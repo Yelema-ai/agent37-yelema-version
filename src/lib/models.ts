@@ -2,6 +2,8 @@ import "server-only";
 import { agent37 } from "@/lib/agent37";
 import { ApiError } from "@/lib/http";
 
+export type OAuthFlowType = "openrouter_pkce" | "device_code" | "browser" | "nous_portal" | "none";
+
 export interface ProviderDefinition {
   id: string;
   name: string;
@@ -12,36 +14,13 @@ export interface ProviderDefinition {
   models: string[];
   docUrl: string;
   placeholderKey: string;
+  supportsOAuth: boolean;
+  oauthType?: OAuthFlowType;
+  oauthNotice?: string;
+  oauthWarning?: string;
 }
 
 export const KNOWN_PROVIDERS: ProviderDefinition[] = [
-  {
-    id: "anthropic",
-    name: "Anthropic",
-    envVar: "ANTHROPIC_API_KEY",
-    providerCode: "anthropic",
-    description: "Claude 3.7 Sonnet (hybride raisonnement), Claude 3.5 Sonnet & Haiku, Claude 3 Opus.",
-    defaultModel: "claude-3-7-sonnet-20250219",
-    models: [
-      "claude-3-7-sonnet-20250219",
-      "claude-3-5-sonnet-20241022",
-      "claude-3-5-haiku-20241022",
-      "claude-3-opus-20240229",
-    ],
-    docUrl: "https://console.anthropic.com/settings/keys",
-    placeholderKey: "sk-ant-api03-...",
-  },
-  {
-    id: "openai",
-    name: "OpenAI",
-    envVar: "OPENAI_API_KEY",
-    providerCode: "openai-api",
-    description: "Modèles GPT-4o, GPT-4o mini, o1 et o3-mini directement via l'API OpenAI.",
-    defaultModel: "gpt-4o",
-    models: ["gpt-4o", "gpt-4o-mini", "o1", "o3-mini", "gpt-4-turbo"],
-    docUrl: "https://platform.openai.com/api-keys",
-    placeholderKey: "sk-proj-...",
-  },
   {
     id: "openrouter",
     name: "OpenRouter",
@@ -60,6 +39,43 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     ],
     docUrl: "https://openrouter.ai/keys",
     placeholderKey: "sk-or-v1-...",
+    supportsOAuth: true,
+    oauthType: "openrouter_pkce",
+    oauthNotice: "Connexion 1-clic via OpenRouter OAuth PKCE avec création automatique de clé sécurisée.",
+  },
+  {
+    id: "anthropic",
+    name: "Anthropic",
+    envVar: "ANTHROPIC_API_KEY",
+    providerCode: "anthropic",
+    description: "Claude 3.7 Sonnet (hybride raisonnement), Claude 3.5 Sonnet & Haiku, Claude 3 Opus.",
+    defaultModel: "claude-3-7-sonnet-20250219",
+    models: [
+      "claude-3-7-sonnet-20250219",
+      "claude-3-5-sonnet-20241022",
+      "claude-3-5-haiku-20241022",
+      "claude-3-opus-20240229",
+    ],
+    docUrl: "https://console.anthropic.com/settings/keys",
+    placeholderKey: "sk-ant-api03-...",
+    supportsOAuth: true,
+    oauthType: "device_code",
+    oauthNotice: "Authentification Claude Code (Jeton OAuth / Setup-token).",
+    oauthWarning: "Selon la documentation officielle Hermes, l'OAuth Anthropic requiert obligatoirement un forfait Claude Max ET l'achat de crédits de dépassement additionnels. Les forfaits Claude Pro ne sont pas compatibles. Pour la plupart des usages, privilégiez une Clé API standard.",
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    envVar: "OPENAI_API_KEY",
+    providerCode: "openai-api",
+    description: "Modèles GPT-4o, GPT-4o mini, o1 et o3-mini directement via l'API OpenAI.",
+    defaultModel: "gpt-4o",
+    models: ["gpt-4o", "gpt-4o-mini", "o1", "o3-mini", "gpt-4-turbo"],
+    docUrl: "https://platform.openai.com/api-keys",
+    placeholderKey: "sk-proj-...",
+    supportsOAuth: true,
+    oauthType: "device_code",
+    oauthNotice: "Connexion par Clé API standard (recommandé) ou via jeton d'abonnement ChatGPT / Codex.",
   },
   {
     id: "gemini",
@@ -71,6 +87,9 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"],
     docUrl: "https://aistudio.google.com/app/apikey",
     placeholderKey: "AIzaSy...",
+    supportsOAuth: false,
+    oauthType: "none",
+    oauthNotice: "Google Gemini supporte uniquement l'authentification par Clé API (Google AI Studio). Le protocole OAuth grand public n'est pas disponible pour les agents autonomes.",
   },
   {
     id: "deepseek",
@@ -82,6 +101,9 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     models: ["deepseek-chat", "deepseek-reasoner"],
     docUrl: "https://platform.deepseek.com/api_keys",
     placeholderKey: "sk-...",
+    supportsOAuth: false,
+    oauthType: "none",
+    oauthNotice: "DeepSeek ne propose pas d'authentification OAuth. Utilisez votre Clé API platform.deepseek.com.",
   },
   {
     id: "mistral",
@@ -93,6 +115,9 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     models: ["mistral-large-latest", "codestral-latest", "mistral-small-latest", "pixtral-large-latest"],
     docUrl: "https://console.mistral.ai/api-keys",
     placeholderKey: "...",
+    supportsOAuth: false,
+    oauthType: "none",
+    oauthNotice: "Mistral AI supporte uniquement l'authentification par Clé API (console.mistral.ai).",
   },
   {
     id: "groq",
@@ -104,6 +129,9 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b"],
     docUrl: "https://console.groq.com/keys",
     placeholderKey: "gsk_...",
+    supportsOAuth: false,
+    oauthType: "none",
+    oauthNotice: "Groq supporte uniquement l'authentification par Clé API (console.groq.com).",
   },
   {
     id: "xai",
@@ -115,6 +143,23 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     models: ["grok-2-1212", "grok-2-vision-1212", "grok-beta"],
     docUrl: "https://console.x.ai/",
     placeholderKey: "xai-...",
+    supportsOAuth: true,
+    oauthType: "browser",
+    oauthNotice: "Connexion par Clé API xAI (recommandé) ou via jeton d'abonnement SuperGrok / X Premium+.",
+  },
+  {
+    id: "nous",
+    name: "Nous Portal",
+    envVar: "NOUS_API_KEY",
+    providerCode: "nous",
+    description: "Portail unifié Nous Research : plus de 300 modèles sous un seul abonnement.",
+    defaultModel: "hermes-3-llama-3.1-405b",
+    models: ["hermes-3-llama-3.1-405b", "hermes-3-llama-3.1-70b", "claude-3-7-sonnet", "gpt-4o"],
+    docUrl: "https://portal.nousresearch.com",
+    placeholderKey: "nous-...",
+    supportsOAuth: true,
+    oauthType: "nous_portal",
+    oauthNotice: "Abonnement Nous Portal unifié avec modèles frontières et Tool Gateway intégrés.",
   },
   {
     id: "together",
@@ -126,6 +171,9 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     models: ["meta-llama/Llama-3.3-70B-Instruct-Turbo", "deepseek-ai/DeepSeek-V3"],
     docUrl: "https://api.together.ai/settings/api-keys",
     placeholderKey: "...",
+    supportsOAuth: false,
+    oauthType: "none",
+    oauthNotice: "Together AI supporte uniquement l'authentification par Clé API (api.together.ai).",
   },
 ];
 
@@ -133,6 +181,7 @@ export interface ProviderStatus extends ProviderDefinition {
   isConfigured: boolean;
   maskedKey: string | null;
   isActive: boolean;
+  authMethod?: "api_key" | "oauth";
 }
 
 export interface CustomProviderInfo {
@@ -224,7 +273,19 @@ print(json.dumps({
     const isStarterActive = activeProvider.includes("Agent37") || activeProvider === "custom:Agent37";
 
     const providers: ProviderStatus[] = KNOWN_PROVIDERS.map((p) => {
-      const rawKey = envData[p.envVar] || (p.id === "gemini" ? envData["GOOGLE_API_KEY"] : "");
+      let rawKey = envData[p.envVar] || (p.id === "gemini" ? envData["GOOGLE_API_KEY"] : "");
+      let authMethod: "api_key" | "oauth" = "api_key";
+
+      if (p.id === "anthropic" && envData["CLAUDE_CODE_OAUTH_TOKEN"]) {
+        rawKey = envData["CLAUDE_CODE_OAUTH_TOKEN"];
+        authMethod = "oauth";
+      } else if (p.id === "openrouter" && envData["OPENROUTER_OAUTH_ACTIVE"] === "true") {
+        authMethod = "oauth";
+      } else if (p.id === "nous" && envData["NOUS_OAUTH_TOKEN"]) {
+        rawKey = envData["NOUS_OAUTH_TOKEN"];
+        authMethod = "oauth";
+      }
+
       const isConfigured = Boolean(rawKey && rawKey.length > 5);
       const isActive = !isStarterActive && activeProvider === p.providerCode;
 
@@ -233,6 +294,7 @@ print(json.dumps({
         isConfigured,
         maskedKey: isConfigured ? maskApiKey(rawKey) : null,
         isActive,
+        authMethod,
       };
     });
 
@@ -265,20 +327,26 @@ print(json.dumps({
 }
 
 /**
- * Configure or update a provider's API key and optionally set it as default active model
+ * Configure or update a provider's credentials (API key or OAuth) and optionally set it as default active model
  */
 export async function saveInstanceProviderKey(
   instanceId: string,
   input: {
     providerId: string;
     apiKey?: string;
+    oauthCode?: string;
+    codeVerifier?: string;
+    oauthToken?: string;
+    authMethod?: "api_key" | "oauth";
     model?: string;
     setActive?: boolean;
     baseUrl?: string;
     customName?: string;
   }
 ): Promise<void> {
-  const { providerId, apiKey = "", model, setActive = true, baseUrl, customName } = input;
+  const { providerId, model, setActive = true, baseUrl, customName, authMethod } = input;
+  let resolvedApiKey = (input.apiKey || "").trim();
+  const oauthToken = (input.oauthToken || "").trim();
 
   const known = KNOWN_PROVIDERS.find((p) => p.id === providerId);
 
@@ -286,17 +354,48 @@ export async function saveInstanceProviderKey(
     throw new ApiError(400, "invalid_provider", `Fournisseur inconnu : ${providerId}`);
   }
 
+  // Handle OpenRouter OAuth PKCE exchange
+  if (providerId === "openrouter" && input.oauthCode && input.codeVerifier) {
+    try {
+      const exchangeRes = await fetch("https://openrouter.ai/api/v1/auth/keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: input.oauthCode,
+          code_verifier: input.codeVerifier,
+          code_challenge_method: "S256",
+        }),
+      });
+
+      if (!exchangeRes.ok) {
+        const errText = await exchangeRes.text();
+        console.error("[models] OpenRouter OAuth exchange error:", exchangeRes.status, errText);
+        throw new ApiError(400, "oauth_exchange_failed", "L'échange OAuth OpenRouter a échoué. Le code a peut-être expiré.");
+      }
+
+      const data = await exchangeRes.json();
+      if (!data?.key) {
+        throw new ApiError(400, "invalid_oauth_response", "OpenRouter n'a pas renvoyé de clé valide.");
+      }
+      resolvedApiKey = data.key;
+    } catch (err: any) {
+      if (err instanceof ApiError) throw err;
+      throw new ApiError(500, "oauth_exchange_failed", `Erreur lors de la connexion OpenRouter: ${err?.message || err}`);
+    }
+  }
+
   const pyCode = `
 import yaml, os, glob
 
 provider_id = ${JSON.stringify(providerId)}
-api_key = ${JSON.stringify(apiKey.trim())}
+api_key = ${JSON.stringify(resolvedApiKey)}
+oauth_token = ${JSON.stringify(oauthToken)}
+auth_method = ${JSON.stringify(authMethod || (input.oauthCode ? "oauth" : "api_key"))}
 model = ${JSON.stringify((model || "").trim())}
 set_active = ${JSON.stringify(Boolean(setActive))}
 base_url = ${JSON.stringify((baseUrl || "").trim())}
 custom_name = ${JSON.stringify((customName || "").trim())}
 
-# 1. Update ~/.hermes/.env if an API key is provided
 env_path = os.path.expanduser("~/.hermes/.env")
 env_lines = []
 if os.path.exists(env_path):
@@ -311,6 +410,7 @@ for line in env_lines:
         env_dict[k.strip()] = v.strip()
 
 env_var_map = {
+    "nous": "NOUS_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
@@ -327,13 +427,25 @@ if target_env_var and api_key:
     env_dict[target_env_var] = api_key
     if target_env_var == "GEMINI_API_KEY":
         env_dict["GOOGLE_API_KEY"] = api_key
+    if provider_id == "openrouter":
+        if auth_method == "oauth":
+            env_dict["OPENROUTER_OAUTH_ACTIVE"] = "true"
+        else:
+            env_dict.pop("OPENROUTER_OAUTH_ACTIVE", None)
+
+if provider_id == "anthropic" and oauth_token:
+    env_dict["CLAUDE_CODE_OAUTH_TOKEN"] = oauth_token
+
+if provider_id == "nous" and oauth_token:
+    env_dict["NOUS_API_KEY"] = oauth_token
+    env_dict["NOUS_OAUTH_TOKEN"] = oauth_token
 
 # Rewrite .env
 with open(env_path, "w") as f:
     for k, v in env_dict.items():
         f.write(f"{k}={v}\\n")
 
-# 2. Update config.yaml and profile configs
+# Update config.yaml
 cfg_path = os.path.expanduser("~/.hermes/config.yaml")
 if os.path.exists(cfg_path):
     with open(cfg_path, "r") as f:
@@ -342,6 +454,7 @@ else:
     root_cfg = {}
 
 provider_code_map = {
+    "nous": "nous",
     "anthropic": "anthropic",
     "openai": "openai-api",
     "openrouter": "openrouter",
@@ -354,6 +467,7 @@ provider_code_map = {
 }
 
 default_model_map = {
+    "nous": "hermes-3-llama-3.1-405b",
     "anthropic": "claude-3-7-sonnet-20250219",
     "openai": "gpt-4o",
     "openrouter": "anthropic/claude-3.7-sonnet",
@@ -366,11 +480,9 @@ default_model_map = {
 }
 
 if provider_id == "custom" and custom_name and base_url:
-    # Custom provider entry
     if "custom_providers" not in root_cfg or not isinstance(root_cfg["custom_providers"], list):
         root_cfg["custom_providers"] = []
     
-    # Check if already exists
     exists = False
     for cp in root_cfg["custom_providers"]:
         if isinstance(cp, dict) and cp.get("name") == custom_name:
@@ -414,7 +526,7 @@ elif provider_id in provider_code_map and set_active:
 with open(cfg_path, "w") as f:
     yaml.safe_dump(root_cfg, f, default_flow_style=False)
 
-# 3. Propagate model config to all expert profiles ~/.hermes/profiles/*/config.yaml
+# Propagate to all profiles
 for p in glob.glob(os.path.expanduser("~/.hermes/profiles/*")):
     prof_cfg = os.path.join(p, "config.yaml")
     if os.path.isfile(prof_cfg):
@@ -457,6 +569,7 @@ import yaml, os, glob
 provider_id = ${JSON.stringify(providerId)}
 
 env_var_map = {
+    "nous": "NOUS_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
@@ -471,14 +584,23 @@ env_var_map = {
 # 1. Remove from .env
 env_path = os.path.expanduser("~/.hermes/.env")
 target_var = env_var_map.get(provider_id)
-if os.path.exists(env_path) and target_var:
+if os.path.exists(env_path):
     with open(env_path, "r") as f:
         lines = f.readlines()
     with open(env_path, "w") as f:
         for line in lines:
             k = line.split("=")[0].strip() if "=" in line else ""
-            if k != target_var and (target_var != "GEMINI_API_KEY" or k != "GOOGLE_API_KEY"):
-                f.write(line)
+            if k == target_var:
+                continue
+            if target_var == "GEMINI_API_KEY" and k == "GOOGLE_API_KEY":
+                continue
+            if provider_id == "anthropic" and k == "CLAUDE_CODE_OAUTH_TOKEN":
+                continue
+            if provider_id == "openrouter" and k == "OPENROUTER_OAUTH_ACTIVE":
+                continue
+            if provider_id == "nous" and k == "NOUS_OAUTH_TOKEN":
+                continue
+            f.write(line)
 
 # 2. If this provider was active, reset to Yelema Starter
 cfg_path = os.path.expanduser("~/.hermes/config.yaml")
@@ -488,6 +610,7 @@ if os.path.exists(cfg_path):
     
     current_p = root_cfg.get("model", {}).get("provider", "")
     provider_code_map = {
+        "nous": "nous",
         "anthropic": "anthropic",
         "openai": "openai-api",
         "openrouter": "openrouter",
@@ -507,7 +630,6 @@ if os.path.exists(cfg_path):
         with open(cfg_path, "w") as f:
             yaml.safe_dump(root_cfg, f, default_flow_style=False)
         
-        # Propagate to profiles
         for p in glob.glob(os.path.expanduser("~/.hermes/profiles/*")):
             prof_cfg = os.path.join(p, "config.yaml")
             if os.path.isfile(prof_cfg):
@@ -526,7 +648,7 @@ print("SUCCESS")
   const execRes = await agent37.exec(instanceId, `${PYTHON} -c '${pyCode}'`);
   if (execRes.exit_code !== 0) {
     console.error(`[models] delete failed for ${instanceId}:`, execRes.stderr);
-    throw new ApiError(502, "model_delete_failed", "Impossible de supprimer la clé API.");
+    throw new ApiError(502, "model_delete_failed", "Impossible de supprimer la configuration du modèle.");
   }
 
   try {

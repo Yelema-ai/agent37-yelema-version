@@ -30,6 +30,10 @@ export async function POST(request: Request, { params }: Ctx) {
     const body = (await request.json().catch(() => ({}))) as {
       providerId?: string;
       apiKey?: string;
+      oauthCode?: string;
+      codeVerifier?: string;
+      oauthToken?: string;
+      authMethod?: "api_key" | "oauth";
       model?: string;
       baseUrl?: string;
       customName?: string;
@@ -43,6 +47,10 @@ export async function POST(request: Request, { params }: Ctx) {
     await saveInstanceProviderKey(id, {
       providerId: body.providerId,
       apiKey: body.apiKey,
+      oauthCode: body.oauthCode,
+      codeVerifier: body.codeVerifier,
+      oauthToken: body.oauthToken,
+      authMethod: body.authMethod,
       model: body.model,
       baseUrl: body.baseUrl,
       customName: body.customName,
