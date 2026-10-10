@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { apiFetch, readApiError } from "@/lib/api";
 import type { MemoryItem, MemoryList, MemoryStatus } from "@/lib/memory";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { HiddenFileInput } from "@/components/HiddenFileInput";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +22,8 @@ const STATUS: Record<MemoryStatus, { label: string; variant: "success" | "warnin
   error: { label: "Envoi impossible", variant: "destructive" },
 };
 const ALL = "";
-const FIELD = "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink";
+const FIELD = "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm font-normal text-ink focus-visible:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/15";
+const SELECT = "w-full flex h-11 max-w-full rounded-xl border border-line bg-surface px-3 text-[15px] font-normal text-ink focus-visible:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/15";
 
 export function MemoryView() {
   const [list, setList] = useState<MemoryList | null>(null);
@@ -31,7 +33,8 @@ export function MemoryView() {
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [unit, setUnit] = useState(ALL);
-  const file = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
 
   const load = useCallback(
     () =>
@@ -56,14 +59,13 @@ export function MemoryView() {
   const target = targets.some((t) => t.id === unit) ? unit : (targets[0]?.id ?? ALL);
 
   async function deposit() {
-    const picked = file.current?.files?.[0];
     setBusy(true);
     try {
-      if (picked) {
+      if (file) {
         const form = new FormData();
         form.set("title", title);
         if (target !== ALL) form.set("unit", target);
-        form.set("file", picked);
+        form.set("file", file);
         const res = await fetch("/api/memory/items", { method: "POST", body: form });
         if (!res.ok) throw new Error(await readApiError(res, "Le document n’a pas pu être déposé."));
       } else {
@@ -71,7 +73,7 @@ export function MemoryView() {
       }
       setTitle("");
       setNote("");
-      if (file.current) file.current.value = "";
+      setFile(null);
       await load();
     } catch (e) {
       toast.error((e as Error).message);
@@ -109,7 +111,7 @@ export function MemoryView() {
             </label>
             <label className="text-[13px] font-semibold text-ink-3">
               Lisible par
-              <select className={`mt-1 ${FIELD}`} value={target} onChange={(e) => setUnit(e.target.value)}>
+              <select className={`mt-1 ${SELECT}`} value={target} onChange={(e) => setUnit(e.target.value)}>
                 {targets.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -122,11 +124,24 @@ export function MemoryView() {
             Texte de la note
             <textarea className={`mt-1 min-h-28 ${FIELD}`} value={note} onChange={(e) => setNote(e.target.value)} />
           </label>
-          <label className="mt-3 block text-[13px] font-semibold text-ink-3">
-            Ou un document (PDF, texte ou JSON, 5 Mo au plus)
-            <input ref={file} type="file" accept=".pdf,.txt,.md,.csv,.json" className="mt-1 block text-sm text-ink" />
-          </label>
-          <Button className="mt-4" disabled={busy || !title.trim()} onClick={() => void deposit()}>
+          <div className="mt-3">
+            <p className="text-[13px] font-semibold text-ink-3">Ou un document (PDF, texte ou JSON, 5 Mo au plus)</p>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <Button type="button" variant="outline" size="sm" onClick={() => picker.current?.click()}>
+                {file ? "Changer de document" : "Choisir un document"}
+              </Button>
+              {file && (
+                <span className="flex min-w-0 items-center gap-2 text-sm text-ink-2">
+                  <span className="truncate">{file.name}</span>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setFile(null)}>
+                    Retirer
+                  </Button>
+                </span>
+              )}
+            </div>
+            <HiddenFileInput inputRef={picker} onFiles={(files) => setFile(files[0] ?? null)} />
+          </div>
+          <Button className="mt-4" disabled={busy || !title.trim() || (!file && !note.trim())} onClick={() => void deposit()}>
             {busy ? "Dépôt en cours…" : "Déposer dans la mémoire"}
           </Button>
         </section>

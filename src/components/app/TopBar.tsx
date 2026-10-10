@@ -17,6 +17,10 @@ function crumbs(pathname: string, experts: Expert[]): string[] {
   if (pathname.startsWith("/administration/connecteurs")) return ["Administration", "Connecteurs"];
   if (pathname.startsWith("/administration/canaux")) return ["Administration", "Canaux"];
   if (pathname.startsWith("/administration/facturation")) return ["Administration", "Facturation"];
+  if (pathname.startsWith("/administration/consommation")) return ["Administration", "Consommation"];
+  if (pathname.startsWith("/administration/emails")) return ["Administration", "E-mails"];
+  if (pathname.startsWith("/administration/memoire")) return ["Administration", "Mémoire"];
+  if (pathname.startsWith("/administration/organigramme")) return ["Administration", "Organigramme"];
   if (pathname.startsWith("/administration")) return ["Administration", "Membres"];
   if (pathname.startsWith("/experts/")) {
     const [, agentId, ...rest] = pathname.split("/").filter(Boolean);

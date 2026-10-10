@@ -36,7 +36,7 @@ export default function AdministrationLayout({ children }: { children: React.Rea
   return (
     <>
       {tabs.length > 1 && (
-        <nav aria-label="Administration" className="mx-auto flex w-full max-w-[1280px] gap-1 overflow-x-auto border-b border-line px-4 pt-4 sm:px-8">
+        <nav aria-label="Administration" className="mx-auto flex w-full max-w-[1280px] shrink-0 gap-1 overflow-x-auto border-b border-line px-4 pt-4 sm:px-8">
           {tabs.map((tab) => {
             const active = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
             return (

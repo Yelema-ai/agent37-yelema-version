@@ -4,17 +4,17 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { orderUnits, type OrgChart, type OrgGrant, type OrgUnit } from "@/lib/memory";
+import { orderUnits, type OrgChart, type OrgGrant, type OrgMember, type OrgUnit } from "@/lib/memory";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-// The org chart of the company: units in a tree, where each member sits, and the exceptions. It
-// decides what each member's experts read in the company memory. The back office keeps it and
-// applies it; every change here is one call, then the chart is read again.
+// The org chart of the company, as one list: each member under their unit, in tree order. It decides
+// what each member's experts read in the company memory. Exceptions are rare and sit folded below.
+// The back office keeps the chart and applies it; every change here is one call, then it is read again.
 
 const NONE = "";
-const FIELD = "rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink";
+const FIELD = "h-9 max-w-full rounded-[10px] border border-line bg-surface px-2 text-[13px] font-normal text-ink focus-visible:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/15";
 const CARD = "mt-5 rounded-[22px] border border-line bg-surface p-5 sm:p-6";
 
 export function OrgChartView() {
@@ -54,6 +54,34 @@ export function OrgChartView() {
     const m = chart?.members.find((x) => x.id === id);
     return m?.name?.trim() || m?.email || "—";
   };
+  const known = new Set(chart?.units.map((u) => u.id));
+  const membersOf = (unitId: string) => chart?.members.filter((m) => m.unit === unitId) ?? [];
+  const unplaced = chart?.members.filter((m) => !m.unit || !known.has(m.unit)) ?? [];
+  // One step of the tree: the same left padding for a unit and for the members under it.
+  const indent = (depth: number) => ({ paddingLeft: `${depth * 1.25}rem` });
+
+  const memberRow = (m: OrgMember, depth: number) => (
+    <div key={m.id} className="flex flex-wrap items-center justify-between gap-2 py-2" style={indent(depth)}>
+      <span className="min-w-0 text-sm">
+        <span className="block font-semibold text-ink">{m.name?.trim() || m.email}</span>
+        {m.name?.trim() && <span className="block text-xs text-ink-3">{m.email}</span>}
+      </span>
+      <span className="flex items-center gap-2">
+        <select aria-label="Unité" className={FIELD} value={m.unit ?? NONE} onChange={(e) => void change(`/api/org/members/${m.id}`, "PATCH", { unit: e.target.value || null })}>
+          <option value={NONE}>Sans unité</option>
+          {chart?.units.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Place" className={FIELD} value={m.unitRole} disabled={!m.unit} onChange={(e) => void change(`/api/org/members/${m.id}`, "PATCH", { unitRole: e.target.value })}>
+          <option value="member">Membre</option>
+          <option value="head">Responsable</option>
+        </select>
+      </span>
+    </div>
+  );
 
   return (
     <div className="max-w-4xl">
@@ -68,44 +96,51 @@ export function OrgChartView() {
       {chart && (
         <>
           <section className={CARD}>
-            <h2 className="text-lg font-bold text-ink">Unités</h2>
-            {units.length === 0 && <p className="mt-2 text-sm text-ink-3">Aucune unité : toute la mémoire est lisible par tous les membres.</p>}
-            <ul className="mt-3 divide-y divide-line">
+            {units.length === 0 && <p className="text-sm text-ink-3">Aucune unité : toute la mémoire est lisible par tous les membres.</p>}
+            <ul className="divide-y divide-line">
               {units.map(({ unit, depth }) => (
-                <li key={unit.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                  <span className="text-sm font-semibold text-ink" style={{ paddingLeft: `${depth * 20}px` }}>
-                    {depth > 0 ? "└ " : ""}
-                    {unit.name}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <select
-                      aria-label={`Rattacher ${unit.name} à`}
-                      className={FIELD}
-                      value={unit.parent ?? NONE}
-                      onChange={(e) => void change(`/api/org/units/${unit.id}`, "PATCH", { parent: e.target.value || null })}
-                    >
-                      <option value={NONE}>Au sommet</option>
-                      {chart.units
-                        .filter((u) => u.id !== unit.id)
-                        .map((u) => (
-                          <option key={u.id} value={u.id}>
-                            Sous {u.name}
-                          </option>
-                        ))}
-                    </select>
-                    <Button variant="ghost" size="sm" className="text-ko" onClick={() => setRemoving(unit)}>
-                      Supprimer
-                    </Button>
-                  </span>
+                <li key={unit.id}>
+                  <div className="flex flex-wrap items-center justify-between gap-2 py-2.5" style={indent(depth)}>
+                    <span className="text-[15px] font-bold text-ink">{unit.name}</span>
+                    <span className="flex items-center gap-2">
+                      <select
+                        aria-label={`Rattacher ${unit.name} à`}
+                        className={FIELD}
+                        value={unit.parent ?? NONE}
+                        onChange={(e) => void change(`/api/org/units/${unit.id}`, "PATCH", { parent: e.target.value || null })}
+                      >
+                        <option value={NONE}>Au sommet</option>
+                        {chart.units
+                          .filter((u) => u.id !== unit.id)
+                          .map((u) => (
+                            <option key={u.id} value={u.id}>
+                              Sous {u.name}
+                            </option>
+                          ))}
+                      </select>
+                      <Button variant="ghost" size="sm" className="text-ko" onClick={() => setRemoving(unit)}>
+                        Supprimer
+                      </Button>
+                    </span>
+                  </div>
+                  {membersOf(unit.id).map((m) => memberRow(m, depth + 1))}
                 </li>
               ))}
+              {unplaced.length > 0 && (
+                <li>
+                  <p className="py-2.5 text-[15px] font-bold text-ink">
+                    Sans unité <span className="font-normal text-ink-3">· ne lisent que ce qui est déposé pour toute l’entreprise</span>
+                  </p>
+                  {unplaced.map((m) => memberRow(m, 1))}
+                </li>
+              )}
             </ul>
-            <div className="mt-4 flex flex-wrap items-end gap-2">
+            <div className="mt-4 flex flex-wrap items-end gap-2 border-t border-line pt-4">
               <label className="text-[13px] font-semibold text-ink-3">
                 Nouvelle unité
                 <Input className="mt-1 w-56" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />
               </label>
-              <select aria-label="Rattachée à" className={FIELD} value={parent} onChange={(e) => setParent(e.target.value)}>
+              <select aria-label="Rattachée à" className={`${FIELD} h-11`} value={parent} onChange={(e) => setParent(e.target.value)}>
                 <option value={NONE}>Au sommet</option>
                 {chart.units.map((u) => (
                   <option key={u.id} value={u.id}>
@@ -124,52 +159,24 @@ export function OrgChartView() {
             </div>
           </section>
 
-          <section className={CARD}>
-            <h2 className="text-lg font-bold text-ink">Place des membres</h2>
-            {chart.members.length === 0 && <p className="mt-2 text-sm text-ink-3">Aucun membre.</p>}
-            <ul className="mt-3 divide-y divide-line">
-              {chart.members.map((m) => (
-                <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                  <span className="min-w-0 text-sm">
-                    <span className="block font-semibold text-ink">{m.name?.trim() || m.email}</span>
-                    {m.name?.trim() && <span className="block text-xs text-ink-3">{m.email}</span>}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <select aria-label="Unité" className={FIELD} value={m.unit ?? NONE} onChange={(e) => void change(`/api/org/members/${m.id}`, "PATCH", { unit: e.target.value || null })}>
-                      <option value={NONE}>Sans unité</option>
-                      {chart.units.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                    </select>
-                    <select aria-label="Place" className={FIELD} value={m.unitRole} disabled={!m.unit} onChange={(e) => void change(`/api/org/members/${m.id}`, "PATCH", { unitRole: e.target.value })}>
-                      <option value="member">Membre</option>
-                      <option value="head">Responsable</option>
-                    </select>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className={CARD}>
-            <h2 className="text-lg font-bold text-ink">Exceptions</h2>
-            <p className="mt-1 text-sm text-ink-3">Ouvre le compartiment d’une unité à une personne ou à une autre unité, en plus de la règle.</p>
-            <ul className="mt-3 divide-y divide-line">
-              {chart.grants.map((g) => (
-                <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm text-ink">
-                  <span>
-                    <strong>{g.user ? memberName(g.user) : `Unité ${unitName(g.granteeUnit)}`}</strong> {g.right === "write" ? "lit et dépose dans" : "lit"} <strong>{unitName(g.unit)}</strong>
-                  </span>
-                  <Button variant="ghost" size="sm" className="text-ko" onClick={() => void change(`/api/org/grants/${g.id}`, "DELETE")}>
-                    Retirer
-                  </Button>
-                </li>
-              ))}
-            </ul>
-            {chart.units.length > 0 && (
-              <div className="mt-4 flex flex-wrap items-end gap-2">
+          {chart.units.length > 0 && (
+            <details className={CARD}>
+              <summary className="cursor-pointer select-none text-[15px] font-bold text-ink">
+                Exceptions ({chart.grants.length}) <span className="font-normal text-ink-3">· ouvrir une unité à une personne ou à une autre unité, en plus de la règle</span>
+              </summary>
+              <ul className="mt-3 divide-y divide-line">
+                {chart.grants.map((g) => (
+                  <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm text-ink">
+                    <span>
+                      <strong>{g.user ? memberName(g.user) : `Unité ${unitName(g.granteeUnit)}`}</strong> {g.right === "write" ? "lit et dépose dans" : "lit"} <strong>{unitName(g.unit)}</strong>
+                    </span>
+                    <Button variant="ghost" size="sm" className="text-ko" onClick={() => void change(`/api/org/grants/${g.id}`, "DELETE")}>
+                      Retirer
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-3 flex flex-wrap items-end gap-2">
                 <select aria-label="Bénéficiaire" className={FIELD} value={grantee} onChange={(e) => setGrantee(e.target.value)}>
                   <option value={NONE}>Qui…</option>
                   {chart.members.map((m) => (
@@ -197,6 +204,7 @@ export function OrgChartView() {
                 </select>
                 <Button
                   variant="outline"
+                  size="sm"
                   disabled={!grantee || !grantUnit}
                   onClick={async () => {
                     const [kind, id] = grantee.split(":");
@@ -207,8 +215,8 @@ export function OrgChartView() {
                   Ajouter l’exception
                 </Button>
               </div>
-            )}
-          </section>
+            </details>
+          )}
         </>
       )}
 
