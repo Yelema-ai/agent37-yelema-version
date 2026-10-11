@@ -156,7 +156,16 @@ export function MemoryView() {
               <div className="min-w-0">
                 <h3 className="font-bold text-ink">{item.title}</h3>
                 <p className="text-[13px] text-ink-3">
-                  {unitName(item.unit)} · {item.kind === "document" ? (item.fileName ?? "Document") : item.kind === "note" ? "Note" : "Site web"}
+                  {unitName(item.unit)} ·{" "}
+                  {item.kind === "document" ? (
+                    <a href={`/api/memory/items/${item.id}/file`} download className="font-semibold text-brand-ink underline-offset-2 hover:underline">
+                      {item.fileName ?? "Document"}
+                    </a>
+                  ) : item.kind === "note" ? (
+                    "Note"
+                  ) : (
+                    "Site web"
+                  )}
                 </p>
               </div>
               <Badge variant={item.active ? STATUS[item.status].variant : "muted"}>{item.active ? STATUS[item.status].label : "Désactivé"}</Badge>

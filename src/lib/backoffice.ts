@@ -331,6 +331,8 @@ export const backoffice = {
   uploadMemoryDocument: (token: string, form: FormData) => call<{ id: string }>("/app/memory/items", { method: "POST", token, form, timeoutMs: MAIL_SEND_TIMEOUT_MS }),
   updateMemoryItem: (token: string, id: string, patch: MemoryPatch) => call<{ ok: true }>(ownPath("/app/memory/items", id), { method: "PATCH", token, body: patch }),
   deleteMemoryItem: (token: string, id: string) => call<{ ok: true }>(ownPath("/app/memory/items", id), { method: "DELETE", token }),
+  // The document of a deposit, as a stream for the route to pipe. 404 when the member does not read its compartment.
+  memoryDocument: (token: string, id: string) => stream(`${ownPath("/app/memory/items", id)}/file`, token),
 
   // The org chart that walls the memory, for the workspace's admins. The back office keeps it; the
   // app holds no copy.
