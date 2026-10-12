@@ -137,6 +137,7 @@ export function ChatView({ initialMessage }: { initialMessage?: string | null })
             {error && <p className="mb-2 rounded-xl bg-ko-pale px-3 py-2 text-[13px] text-ko">{error}</p>}
           </div>
           <ChatComposer
+            agentId={agentId}
             isStreaming={isStreaming}
             att={att}
             onSend={send}
