@@ -1,11 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import {
   Check,
-  Mail,
-  Copy,
   FileCheck,
   FileText,
   Inbox,
@@ -21,7 +18,6 @@ import {
 } from "lucide-react";
 import { getExpert } from "@/config/experts";
 import { Button } from "@/components/ui/button";
-import { useApp } from "@/components/app/AppProvider";
 import { cn } from "@/lib/utils";
 
 // Colors of the numbered skill badges, cycling brand / coral / blue like the mockup.
@@ -78,44 +74,6 @@ function IconList({ items, icon: Icon, iconClass }: { items: string[]; icon: Luc
 // The read-only job sheet ("Fiche de poste") of one expert. Sized by its own width (container
 // queries), so it fits whatever column the page gives it.
 
-function ExpertEmailCard({ expertKey, expertName }: { expertKey: string; expertName: string }) {
-  const [copied, setCopied] = useState(false);
-  const { workspace } = useApp();
-  const slug = workspace?.name ? workspace.name.toLowerCase().replace(/[^a-z0-9]/g, "") : "mstudio";
-  const email = `${expertKey}.${slug}@agentmail.to`;
-
-  const copy = () => {
-    navigator.clipboard.writeText(email);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-[20px] border border-line bg-surface p-5 mt-3.5">
-      <div className="flex items-center gap-3.5">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-tint text-brand">
-          <Mail className="h-5 w-5" />
-        </span>
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-ink text-[15px]">Adresse e-mail directe</span>
-            <span className="inline-flex items-center rounded-full bg-ok-pale px-2 py-0.5 text-xs font-medium text-ok">
-              Actif via AgentMail
-            </span>
-          </div>
-          <p className="text-sm font-mono text-ink-2 mt-0.5">{email}</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 w-full sm:w-auto">
-        <Button variant="outline" size="sm" onClick={copy} className="rounded-full flex-1 sm:flex-none">
-          {copied ? <Check className="h-4 w-4 text-ok" /> : <Copy className="h-4 w-4" />}
-          {copied ? "Copié !" : "Copier"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 export function ExpertFiche({ expertKey }: { expertKey: string }) {
   const expert = getExpert(expertKey);
   if (!expert) return null;
@@ -160,8 +118,6 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
         </span>
         <p className="text-[15px] leading-[1.55] text-ink">{expert.inAction}</p>
       </div>
-
-      <ExpertEmailCard expertKey={expert.key} expertName={name} />
 
       <SectionTitle title="Ses compétences" sub="Des savoir-faire déjà construits dans l’atelier Yelema" />
       <div className="grid gap-2.5 @xl:grid-cols-2 @3xl:grid-cols-3">

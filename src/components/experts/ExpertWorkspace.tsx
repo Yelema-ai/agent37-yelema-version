@@ -5,7 +5,8 @@ import { FileText, FolderOpen, Mail, MessageCircle, Repeat } from "lucide-react"
 import { getExpert } from "@/config/experts";
 import { expertFolder } from "@/lib/drive-paths";
 import { cn } from "@/lib/utils";
-import { useAgentId } from "@/components/app/AppProvider";
+import { useAgentId, useApp } from "@/components/app/AppProvider";
+import { toast } from "sonner";
 import { ExpertAvatar } from "@/components/app/ExpertAvatar";
 import { ChatProvider, useSessionUrl } from "@/components/chat/ChatProvider";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
@@ -27,15 +28,34 @@ const TABS: { id: ExpertTab; label: string; icon: typeof MessageCircle; path: st
 
 function ExpertColumn({ expertKey, tab }: { expertKey: string; tab: ExpertTab }) {
   const e = getExpert(expertKey)!;
+  const { workspace } = useApp();
+  const slug = workspace?.name ? workspace.name.toLowerCase().replace(/[^a-z0-9]/g, "") : "mstudio";
+  const email = `${e.key}.${slug || "mstudio"}@agentmail.to`;
+
+  const copyEmail = (evt: React.MouseEvent) => {
+    evt.preventDefault();
+    evt.stopPropagation();
+    navigator.clipboard.writeText(email);
+    toast.success("Adresse e-mail copiée !");
+  };
+
   return (
     <aside className="sticky top-[62px] hidden h-[calc(100vh-62px)] flex-col gap-1 overflow-y-auto border-r border-line bg-surface px-3 py-3.5 lg:flex">
       <div className="relative isolate aspect-[1/1.02] shrink-0 overflow-hidden rounded-[22px] text-white">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={`/experts/${e.key}.jpg`} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover object-[50%_15%]" />
-        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-transparent from-45% to-[rgba(8,5,16,.82)]" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-transparent from-35% to-[rgba(8,5,16,.88)]" />
         <div className="absolute inset-x-3 bottom-3">
           <p className="text-[17px] font-bold">{e.name}</p>
           <p className="text-[11px] font-semibold uppercase tracking-[0.06em] opacity-85">{e.role}</p>
+          <button
+            type="button"
+            onClick={copyEmail}
+            title="Copier l'adresse e-mail"
+            className="mt-0.5 block w-full text-left text-[11.5px] opacity-75 transition-opacity hover:opacity-100 hover:underline truncate"
+          >
+            {email}
+          </button>
         </div>
       </div>
       <p className="px-1.5 pb-1 pt-2 text-[13px] text-ink-3">{e.tagline}</p>
@@ -68,10 +88,17 @@ function ExpertColumn({ expertKey, tab }: { expertKey: string; tab: ExpertTab })
 // Phones and tablets: the column folds into a header with tab pills.
 function MobileHeader({ expertKey, tab }: { expertKey: string; tab: ExpertTab }) {
   const e = getExpert(expertKey)!;
+  const { workspace } = useApp();
+  const slug = workspace?.name ? workspace.name.toLowerCase().replace(/[^a-z0-9]/g, "") : "mstudio";
+  const email = `${e.key}.${slug || "mstudio"}@agentmail.to`;
+
   return (
     <div className="flex items-center gap-3 overflow-x-auto border-b border-line bg-surface px-4 py-2.5 lg:hidden">
       <ExpertAvatar expertKey={e.key} size={36} />
-      <span className="mr-2 shrink-0 text-sm font-bold text-ink">{e.name}</span>
+      <div className="mr-2 min-w-0 shrink-0">
+        <span className="block text-sm font-bold text-ink leading-tight">{e.name}</span>
+        <span className="block font-mono text-[10px] text-ink-3 truncate max-w-[130px]">{email}</span>
+      </div>
       {TABS.map((t) => (
         <Link
           key={t.id}
