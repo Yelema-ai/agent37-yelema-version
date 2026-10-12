@@ -8,7 +8,7 @@ export interface ProviderDefinition {
   id: string;
   name: string;
   envVar: string;
-  providerCode: string; // Used in config.yaml model.provider
+  providerCode: string;
   description: string;
   defaultModel: string;
   models: string[];
@@ -17,8 +17,6 @@ export interface ProviderDefinition {
   supportsOAuth: boolean;
   oauthType?: OAuthFlowType;
   oauthLabel?: string;
-  oauthNotice?: string;
-  oauthWarning?: string;
   isLocal?: boolean;
   defaultBaseUrl?: string;
 }
@@ -44,8 +42,7 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "sk-or-v1-...",
     supportsOAuth: true,
     oauthType: "openrouter_pkce",
-    oauthLabel: "Connexion 1-clic OpenRouter",
-    oauthNotice: "Connexion 1-clic via OpenRouter OAuth PKCE avec création automatique de clé sécurisée.",
+    oauthLabel: "OAuth",
   },
   {
     id: "anthropic",
@@ -64,9 +61,7 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "sk-ant-api03-...",
     supportsOAuth: true,
     oauthType: "device_code",
-    oauthLabel: "Jeton Claude Code / OAuth",
-    oauthNotice: "Authentification Claude Code (Jeton OAuth / Setup-token).",
-    oauthWarning: "Selon la documentation officielle Hermes, l'OAuth Anthropic requiert obligatoirement un forfait Claude Max ET l'achat de crédits de dépassement additionnels. Les forfaits Claude Pro ne sont pas compatibles. Pour la plupart des usages, privilégiez une Clé API standard.",
+    oauthLabel: "Compte",
   },
   {
     id: "openai",
@@ -80,8 +75,7 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "sk-proj-...",
     supportsOAuth: true,
     oauthType: "device_code",
-    oauthLabel: "Abonnement ChatGPT / Codex OAuth",
-    oauthNotice: "Connectez votre compte via votre Clé API standard (recommandé) ou via jeton d'abonnement ChatGPT Codex.",
+    oauthLabel: "Compte",
   },
   {
     id: "gemini",
@@ -95,8 +89,7 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "AIzaSy...",
     supportsOAuth: true,
     oauthType: "vertex_oauth",
-    oauthLabel: "OAuth2 Google Cloud (Vertex AI)",
-    oauthNotice: "Vous pouvez vous connecter via votre Clé API Google AI Studio (officielle, gratuite en 2 clics sur aistudio.google.com) ou via un jeton OAuth2 Google Cloud Vertex AI (compte de service GCP).",
+    oauthLabel: "Compte",
   },
   {
     id: "deepseek",
@@ -110,7 +103,6 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "sk-...",
     supportsOAuth: false,
     oauthType: "none",
-    oauthNotice: "DeepSeek ne propose pas d'authentification OAuth. Utilisez votre Clé API platform.deepseek.com.",
   },
   {
     id: "qwen",
@@ -124,8 +116,7 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "sk-...",
     supportsOAuth: true,
     oauthType: "device_code",
-    oauthLabel: "Qwen Portal OAuth",
-    oauthNotice: "Connexion par Clé API DashScope (recommandé) ou via jeton Qwen Chat Portal.",
+    oauthLabel: "Compte",
   },
   {
     id: "mistral",
@@ -139,7 +130,6 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "...",
     supportsOAuth: false,
     oauthType: "none",
-    oauthNotice: "Mistral AI supporte uniquement l'authentification par Clé API (console.mistral.ai).",
   },
   {
     id: "groq",
@@ -153,7 +143,6 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "gsk_...",
     supportsOAuth: false,
     oauthType: "none",
-    oauthNotice: "Groq supporte uniquement l'authentification par Clé API (console.groq.com).",
   },
   {
     id: "xai",
@@ -167,8 +156,7 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "xai-...",
     supportsOAuth: true,
     oauthType: "browser",
-    oauthLabel: "Abonnement SuperGrok / X Premium+",
-    oauthNotice: "Connexion par Clé API xAI (recommandé) ou via jeton d'abonnement SuperGrok / X Premium+.",
+    oauthLabel: "Compte",
   },
   {
     id: "ollama",
@@ -182,8 +170,7 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "Optionnel en local (ex: http://localhost:11434/v1)",
     supportsOAuth: true,
     oauthType: "ollama_cloud",
-    oauthLabel: "Ollama Cloud (Clé / API)",
-    oauthNotice: "En local sur votre machine, aucun clé n'est requise. Si vous utilisez Ollama Cloud, indiquez votre clé OLLAMA_API_KEY.",
+    oauthLabel: "Cloud",
     isLocal: true,
     defaultBaseUrl: "http://localhost:11434/v1",
   },
@@ -199,7 +186,6 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "Optionnel en local (ex: http://localhost:1234/v1)",
     supportsOAuth: false,
     oauthType: "none",
-    oauthNotice: "Lancez LM Studio et activez le Local Server (port 1234).",
     isLocal: true,
     defaultBaseUrl: "http://localhost:1234/v1",
   },
@@ -215,7 +201,6 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "pplx-...",
     supportsOAuth: false,
     oauthType: "none",
-    oauthNotice: "Utilisez votre clé API Perplexity (pplx-...).",
     defaultBaseUrl: "https://api.perplexity.ai",
   },
   {
@@ -230,7 +215,6 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "hf_...",
     supportsOAuth: false,
     oauthType: "none",
-    oauthNotice: "Créez un Access Token avec droits de lecture sur huggingface.co.",
   },
   {
     id: "minimax",
@@ -244,8 +228,7 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "...",
     supportsOAuth: true,
     oauthType: "device_code",
-    oauthLabel: "MiniMax Portal OAuth",
-    oauthNotice: "Connexion par Clé API MiniMax ou via jeton d'authentification MiniMax Portal.",
+    oauthLabel: "Compte",
   },
   {
     id: "nous",
@@ -259,8 +242,7 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "nous-...",
     supportsOAuth: true,
     oauthType: "nous_portal",
-    oauthLabel: "Abonnement Nous Portal",
-    oauthNotice: "Abonnement Nous Portal unifié avec modèles frontières et Tool Gateway intégrés.",
+    oauthLabel: "Compte",
   },
   {
     id: "copilot",
@@ -274,7 +256,6 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "ghp_...",
     supportsOAuth: false,
     oauthType: "none",
-    oauthNotice: "Utilisez un Personal Access Token GitHub (avec accès Copilot / GitHub Models).",
   },
   {
     id: "together",
@@ -288,7 +269,6 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "...",
     supportsOAuth: false,
     oauthType: "none",
-    oauthNotice: "Together AI supporte l'authentification par Clé API (api.together.ai).",
   },
   {
     id: "deepinfra",
@@ -302,7 +282,6 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "...",
     supportsOAuth: false,
     oauthType: "none",
-    oauthNotice: "DeepInfra supporte l'authentification par Clé API.",
   },
   {
     id: "fireworks",
@@ -316,7 +295,6 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     placeholderKey: "...",
     supportsOAuth: false,
     oauthType: "none",
-    oauthNotice: "Fireworks AI supporte l'authentification par Clé API.",
   },
 ];
 
@@ -353,14 +331,10 @@ function maskApiKey(key: string): string {
   return `${start}••••••••${end}`;
 }
 
-/**
- * Get current LLM model configuration from instance (~/.hermes/.env, ~/.hermes/auth.json and ~/.hermes/config.yaml)
- */
 export async function getInstanceModelConfig(instanceId: string): Promise<ModelSettingsResponse> {
   const pyCode = `
 import yaml, json, os
 
-# 1. Read .env
 env_path = os.path.expanduser("~/.hermes/.env")
 env_data = {}
 if os.path.exists(env_path):
@@ -371,7 +345,6 @@ if os.path.exists(env_path):
                 k, v = line.split("=", 1)
                 env_data[k.strip()] = v.strip()
 
-# 2. Read auth.json
 auth_json_path = os.path.expanduser("~/.hermes/auth.json")
 auth_json = {}
 if os.path.exists(auth_json_path):
@@ -381,7 +354,6 @@ if os.path.exists(auth_json_path):
     except Exception:
         pass
 
-# 3. Read config.yaml
 cfg_path = os.path.expanduser("~/.hermes/config.yaml")
 cfg_data = {}
 if os.path.exists(cfg_path):
@@ -435,16 +407,13 @@ print(json.dumps({
       let rawKey = envData[p.envVar] || "";
       let authMethod: "api_key" | "oauth" = "api_key";
 
-      // Gemini check
       if (p.id === "gemini") {
         rawKey = envData["GEMINI_API_KEY"] || envData["GOOGLE_API_KEY"] || "";
         if (envData["VERTEX_BEARER_TOKEN"] || envData["GOOGLE_APPLICATION_CREDENTIALS"] || activeProvider === "vertex") {
           rawKey = envData["VERTEX_BEARER_TOKEN"] || envData["GOOGLE_APPLICATION_CREDENTIALS"] || rawKey;
           authMethod = "oauth";
         }
-      }
-      // Anthropic check
-      else if (p.id === "anthropic") {
+      } else if (p.id === "anthropic") {
         if (envData["CLAUDE_CODE_OAUTH_TOKEN"]) {
           rawKey = envData["CLAUDE_CODE_OAUTH_TOKEN"];
           authMethod = "oauth";
@@ -454,50 +423,36 @@ print(json.dumps({
           rawKey = "oauth-token";
           authMethod = "oauth";
         }
-      }
-      // OpenAI check
-      else if (p.id === "openai") {
+      } else if (p.id === "openai") {
         if (activeProvider === "openai-codex" || authProviders["openai-codex"] || envData["OPENAI_CODEX_TOKEN"]) {
           rawKey = envData["OPENAI_CODEX_TOKEN"] || "chatgpt-oauth";
           authMethod = "oauth";
         }
-      }
-      // OpenRouter check
-      else if (p.id === "openrouter") {
+      } else if (p.id === "openrouter") {
         if (envData["OPENROUTER_OAUTH_ACTIVE"] === "true") {
           authMethod = "oauth";
         }
-      }
-      // Nous check
-      else if (p.id === "nous") {
+      } else if (p.id === "nous") {
         if (envData["NOUS_OAUTH_TOKEN"] || authProviders["nous"]) {
           rawKey = envData["NOUS_OAUTH_TOKEN"] || "nous-oauth";
           authMethod = "oauth";
         }
-      }
-      // xAI check
-      else if (p.id === "xai") {
+      } else if (p.id === "xai") {
         if (activeProvider === "xai-oauth" || envData["XAI_OAUTH_TOKEN"]) {
           rawKey = envData["XAI_OAUTH_TOKEN"] || "xai-oauth";
           authMethod = "oauth";
         }
-      }
-      // Qwen check
-      else if (p.id === "qwen") {
+      } else if (p.id === "qwen") {
         if (activeProvider === "qwen-oauth" || envData["QWEN_OAUTH_TOKEN"]) {
           rawKey = envData["QWEN_OAUTH_TOKEN"] || "qwen-oauth";
           authMethod = "oauth";
         }
-      }
-      // MiniMax check
-      else if (p.id === "minimax") {
+      } else if (p.id === "minimax") {
         if (activeProvider === "minimax-oauth" || envData["MINIMAX_OAUTH_TOKEN"]) {
           rawKey = envData["MINIMAX_OAUTH_TOKEN"] || "minimax-oauth";
           authMethod = "oauth";
         }
-      }
-      // Ollama check
-      else if (p.id === "ollama") {
+      } else if (p.id === "ollama") {
         const matchingCp = customList.find((cp) => cp && (cp.name === "Ollama" || cp.base_url?.includes("11434")));
         if (matchingCp) {
           rawKey = matchingCp.api_key || "http://localhost:11434";
@@ -505,44 +460,39 @@ print(json.dumps({
           rawKey = envData["OLLAMA_API_KEY"];
           authMethod = "oauth";
         }
-      }
-      // LM Studio check
-      else if (p.id === "lmstudio") {
+      } else if (p.id === "lmstudio") {
         const matchingCp = customList.find((cp) => cp && (cp.name === "LMStudio" || cp.base_url?.includes("1234")));
         if (matchingCp || envData["LM_API_KEY"] || activeProvider === "lmstudio") {
           rawKey = matchingCp?.api_key || envData["LM_API_KEY"] || "http://localhost:1234";
         }
-      }
-      // Perplexity check
-      else if (p.id === "perplexity") {
+      } else if (p.id === "perplexity") {
         const matchingCp = customList.find((cp) => cp && (cp.name === "Perplexity" || cp.base_url?.includes("perplexity")));
         if (matchingCp) {
           rawKey = matchingCp.api_key || "configured";
         } else if (envData["PERPLEXITY_API_KEY"]) {
           rawKey = envData["PERPLEXITY_API_KEY"];
         }
-      }
-      // Hugging Face check
-      else if (p.id === "huggingface") {
+      } else if (p.id === "huggingface") {
         rawKey = envData["HF_TOKEN"] || "";
-      }
-      // Copilot check
-      else if (p.id === "copilot") {
+      } else if (p.id === "copilot") {
         rawKey = envData["COPILOT_GITHUB_TOKEN"] || envData["GITHUB_TOKEN"] || envData["GH_TOKEN"] || "";
       }
 
       const isConfigured = Boolean(rawKey && rawKey.length > 3);
       const isActive =
-        !isStarterActive &&
-        (activeProvider === p.providerCode ||
-          (p.id === "openai" && activeProvider === "openai-codex") ||
-          (p.id === "gemini" && activeProvider === "vertex") ||
-          (p.id === "xai" && activeProvider === "xai-oauth") ||
-          (p.id === "qwen" && activeProvider === "qwen-oauth") ||
-          (p.id === "minimax" && activeProvider === "minimax-oauth") ||
-          (p.id === "ollama" && (activeProvider === "custom:Ollama" || activeProvider === "ollama-cloud")) ||
-          (p.id === "lmstudio" && (activeProvider === "lmstudio" || activeProvider === "custom:LMStudio")) ||
-          (p.id === "perplexity" && activeProvider === "custom:Perplexity"));
+        (!isStarterActive &&
+          ((activeProvider === p.providerCode && authMethod !== "oauth") ||
+            (p.id === "openai" && (activeProvider === "openai-api" || activeProvider === "openai-codex")) ||
+            (p.id === "gemini" && (activeProvider === "gemini" || activeProvider === "vertex")) ||
+            (p.id === "qwen" && (activeProvider === "alibaba" || activeProvider === "qwen-oauth")) ||
+            (p.id === "minimax" && (activeProvider === "minimax" || activeProvider === "minimax-oauth")) ||
+            (p.id === "xai" && (activeProvider === "xai" || activeProvider === "xai-oauth")) ||
+            (p.id === "nous" && activeProvider === "nous") ||
+            (p.id === "copilot" && activeProvider === "copilot") ||
+            (p.id === "openrouter" && activeProvider === "openrouter") ||
+            (p.id === "ollama" && activeProvider === "custom:Ollama") ||
+            (p.id === "lmstudio" && (activeProvider === "lmstudio" || activeProvider === "custom:LMStudio")) ||
+            (p.id === "perplexity" && activeProvider === "custom:Perplexity")));
 
       return {
         ...p,
@@ -582,9 +532,6 @@ print(json.dumps({
   }
 }
 
-/**
- * Configure or update a provider's credentials (API key or OAuth) and optionally set it as default active model
- */
 export async function saveInstanceProviderKey(
   instanceId: string,
   input: {
@@ -611,7 +558,6 @@ export async function saveInstanceProviderKey(
     throw new ApiError(400, "invalid_provider", `Fournisseur inconnu : ${providerId}`);
   }
 
-  // Handle OpenRouter OAuth PKCE exchange
   if (providerId === "openrouter" && input.oauthCode && input.codeVerifier) {
     try {
       const exchangeRes = await fetch("https://openrouter.ai/api/v1/auth/keys", {
@@ -701,7 +647,6 @@ if target_env_var and api_key:
         else:
             env_dict.pop("OPENROUTER_OAUTH_ACTIVE", None)
 
-# Handle OAuth tokens
 if provider_id == "anthropic" and oauth_token:
     env_dict["CLAUDE_CODE_OAUTH_TOKEN"] = oauth_token
     env_dict["ANTHROPIC_TOKEN"] = oauth_token
@@ -725,12 +670,10 @@ if provider_id == "nous" and oauth_token:
     env_dict["NOUS_API_KEY"] = oauth_token
     env_dict["NOUS_OAUTH_TOKEN"] = oauth_token
 
-# Rewrite .env
 with open(env_path, "w") as f:
     for k, v in env_dict.items():
         f.write(f"{k}={v}\\n")
 
-# Update config.yaml
 cfg_path = os.path.expanduser("~/.hermes/config.yaml")
 if os.path.exists(cfg_path):
     with open(cfg_path, "r") as f:
@@ -741,11 +684,9 @@ else:
 if "custom_providers" not in root_cfg or not isinstance(root_cfg["custom_providers"], list):
     root_cfg["custom_providers"] = []
 
-# Special handler for Ollama
 if provider_id == "ollama":
     o_url = base_url or "http://localhost:11434/v1"
     o_model = model or "llama3.3:latest"
-    # Update or add Ollama in custom_providers
     found = False
     for cp in root_cfg["custom_providers"]:
         if isinstance(cp, dict) and cp.get("name") == "Ollama":
@@ -769,7 +710,6 @@ if provider_id == "ollama":
             "default": o_model
         }
 
-# Special handler for LM Studio
 elif provider_id == "lmstudio":
     lm_url = base_url or "http://localhost:1234/v1"
     lm_model = model or "default"
@@ -794,7 +734,6 @@ elif provider_id == "lmstudio":
             "default": lm_model
         }
 
-# Special handler for Perplexity
 elif provider_id == "perplexity":
     p_url = "https://api.perplexity.ai"
     p_model = model or "sonar-pro"
@@ -915,7 +854,6 @@ else:
 with open(cfg_path, "w") as f:
     yaml.safe_dump(root_cfg, f, default_flow_style=False)
 
-# Propagate to all profiles
 for p in glob.glob(os.path.expanduser("~/.hermes/profiles/*")):
     prof_cfg = os.path.join(p, "config.yaml")
     if os.path.isfile(prof_cfg):
@@ -940,7 +878,6 @@ print("SUCCESS")
     throw new ApiError(502, "model_config_failed", "Impossible d'enregistrer la configuration du modèle.");
   }
 
-  // Reload worker process immediately
   try {
     await agent37.exec(instanceId, "pkill -9 -f hermes_worker.py || true");
   } catch {
@@ -948,9 +885,6 @@ print("SUCCESS")
   }
 }
 
-/**
- * Remove an API key / reset provider
- */
 export async function deleteInstanceProviderKey(instanceId: string, providerId: string): Promise<void> {
   const pyCode = `
 import yaml, os, glob
@@ -979,7 +913,6 @@ env_var_map = {
     "perplexity": "PERPLEXITY_API_KEY"
 }
 
-# 1. Remove from .env
 env_path = os.path.expanduser("~/.hermes/.env")
 target_var = env_var_map.get(provider_id)
 if os.path.exists(env_path):
@@ -1010,7 +943,6 @@ if os.path.exists(env_path):
                 continue
             f.write(line)
 
-# 2. If this provider was active, reset to Yelema Starter
 cfg_path = os.path.expanduser("~/.hermes/config.yaml")
 if os.path.exists(cfg_path):
     with open(cfg_path, "r") as f:
