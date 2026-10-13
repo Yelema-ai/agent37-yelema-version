@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { catalogToolkit } from "@/lib/integration-catalog";
+import type { LlmOverview } from "@/lib/llm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,6 +119,14 @@ export function UsageView() {
       });
   }, [month, member]);
 
+  // On a key of their own, the model itself is paid to the provider: Yelema measures none of it.
+  const [ownKey, setOwnKey] = useState(false);
+  useEffect(() => {
+    apiFetch<LlmOverview>("/api/llm")
+      .then((o) => setOwnKey(Boolean(o.client) || (o.members ?? []).some((m) => m.own)))
+      .catch(() => undefined);
+  }, []);
+
   async function more() {
     if (!calls) return;
     const key = asked.current;
@@ -136,6 +145,11 @@ export function UsageView() {
     <div className="max-w-5xl">
       <h1 className="font-display text-[28px] font-bold tracking-tight text-ink">Consommation</h1>
       <p className="mt-1 text-sm text-ink-2">Ce que les outils connectés de vos experts ont coûté, appel par appel.</p>
+      {ownKey && (
+        <p className="mt-3 max-w-2xl rounded-xl border border-line bg-soft px-4 py-3 text-[13px] text-ink-2">
+          Des experts tournent sur votre propre clé de modèle : la dépense de modèle n’est pas mesurée par Yelema, elle se lit chez votre fournisseur.
+        </p>
+      )}
 
       <div className="mt-5 flex flex-wrap items-end gap-3">
         <label className="text-[13px] font-semibold text-ink-3">

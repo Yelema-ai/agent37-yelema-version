@@ -17,6 +17,7 @@ const TABS = [
   { href: "/administration/emails", label: "E-mails", exact: false, adminOnly: true, backoffice: true },
   { href: "/administration/memoire", label: "Mémoire", exact: false, adminOnly: false, backoffice: true },
   { href: "/administration/organigramme", label: "Organigramme", exact: false, adminOnly: true, backoffice: true },
+  { href: "/administration/modeles", label: "Modèles", exact: false, adminOnly: false, backoffice: true },
 ];
 
 // Le cadre de l'administration. Membres et Instances, pour les admins, sont deux listes à lire :
@@ -24,7 +25,8 @@ const TABS = [
 // instance. Facturation et Consommation, pour les admins, lisent au back-office le forfait et les
 // factures, ce que les outils des experts ont coûté, et qui peut faire écrire chaque expert.
 // Mémoire, pour chacun, montre ce que ses experts savent de l'entreprise ; Organigramme, pour les
-// admins, décide de qui lit quoi.
+// admins, décide de qui lit quoi. Modèles dit sur quel compte de modèle tournent les experts : un
+// admin le règle pour l'entreprise ou pour un membre, un membre pour lui-même si son admin l'a permis.
 export default function AdministrationLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { current } = useWorkspace();

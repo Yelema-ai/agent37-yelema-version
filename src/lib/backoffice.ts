@@ -1,5 +1,6 @@
 import "server-only";
 import type { ComposioCall } from "@/lib/composio-usage";
+import { scopePath, type LlmKeyDraft, type LlmModelChoice, type LlmLoginView, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { mailPath, type MailDetail, type MailDraft, type MailInbox, type MailRights, type MailRightsPatch, type MailSummary } from "@/lib/mail";
 import { isPublicId, type MemoryList, type MemoryNote, type MemoryPatch, type OrgChart, type OrgGrantDraft } from "@/lib/memory";
 import { backofficeUrl } from "@/lib/runtime-config";
@@ -17,6 +18,8 @@ import { pinnedWorkspaceId } from "@/lib/tenant";
 const TIMEOUT_MS = 15_000;
 // Sending an e-mail with attachments goes on to the provider before it answers.
 const MAIL_SEND_TIMEOUT_MS = 90_000;
+// Saving a model key waits for the provider to say whether it accepts it.
+const SETTING_WRITE_TIMEOUT_MS = 30_000;
 // A reasoned answer of the company memory runs a model on the provider's side.
 const MEMORY_ASK_TIMEOUT_MS = 75_000;
 
@@ -25,12 +28,15 @@ export class BackofficeError extends Error {
   code: string;
   /** Seconds to wait before trying again (rate limit), when the back office says so. */
   retryAfter: number | null;
-  constructor(status: number, code: string, message: string, retryAfter: number | null = null) {
+  /** What a refusal carries besides its code: the models to propose in place of an unknown one. */
+  suggestions: unknown[];
+  constructor(status: number, code: string, message: string, retryAfter: number | null = null, suggestions: unknown[] = []) {
     super(message);
     this.name = "BackofficeError";
     this.status = status;
     this.code = code;
     this.retryAfter = retryAfter;
+    this.suggestions = suggestions;
   }
 }
 
@@ -161,14 +167,15 @@ async function call<T>(path: string, init: { method?: string; token?: string | n
     // A gateway page instead of JSON: treated as an outage below.
   }
   if (!res.ok) {
-    const err = (data as { error?: { code?: string; message?: string } } | null)?.error;
+    const err = (data as { error?: { code?: string; message?: string; suggestions?: unknown } } | null)?.error;
     const retry = Number(res.headers.get("retry-after"));
     if (!err) console.error(`[backoffice] ${path}: ${res.status}`, text.slice(0, 300));
     throw new BackofficeError(
       res.status,
       err?.code ?? (res.status >= 500 ? "unavailable" : "error"),
       err?.message ?? "Le service est momentanément indisponible. Réessayez dans un instant.",
-      Number.isFinite(retry) && retry > 0 ? retry : null
+      Number.isFinite(retry) && retry > 0 ? retry : null,
+      Array.isArray(err?.suggestions) ? err.suggestions : []
     );
   }
   return data as T;
@@ -317,6 +324,25 @@ export const backoffice = {
     return call<MailRights>(`/app/mail/rights/${expert}`, { method: "PUT", token, body: patch });
   },
 
+  // The client's model keys. The back office checks a key with its provider, encrypts it, installs
+  // it on the instances in the background and watches it; it reads the caller's role on the session
+  // and refuses with a code the route turns into a sentence (src/lib/llm.ts). A key never comes back.
+  llm: (token: string) => call<LlmOverview>("/app/llm", { token }),
+  setLlmKey: (token: string, scope: SettingScope, draft: LlmKeyDraft) =>
+    call<LlmWritten>(settingPath("/app/llm", scope), { method: "PUT", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  removeLlmKey: (token: string, scope: SettingScope) => call<LlmWritten>(settingPath("/app/llm", scope), { method: "DELETE", token }),
+  // A subscription instead of a key: the back office starts the provider's own sign-in inside the
+  // member's instance and answers the page to open and the code to type there; the tokens never
+  // leave the instance. Not for the whole company: an account signs in on one instance.
+  startLlmLogin: (token: string, scope: SettingScope, draft: { provider: string; model: string }) =>
+    call<LlmLoginView>(`${settingPath("/app/llm", scope)}/provider-login`, { method: "POST", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS * 2 }),
+  llmLogin: (token: string, scope: SettingScope) => call<LlmLoginView>(`${settingPath("/app/llm", scope)}/provider-login`, { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  // The model the caller picks among Yelema's own, for their instance or one of their experts.
+  setLlmModel: (token: string, choice: LlmModelChoice) =>
+    call<LlmWritten>("/app/llm/own/model", { method: "PUT", token, body: choice, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  setLlmSettings: (token: string, settings: { membersMayBringKey: boolean }) =>
+    call<{ membersMayBringKey: boolean }>("/app/llm/settings", { method: "PUT", token, body: settings }),
+
   // The company memory. The two reads are made in an instance's name, like reportComposioCalls: the
   // back office maps the token to its member and answers only from the compartments the org chart
   // opens to that member. A reasoned answer goes through a model on the provider's side.
@@ -345,6 +371,14 @@ export const backoffice = {
   createGrant: (token: string, grant: OrgGrantDraft) => call<{ id: string }>("/app/org/grants", { method: "POST", token, body: grant }),
   deleteGrant: (token: string, id: string) => call<{ ok: true }>(ownPath("/app/org/grants", id), { method: "DELETE", token }),
 };
+
+// The route of a setting's scope, or a 404: a member id that is not a plain number never reaches
+// the back office's URL.
+function settingPath(base: string, scope: SettingScope): string {
+  const path = scopePath(base, scope);
+  if (!path) throw new BackofficeError(404, "not_found", "Ce membre est introuvable.");
+  return path;
+}
 
 function ownPath(base: string, id: string): string {
   if (!isPublicId(id)) throw new BackofficeError(404, "not_found", "Cet élément est introuvable.");

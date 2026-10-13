@@ -145,7 +145,9 @@ Browser ─▶ Next.js (this app) ─▶ control plane  https://api.agent37.com/
   `/experts/{agentId}/{profileId}/{tab}` the expert's workspace (Discussion / Livrables /
   Routines). Without a profile segment the page is the instance's default Hermes home.
   Administration (`/administration`) has four tabs, plus Facturation and Consommation for admins
-  where the back office signs users in. Two are read-only lists for admins: the
+  where the back office signs users in, and Modèles for everyone there (the account of model the
+  experts run on: an admin sets it for the company or for a member, a member for themself when
+  their admin allows it, and otherwise only reads where theirs comes from). Two are read-only lists for admins: the
   workspace's members, and its instances by name and member (no id, no state, no way in). Two are
   for everyone and act on the signed-in user's OWN instance, for all of its experts: Connecteurs
   and Canaux (`src/components/MyInstance.tsx`). A member sees only those two. The app creates
@@ -193,6 +195,8 @@ Browser ─▶ Next.js (this app) ─▶ control plane  https://api.agent37.com/
 | `src/lib/tenant-resolver.ts`, `src/lib/tenant.ts`, `src/app/espace-*` | The client a request is for when one deployment serves every client: host lookup at the back office, the workspace a request is confined to, and the pages for an unknown or suspended client |
 | `src/lib/backoffice.ts`, `src/lib/session.ts`, `src/app/api/auth/**` | Sign-in through the back office: its client, the cookie session, and the login / logout / forgot / accept routes |
 | `src/app/api/billing/**`, `src/components/BillingView.tsx`, `src/app/(app)/administration/facturation/` | Facturation, for admins, signed in through the back office: plan, next due date, invoices and their PDF, read from the back office (`/api/v1/app/billing/*`). "Payer" opens the back office's own payment link; the app creates no payment |
+| `src/lib/llm.ts` (+ `.test.ts`), `src/app/api/llm/**`, `src/components/models/**`, `src/app/(app)/administration/modeles/` | Modèles, signed in through the back office: the client's own model key, for the company, a member or oneself (`/api/v1/app/llm/*`). The back office serves the providers, checks, keeps, installs and watches the key; the app shows it and turns each refusal code into a French sentence. Also a private OpenAI-compatible endpoint, and a subscription signed in inside the member's instance (a page to open and a code to type; no token passes here). `YelemaModels.tsx`: with no key at all, every member picks among the models Yelema offers to all its clients, for their instance or one expert (`PUT /api/llm/own/model`); the chat's model switcher lists the same models, as the instance reports them |
+| `src/lib/openrouter-pkce.ts` (+ `.test.ts`), `src/app/api/llm/openrouter/` | OpenRouter in one click (OAuth PKCE): the server keeps the verifier in an httpOnly cookie, trades the code for a key and hands it to the back office; the key never reaches the browser |
 | `src/app/api/composio-usage/**`, `src/components/integrations/UsageView.tsx`, `src/app/(app)/administration/consommation/` | Consommation, for admins, signed in through the back office: what the experts' tools cost over a month, in all, by member, by application and call by call, read from the back office (`/api/v1/app/composio-usage`). Amounts come in thousandths of a CFA franc and are rounded to the franc on display only |
 | `src/lib/catalogue.ts`, `src/app/api/catalogue/**` | The back office's expert catalogue, cached, and its join with installed profiles |
 | `src/components/experts/ExpertImage.tsx`, `images` in `next.config.ts` | Expert pictures resized by the image optimizer (the catalogue serves them full size); only Yelema hosts are optimized |
@@ -286,6 +290,10 @@ Dockerfile goes away once every client is on Vercel.
   settings tab and no route that mints a signed URL for an arbitrary port; running the instance is
   Yelema's job, from the back office. The one exception is "Son ordinateur", whose route signs
   the screen's port only.
+- **The app sets no model key and no tool on an instance.** A key, an endpoint or a subscription
+  for the experts' model is asked of the back office (`/api/v1/app/llm/*`), which alone writes on
+  the instance: no `exec` and no files call here for it, and no list of providers. A key goes
+  through the app once, on its way in, and never comes back: only its last four characters.
 - **The app cannot act on an instance.** No route starts, stops, restarts, updates, resizes or
   re-budgets one, and `src/lib/agent37.ts` no longer has those calls: the app holds Yelema's
   workspace-wide key, so any such route would let a signed-in user change an instance behind the
