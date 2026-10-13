@@ -1,8 +1,21 @@
+import {
+  siAnthropic,
+  siDeepseek,
+  siGithubcopilot,
+  siGooglegemini,
+  siHuggingface,
+  siMinimax,
+  siMistralai,
+  siOllama,
+  siOpenrouter,
+  siPerplexity,
+} from "simple-icons";
 import { cn } from "@/lib/utils";
 
-// La pastille d'un fournisseur de modèles : ses initiales aux couleurs de sa marque. Elle se choisit
-// par `family`, que le back-office sert avec son catalogue, et jamais par le libellé, qui peut
-// changer. Une famille inconnue ici prend les initiales de son nom sur un fond neutre.
+// La pastille d'un fournisseur de modèles : le logo de sa marque quand on en a un tracé fidèle,
+// sinon ses initiales, aux couleurs de la marque. Elle se choisit par `family`, que le back-office
+// sert avec son catalogue, et jamais par le libellé, qui peut changer. Une famille inconnue ici
+// prend les initiales de son nom sur un fond neutre.
 const MARKS: Record<string, { tone: string; label: string }> = {
   openrouter: { tone: "bg-[#6366F1]/10 text-[#6366F1] border-[#6366F1]/20", label: "OR" },
   anthropic: { tone: "bg-[#D97706]/10 text-[#D97706] border-[#D97706]/20", label: "A" },
@@ -26,11 +39,32 @@ const MARKS: Record<string, { tone: string; label: string }> = {
   custom: { tone: "bg-tint text-brand-ink border-brand/20", label: "⚙" },
 };
 
+// Les tracés officiels des marques (`simple-icons`, grille de 24). Une marque que le paquet ne
+// connaît pas garde ses initiales : un logo approchant passerait pour le vrai, les initiales non.
+const ICONS: Record<string, string> = {
+  openrouter: siOpenrouter.path,
+  anthropic: siAnthropic.path,
+  google: siGooglegemini.path,
+  deepseek: siDeepseek.path,
+  mistral: siMistralai.path,
+  ollama: siOllama.path,
+  copilot: siGithubcopilot.path,
+  perplexity: siPerplexity.path,
+  huggingface: siHuggingface.path,
+  minimax: siMinimax.path,
+};
+
 export function ProviderLogo({ family, name }: { family: string; name: string }) {
   const mark = MARKS[family] ?? { tone: "bg-soft text-ink border-line", label: name.slice(0, 2).toUpperCase() };
   return (
     <div aria-hidden className={cn("grid h-11 w-11 shrink-0 select-none place-items-center rounded-[14px] border text-sm font-bold tracking-tight", mark.tone)}>
-      {mark.label}
+      {ICONS[family] ? (
+        <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+          <path d={ICONS[family]} />
+        </svg>
+      ) : (
+        mark.label
+      )}
     </div>
   );
 }

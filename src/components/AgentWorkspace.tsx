@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { toast } from "sonner";
 import { FolderOpen, Mail, MessageSquare, Repeat } from "lucide-react";
 import { agentTabPath, parseAgentRoute, type AgentTab } from "@/lib/expert-tabs";
 import { useWorkspace } from "@/components/WorkspaceProvider";
@@ -72,6 +73,13 @@ export function AgentWorkspace({
   // The expert's own inbox, when the back office gives this member one to read.
   const mail = useMailInboxes();
   const inbox = (expert?.catalogueKey && mail.inboxes.find((i) => i.expert === expert.catalogueKey)) || null;
+  const copyAddress = () => {
+    if (!inbox) return;
+    navigator.clipboard.writeText(inbox.address).then(
+      () => toast.success("Adresse e-mail copiée."),
+      () => toast.error("L’adresse n’a pas pu être copiée.")
+    );
+  };
   // Routines belong to an expert's profile: the instance's default home has none here. E-mails show
   // only for an expert that has an inbox.
   const tabs = TABS.filter((t) => (t.id === "routines" ? profileId !== null : t.id !== "emails" || inbox !== null));
@@ -153,6 +161,16 @@ export function AgentWorkspace({
                 <div className="absolute inset-x-3 bottom-3">
                   <p className="text-[17px] font-bold">{expert.displayName}</p>
                   {expert.role && <p className="text-[11px] font-semibold uppercase tracking-[0.06em] opacity-85">{expert.role}</p>}
+                  {inbox && (
+                    <button
+                      type="button"
+                      onClick={copyAddress}
+                      title="Copier l’adresse e-mail"
+                      className="mt-0.5 block w-full truncate text-left text-[11.5px] opacity-75 transition-opacity hover:underline hover:opacity-100"
+                    >
+                      {inbox.address}
+                    </button>
+                  )}
                 </div>
               </div>
               {expert.tagline && <p className="px-1.5 pb-1 pt-2 text-[13px] text-ink-3">{expert.tagline}</p>}
@@ -194,7 +212,10 @@ export function AgentWorkspace({
             {expert && (
               <>
                 <ExpertAvatar expert={{ ...expert, gateway: null }} size="sm" />
-                <span className="ml-2 mr-2 shrink-0 text-sm font-bold text-ink">{expert.displayName}</span>
+                <span className="ml-2 mr-2 min-w-0 shrink-0">
+                  <span className="block text-sm font-bold leading-tight text-ink">{expert.displayName}</span>
+                  {inbox && <span className="block max-w-[150px] truncate text-[10px] text-ink-3">{inbox.address}</span>}
+                </span>
               </>
             )}
             {tabs.map((t) => (
