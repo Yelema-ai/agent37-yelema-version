@@ -15,6 +15,7 @@ describe("llmRefusalMessage", () => {
     assert.equal(llmRefusalMessage("internal_error"), null);
     assert.equal(llmRefusalMessage("unauthorized"), null);
     assert.equal(llmRefusalMessage(""), null);
+    assert.equal(llmRefusalMessage("constructor"), null);
   });
 
   it("an unknown model lists the provider's suggestions, and only plain model names", () => {

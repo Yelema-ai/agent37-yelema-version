@@ -1,6 +1,7 @@
 import "server-only";
 import type { CompanyProfile } from "@/lib/company";
 import type { ComposioCall } from "@/lib/composio-usage";
+import { mcpScopePath, mcpServerPath, type McpOverview, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
 import { scopePath, type LlmKeyDraft, type LlmModelChoice, type LlmLoginView, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { mailPath, type MailDetail, type MailDraft, type MailInbox, type MailRights, type MailRightsPatch, type MailSummary } from "@/lib/mail";
 import { isPublicId, type MemoryList, type MemoryNote, type MemoryPatch, type OrgChart, type OrgGrantDraft } from "@/lib/memory";
@@ -343,6 +344,24 @@ export const backoffice = {
     call<LlmWritten>("/app/llm/own/model", { method: "PUT", token, body: choice, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   setLlmSettings: (token: string, settings: { membersMayBringKey: boolean }) =>
     call<{ membersMayBringKey: boolean }>("/app/llm/settings", { method: "PUT", token, body: settings }),
+
+  // The client's own tool servers (MCP). The back office checks the name, the address and the
+  // token, encrypts the token, writes the server on the instances in the background and never calls
+  // the address itself; it reads the caller's role on the session and refuses with a code the route
+  // turns into a sentence (src/lib/mcp-servers.ts). A token never comes back.
+  mcp: (token: string) => call<McpOverview>("/app/mcp", { token }),
+  addMcpServer: (token: string, scope: SettingScope, draft: McpServerDraft) => {
+    const path = mcpScopePath(scope);
+    if (!path) throw new BackofficeError(404, "not_found", "Ce membre est introuvable.");
+    return call<McpWritten>(path, { method: "POST", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS });
+  },
+  removeMcpServer: (token: string, scope: SettingScope, serverId: string) => {
+    const path = mcpServerPath(scope, serverId);
+    if (!path) throw new BackofficeError(404, "not_found", "Ce serveur est introuvable.");
+    return call<McpWritten>(path, { method: "DELETE", token });
+  },
+  setMcpSettings: (token: string, settings: { membersMayAddMcp: boolean }) =>
+    call<{ membersMayAddMcp: boolean }>("/app/mcp/settings", { method: "PUT", token, body: settings }),
 
   // The company memory. The two reads are made in an instance's name, like reportComposioCalls: the
   // back office maps the token to its member and answers only from the compartments the org chart

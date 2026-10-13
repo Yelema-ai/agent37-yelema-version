@@ -215,7 +215,7 @@ const REFUSALS: Record<string, string> = {
  * these (the caller then answers its usual sentence). The back office's own text is never shown.
  */
 export function llmRefusalMessage(code: string, suggestions: readonly unknown[] = []): string | null {
-  const sentence = REFUSALS[code];
+  const sentence = Object.hasOwn(REFUSALS, code) ? REFUSALS[code] : undefined;
   if (!sentence) return null;
   // Model names come from the provider's list: only plain ones are shown, and only a few.
   const models = suggestions.filter((m): m is string => typeof m === "string" && /^[A-Za-z0-9][A-Za-z0-9._:/-]{1,120}$/.test(m)).slice(0, 6);
