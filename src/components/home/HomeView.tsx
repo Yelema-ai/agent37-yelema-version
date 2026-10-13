@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, MessageCircle, Send } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
+import { CompanyProfileCard } from "@/components/company/CompanyProfileCard";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { ExpertMedia } from "@/components/experts/ExpertMedia";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
@@ -146,6 +147,7 @@ export function HomeView() {
     <div className="mx-auto w-full max-w-[1280px] px-4 pb-24 pt-6 sm:px-8">
       <p className="text-[15px] text-ink-3">{today()}</p>
       <h1 className="mt-1 font-display text-[34px] font-bold tracking-tight text-ink sm:text-[38px]">Bonjour {hello}</h1>
+      <CompanyProfileCard />
 
       {to && (
         <>

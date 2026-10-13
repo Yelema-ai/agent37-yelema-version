@@ -1,4 +1,5 @@
 import "server-only";
+import type { CompanyProfile } from "@/lib/company";
 import type { ComposioCall } from "@/lib/composio-usage";
 import { scopePath, type LlmKeyDraft, type LlmModelChoice, type LlmLoginView, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { mailPath, type MailDetail, type MailDraft, type MailInbox, type MailRights, type MailRightsPatch, type MailSummary } from "@/lib/mail";
@@ -350,6 +351,10 @@ export const backoffice = {
     call<{ answer: string | null }>("/app/memory/ask", { method: "POST", token: instanceToken, workspace, body: { question }, timeoutMs: MEMORY_ASK_TIMEOUT_MS }),
   memorySearch: (instanceToken: string, workspace: string, query: string, limit?: number) =>
     call<{ items: { title: string; excerpt: string }[] }>("/app/memory/search", { method: "POST", token: instanceToken, workspace, body: { query, limit }, timeoutMs: MEMORY_ASK_TIMEOUT_MS }),
+  // The company profile: where it stands for any member, the logo for a workspace admin only.
+  companyProfile: (token: string) => call<CompanyProfile>("/app/workspace/profile", { token }),
+  uploadLogo: (token: string, form: FormData) => call<CompanyProfile>("/app/workspace/logo", { method: "POST", token, form, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  removeLogo: (token: string) => call<CompanyProfile>("/app/workspace/logo", { method: "DELETE", token }),
   // What the member reads, and where they may deposit. Deposits are sent to the memory in the
   // background: `status` goes from pending to synced.
   memoryItems: (token: string) => call<MemoryList>("/app/memory/items", { token }),
