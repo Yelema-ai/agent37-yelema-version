@@ -22,6 +22,7 @@ import { ChatView } from "@/components/chat/ChatView";
 import { FilesTab } from "@/components/files/FilesTab";
 import { cn } from "@/lib/utils";
 import { CallButton } from "@/components/voice/CallButton";
+import { VoiceButton } from "@/components/voice/VoiceButton";
 
 const TABS: { id: AgentTab; label: string; icon: typeof MessageSquare }[] = [
   { id: "chat", label: "Discussion", icon: MessageSquare },
@@ -177,7 +178,12 @@ export function AgentWorkspace({
                 </div>
               </div>
               {expert.tagline && <p className="px-1.5 pb-1 pt-2 text-[13px] text-ink-3">{expert.tagline}</p>}
-              {callee && <CallButton expert={callee} className="mx-1.5 mb-2 mt-1" />}
+              {callee && (
+                <div className="mx-1.5 mb-2 mt-1 flex gap-1.5">
+                  <CallButton expert={callee} className="flex-1" />
+                  <VoiceButton expert={callee} />
+                </div>
+              )}
             </>
           )}
           <nav className="flex flex-col gap-0.5">
@@ -220,7 +226,8 @@ export function AgentWorkspace({
                   <span className="block text-sm font-bold leading-tight text-ink">{expert.displayName}</span>
                   {inbox && <span className="block max-w-[150px] truncate text-[10px] text-ink-3">{inbox.address}</span>}
                 </span>
-                {callee && <CallButton expert={callee} className="mr-2 shrink-0" />}
+                {callee && <CallButton expert={callee} className="mr-1 shrink-0" />}
+                {callee && <VoiceButton expert={callee} compact className="mr-2 size-8 shrink-0" />}
               </>
             )}
             {tabs.map((t) => (

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { callHeaders, chosenVoice, signalingStep } from "./voice.ts";
+import { callHeaders, chosenVoice, parseVoicePrefs, signalingStep } from "./voice.ts";
 
 test("a relayed step is only one the SDK sends, with its own method", () => {
   assert.equal(signalingStep("conv_abc-1", "offer", "POST"), "offer");
@@ -39,4 +39,11 @@ test("the voice of a call: the one chosen for the language, else its default, el
   assert.equal(chosenVoice(voices, { language: "fr", voices: { fr: "retiree" } })?.key, "akissi");
   assert.equal(chosenVoice(voices, { language: "en", voices: { fr: "adjoua" } })?.key, "amelia");
   assert.equal(chosenVoice([], { language: "fr", voices: {} }), null);
+});
+
+test("stored voice settings: read leniently, anything unreadable is no setting", () => {
+  assert.deepEqual(parseVoicePrefs('{"language":"en","voices":{"en":"nana"}}'), { language: "en", voices: { en: "nana" } });
+  assert.deepEqual(parseVoicePrefs('{"language":"de"}'), { language: "fr", voices: {} });
+  assert.equal(parseVoicePrefs(null), null);
+  assert.equal(parseVoicePrefs("{oops"), null);
 });
