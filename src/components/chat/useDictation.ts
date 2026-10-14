@@ -5,7 +5,7 @@ import { readVoicePrefs } from "@/lib/voice";
 import { downsample, encodeWav } from "@/lib/wav";
 
 // The chat's dictation: the microphone is captured as raw samples and sent as a WAV (the format
-// the speech service reads), in the language chosen for calls. Ported from the voice dictation of
+// the speech service reads), in the language chosen for the expert's calls. Ported from the voice dictation of
 // feat/agentMail (ddbf907), which recorded WebM for six speech engines.
 
 /** About 4 minutes: the speech service takes 8 MB at most. */
@@ -24,7 +24,8 @@ export interface UseDictation {
   cancel(): void;
 }
 
-export function useDictation({ onText, onError }: { onText: (text: string) => void; onError: (message: string) => void }): UseDictation {
+/** `expert`: catalogue key whose call language the dictation takes; French without one. */
+export function useDictation({ expert, onText, onError }: { expert: string | null; onText: (text: string) => void; onError: (message: string) => void }): UseDictation {
   const [state, setState] = useState<DictationState>("idle");
   const [seconds, setSeconds] = useState(0);
   const [level, setLevel] = useState(0);
@@ -51,7 +52,7 @@ export function useDictation({ onText, onError }: { onText: (text: string) => vo
       try {
         const form = new FormData();
         form.append("file", new Blob([encodeWav(downsample(all, rate))], { type: "audio/wav" }), "dictee.wav");
-        form.append("language", readVoicePrefs().language);
+        form.append("language", expert ? readVoicePrefs(expert).language : "fr");
         const res = await fetch("/api/voice/transcribe", { method: "POST", body: form });
         const data = (await res.json().catch(() => ({}))) as { text?: string; error?: { message?: string } };
         if (!res.ok) throw new Error(data.error?.message ?? "La dictée n’a pas pu être transcrite.");
@@ -63,7 +64,7 @@ export function useDictation({ onText, onError }: { onText: (text: string) => vo
         setState("idle");
       }
     },
-    [onError, onText]
+    [expert, onError, onText]
   );
 
   const finish = useCallback(() => {

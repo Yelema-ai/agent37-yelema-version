@@ -20,7 +20,7 @@ const PHASE_LABEL: Record<CallPhase, string> = {
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-/** Opening it calls at once, in the language and voice chosen ahead in "Mon profil". */
+/** Opening it calls at once, in the language and voice chosen ahead for this expert. */
 export function CallDialog({
   open,
   onOpenChange,
@@ -37,7 +37,7 @@ export function CallDialog({
   const inCall = call.phase !== "idle" && call.phase !== "ended" && call.phase !== "unreachable";
 
   const dial = () => {
-    const prefs = readVoicePrefs();
+    const prefs = readVoicePrefs(expert.key);
     voice.current = chosenVoice(voices, prefs);
     call.start({ expert: expert.key, language: prefs.language, voice: voice.current?.key ?? null });
   };
@@ -61,7 +61,7 @@ export function CallDialog({
             {call.phase === "unreachable" ? call.reason : PHASE_LABEL[call.phase]}
             {(call.phase === "listening" || call.phase === "speaking" || (call.phase === "ended" && call.elapsed > 0)) && ` · ${clock(call.elapsed)}`}
           </DialogDescription>
-          {voice.current && <p className="text-[12px] text-ink-3">Voix : {voice.current.label} · se change dans « Mon profil »</p>}
+          {voice.current && <p className="text-[12px] text-ink-3">Voix : {voice.current.label} · se change dans « Voix », sous Appeler</p>}
         </div>
 
         <div className="flex justify-center gap-3 pt-1">

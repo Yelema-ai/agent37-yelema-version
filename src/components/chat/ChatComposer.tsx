@@ -14,6 +14,7 @@ import { findModel, prettyModelLabel, type ChatSettings } from "./types";
 import type { SendSettings } from "./useChat";
 import { useDictation } from "./useDictation";
 import { useVoices } from "@/components/voice/useVoices";
+import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 
 interface Props {
   agentId: string;
@@ -64,7 +65,10 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
 
   // Dictation goes through the speech service: offered only where voice is on (voices are offered).
   const canDictate = useVoices().length > 0;
+  const { experts } = useExpertsContext();
+  const expertKey = experts.find((e) => e.agentId === agentId && e.profileId === profile)?.catalogueKey ?? null;
   const dictation = useDictation({
+    expert: expertKey,
     onText: (said) => {
       setText((prev) => (prev.trim() ? `${prev.trim()} ${said}` : said));
       requestAnimationFrame(() => {

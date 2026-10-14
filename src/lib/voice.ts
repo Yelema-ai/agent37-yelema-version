@@ -52,20 +52,31 @@ export interface VoicePrefs {
   voices: Partial<Record<VoiceLanguage, string>>;
 }
 
+// One setting per expert (its catalogue key); an expert not set yet takes what was chosen for all
+// of them before, in "Mon profil" (the bare key), else French and its default voice.
 const PREFS_KEY = "yelema-voice";
 
-export function readVoicePrefs(): VoicePrefs {
+export function parseVoicePrefs(raw: string | null): VoicePrefs | null {
   try {
-    const raw = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as Partial<VoicePrefs>;
-    return { language: raw.language === "en" ? "en" : "fr", voices: raw.voices && typeof raw.voices === "object" ? raw.voices : {} };
+    const v = JSON.parse(raw ?? "null") as Partial<VoicePrefs> | null;
+    if (!v || typeof v !== "object") return null;
+    return { language: v.language === "en" ? "en" : "fr", voices: v.voices && typeof v.voices === "object" ? v.voices : {} };
+  } catch {
+    return null;
+  }
+}
+
+export function readVoicePrefs(expert: string): VoicePrefs {
+  try {
+    return parseVoicePrefs(localStorage.getItem(`${PREFS_KEY}:${expert}`)) ?? parseVoicePrefs(localStorage.getItem(PREFS_KEY)) ?? { language: "fr", voices: {} };
   } catch {
     return { language: "fr", voices: {} };
   }
 }
 
-export function writeVoicePrefs(prefs: VoicePrefs): void {
+export function writeVoicePrefs(expert: string, prefs: VoicePrefs): void {
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    localStorage.setItem(`${PREFS_KEY}:${expert}`, JSON.stringify(prefs));
   } catch {}
 }
 
