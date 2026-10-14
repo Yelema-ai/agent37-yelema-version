@@ -25,6 +25,8 @@ const MAIL_SEND_TIMEOUT_MS = 90_000;
 const SETTING_WRITE_TIMEOUT_MS = 30_000;
 // A reasoned answer of the company memory runs a model on the provider's side.
 const MEMORY_ASK_TIMEOUT_MS = 75_000;
+// A dictation is transcribed in about the time it was spoken (4 minutes at most).
+const DICTATION_TIMEOUT_MS = 95_000;
 
 export class BackofficeError extends Error {
   status: number;
@@ -314,6 +316,8 @@ export const backoffice = {
   // 403 whose sentence is shown as it is; 404 everywhere when the feature is off.
   // Voice calls: the back office answers with Aethex's own bodies, which the browser's SDK reads.
   voiceVoices: async (token: string) => (await call<{ items: VoiceOption[] }>("/app/voice/voices", { token })).items,
+  // A dictation of the chat (WAV/FLAC/Ogg), transcribed by the back office's speech service.
+  voiceTranscribe: (token: string, form: FormData) => call<{ text: string }>("/app/voice/transcribe", { method: "POST", token, form, timeoutMs: DICTATION_TIMEOUT_MS }),
   voiceStart: (token: string, headers: Record<string, string>, body: unknown) =>
     call<Record<string, unknown>>("/app/voice/calls", { method: "POST", token, body, headers }),
   voiceSignal: (token: string, conversationId: string, step: SignalingStep, body: unknown) =>
