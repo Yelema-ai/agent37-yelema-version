@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { callHeaders, signalingStep } from "./voice.ts";
+import { callHeaders, chosenVoice, signalingStep } from "./voice.ts";
 
 test("a relayed step is only one the SDK sends, with its own method", () => {
   assert.equal(signalingStep("conv_abc-1", "offer", "POST"), "offer");
@@ -29,4 +29,14 @@ test("call headers: expert and language required, voice optional, all normalised
   assert.equal(callHeaders(new Headers({ "x-yelema-language": "fr" })), null);
   assert.equal(callHeaders(new Headers({ "x-yelema-expert": "koffi", "x-yelema-language": "de" })), null);
   assert.equal(callHeaders(new Headers({ "x-yelema-expert": "koffi", "x-yelema-language": "fr", "x-yelema-voice": "a/b" })), null);
+});
+
+test("the voice of a call: the one chosen for the language, else its default, else its first", () => {
+  const v = (key: string, language: "fr" | "en", isDefault = false) => ({ key, label: key, language, gender: "female" as const, country: "CI", previewUrl: "", default: isDefault });
+  const voices = [v("adjoua", "fr"), v("akissi", "fr", true), v("amelia", "en")];
+  assert.equal(chosenVoice(voices, { language: "fr", voices: { fr: "adjoua" } })?.key, "adjoua");
+  assert.equal(chosenVoice(voices, { language: "fr", voices: {} })?.key, "akissi");
+  assert.equal(chosenVoice(voices, { language: "fr", voices: { fr: "retiree" } })?.key, "akissi");
+  assert.equal(chosenVoice(voices, { language: "en", voices: { fr: "adjoua" } })?.key, "amelia");
+  assert.equal(chosenVoice([], { language: "fr", voices: {} }), null);
 });

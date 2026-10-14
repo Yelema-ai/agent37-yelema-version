@@ -8,6 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
+import { readVoicePrefs, writeVoicePrefs, type VoicePrefs } from "@/lib/voice";
+import { useVoices } from "@/components/voice/useVoices";
+import { VoiceSettings } from "@/components/voice/VoiceSettings";
 
 interface Profile {
   firstName: string;
@@ -21,10 +24,14 @@ export function ProfileDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [saving, setSaving] = useState(false);
+  // The call voice lives in this browser; the back office keeps the rest.
+  const voices = useVoices();
+  const [voicePrefs, setVoicePrefs] = useState<VoicePrefs>({ language: "fr", voices: {} });
 
   useEffect(() => {
     if (!open) return;
     setProfile(null);
+    setVoicePrefs(readVoicePrefs());
     apiFetch<Profile>("/api/account").then(setProfile, (e: Error) => {
       toast.error(e.message);
       onOpenChange(false);
@@ -43,6 +50,7 @@ export function ProfileDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         method: "PATCH",
         body: JSON.stringify({ firstName: profile.firstName, lastName: profile.lastName, jobTitle: profile.jobTitle }),
       });
+      writeVoicePrefs(voicePrefs);
       toast.success("Profil enregistré.");
       onOpenChange(false);
       router.refresh();
@@ -74,6 +82,13 @@ export function ProfileDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               <Label htmlFor="profile-job">Fonction</Label>
               <Input id="profile-job" value={profile.jobTitle} onChange={set("jobTitle")} maxLength={200} placeholder="Directrice administrative et financière" />
             </div>
+            {voices.length > 0 && (
+              <div className="flex flex-col gap-1.5 border-t border-line pt-3">
+                <Label>Appels vocaux</Label>
+                <p className="text-[12px] text-ink-3">La langue et la voix de vos experts quand vous les appelez.</p>
+                <VoiceSettings voices={voices} prefs={voicePrefs} onChange={setVoicePrefs} />
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
                 Annuler
