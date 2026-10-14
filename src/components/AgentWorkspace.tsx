@@ -21,6 +21,7 @@ import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatView } from "@/components/chat/ChatView";
 import { FilesTab } from "@/components/files/FilesTab";
 import { cn } from "@/lib/utils";
+import { CallButton } from "@/components/voice/CallButton";
 
 const TABS: { id: AgentTab; label: string; icon: typeof MessageSquare }[] = [
   { id: "chat", label: "Discussion", icon: MessageSquare },
@@ -87,6 +88,8 @@ export function AgentWorkspace({
   const expertName = expert?.displayName ?? (profileId ? expertDisplayName(profileId) : "");
   // The rail's picture: the face, or the full-body portrait cropped to it.
   const portrait = expert?.photoUrl ?? (sheet ? sheet.portraitUrl : null);
+  // Only an expert of the catalogue can be called: the back office opens the call by its key.
+  const callee = expert?.catalogueKey ? { key: expert.catalogueKey, name: expertName, photoUrl: portrait } : null;
 
   // A message typed on the home page rides the URL as ?q= and is sent once the chat is up.
   const [initialMessage] = useState<string | null>(() =>
@@ -174,6 +177,7 @@ export function AgentWorkspace({
                 </div>
               </div>
               {expert.tagline && <p className="px-1.5 pb-1 pt-2 text-[13px] text-ink-3">{expert.tagline}</p>}
+              {callee && <CallButton expert={callee} className="mx-1.5 mb-2 mt-1" />}
             </>
           )}
           <nav className="flex flex-col gap-0.5">
@@ -216,6 +220,7 @@ export function AgentWorkspace({
                   <span className="block text-sm font-bold leading-tight text-ink">{expert.displayName}</span>
                   {inbox && <span className="block max-w-[150px] truncate text-[10px] text-ink-3">{inbox.address}</span>}
                 </span>
+                {callee && <CallButton expert={callee} className="mr-2 shrink-0" />}
               </>
             )}
             {tabs.map((t) => (
