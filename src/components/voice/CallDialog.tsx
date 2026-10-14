@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { chosenVoice, readVoicePrefs, type VoiceOption } from "@/lib/voice";
+import { useRingback } from "./useRingback";
 import { useVoiceCall, type CallPhase } from "./useVoiceCall";
 
 const PHASE_LABEL: Record<CallPhase, string> = {
@@ -35,6 +36,7 @@ export function CallDialog({
   const call = useVoiceCall();
   const voice = useRef<VoiceOption | null>(null);
   const inCall = call.phase !== "idle" && call.phase !== "ended" && call.phase !== "unreachable";
+  useRingback(open && call.phase === "connecting");
 
   const dial = () => {
     const prefs = readVoicePrefs(expert.key);
