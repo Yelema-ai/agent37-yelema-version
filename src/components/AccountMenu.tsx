@@ -18,9 +18,10 @@ import { cn } from "@/lib/utils";
 // espace appartient au back-office.
 export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
   const supabase = useSupabase();
-  const { current, userEmail } = useWorkspace();
+  const { current, userEmail, userName } = useWorkspace();
 
-  const initial = (userEmail.trim()[0] ?? "?").toUpperCase();
+  const shown = userName ?? userEmail;
+  const initial = (shown.trim()[0] ?? "?").toUpperCase();
 
   async function signOut() {
     await signOutEverywhere(supabase);
@@ -41,7 +42,7 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
         {!collapsed && (
           <>
             <span className="min-w-0 grow">
-              <span className="block truncate text-sm font-semibold text-ink">{userEmail}</span>
+              <span className="block truncate text-sm font-semibold text-ink">{shown}</span>
               <small className="block truncate text-xs text-ink-3">
                 {current?.role === "admin" ? "Administrateur" : "Membre"}
               </small>
@@ -57,8 +58,9 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
             {initial}
           </span>
           <span className="min-w-0">
-            <b className="block truncate text-sm">{current?.name}</b>
-            <small className="block truncate text-xs text-ink-3">{userEmail}</small>
+            <b className="block truncate text-sm">{shown}</b>
+            {userName && <small className="block truncate text-xs text-ink-3">{userEmail}</small>}
+            <small className="block truncate text-xs text-ink-3">{current?.name}</small>
           </span>
         </div>
 
