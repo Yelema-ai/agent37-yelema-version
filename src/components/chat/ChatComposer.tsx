@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Loader2, Send, Square } from "lucide-react";
+import { Check, Loader2, Mic, Send, Square, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AttachButton, AttachmentTray } from "./Attachments";
 import { EffortMenu } from "./EffortMenu";
@@ -11,6 +12,8 @@ import { useChatModels } from "./useChatModels";
 import { useChatContext } from "./ChatProvider";
 import { findModel, prettyModelLabel, type ChatSettings } from "./types";
 import type { SendSettings } from "./useChat";
+import { useDictation } from "./useDictation";
+import { useVoices } from "@/components/voice/useVoices";
 
 interface Props {
   agentId: string;
@@ -52,14 +55,29 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
     return def ? prettyModelLabel(def.label) : loading ? "Loading…" : "Default";
   }, [groups, defaultModel, loading]);
 
-  const canSend = (text.trim().length > 0 || att.hasFiles) && !att.blocksSend && !isStreaming;
-
   const grow = (el: HTMLTextAreaElement) => {
     const minHeight = large ? 76 : 44;
     const maxHeight = 180;
     el.style.height = "auto";
     el.style.height = `${Math.max(minHeight, Math.min(el.scrollHeight, maxHeight))}px`;
   };
+
+  // Dictation goes through the speech service: offered only where voice is on (voices are offered).
+  const canDictate = useVoices().length > 0;
+  const dictation = useDictation({
+    onText: (said) => {
+      setText((prev) => (prev.trim() ? `${prev.trim()} ${said}` : said));
+      requestAnimationFrame(() => {
+        if (!textareaRef.current) return;
+        grow(textareaRef.current);
+        textareaRef.current.focus();
+      });
+    },
+    onError: (message) => toast.error(message),
+  });
+  const dictating = dictation.state !== "idle";
+
+  const canSend = (text.trim().length > 0 || att.hasFiles) && !att.blocksSend && !isStreaming && !dictating;
 
   const submit = () => {
     if (isStreaming) return;
@@ -102,9 +120,24 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
         )}
       />
       <AttachmentTray files={att.files} onRemove={att.removeFile} onRetry={att.retryFile} />
+      {dictating ? (
+        <DictationBar dictation={dictation} />
+      ) : (
       <div className="flex items-center gap-2 px-3 pb-3">
         <div className="flex min-w-0 items-center gap-1.5">
           <AttachButton onFiles={att.addFiles} disabled={isStreaming} />
+          {canDictate && (
+            <button
+              type="button"
+              onClick={() => void dictation.start()}
+              disabled={isStreaming}
+              aria-label="Dicter un message"
+              title="Dicter un message"
+              className="inline-flex size-9 items-center justify-center rounded-xl text-ink-2 transition-colors hover:bg-soft hover:text-ink disabled:opacity-40"
+            >
+              <Mic className="h-[18px] w-[18px]" />
+            </button>
+          )}
           {groups.length > 0 && (
             <ModelMenu
               groups={groups}
@@ -143,6 +176,37 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
           )}
         </div>
       </div>
+      )}
+    </div>
+  );
+}
+
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+/** While dictating: duration and level, then cancel or keep (which transcribes into the message). */
+function DictationBar({ dictation }: { dictation: ReturnType<typeof useDictation> }) {
+  const transcribing = dictation.state === "transcribing";
+  return (
+    <div className="flex items-center gap-3 px-3 pb-3">
+      <span className={cn("size-2.5 shrink-0 rounded-full", transcribing ? "bg-ink-3" : "animate-pulse bg-ko")} />
+      <span className="w-10 shrink-0 text-sm tabular-nums text-ink-2">{clock(dictation.seconds)}</span>
+      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-soft">
+        <div className="h-full rounded-full bg-brand transition-[width] duration-100" style={{ width: `${Math.round(dictation.level * 100)}%` }} />
+      </div>
+      {transcribing ? (
+        <span className="inline-flex shrink-0 items-center gap-2 text-sm text-ink-2">
+          <Loader2 className="h-4 w-4 animate-spin" /> Transcription…
+        </span>
+      ) : (
+        <>
+          <button type="button" onClick={dictation.cancel} aria-label="Annuler la dictée" className="inline-flex size-9 items-center justify-center rounded-xl text-ink-2 hover:bg-soft">
+            <Trash2 className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={dictation.finish} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand hover:opacity-90">
+            <Check className="h-4 w-4" /> Terminer
+          </button>
+        </>
+      )}
     </div>
   );
 }

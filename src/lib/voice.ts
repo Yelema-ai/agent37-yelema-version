@@ -68,3 +68,9 @@ export function writeVoicePrefs(prefs: VoicePrefs): void {
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
   } catch {}
 }
+
+/** The voice a call takes: the one chosen for the language, else its default, else its first. */
+export function chosenVoice(voices: VoiceOption[], prefs: VoicePrefs): VoiceOption | null {
+  const ofLanguage = voices.filter((v) => v.language === prefs.language);
+  return ofLanguage.find((v) => v.key === prefs.voices[prefs.language]) ?? ofLanguage.find((v) => v.default) ?? ofLanguage[0] ?? null;
+}
