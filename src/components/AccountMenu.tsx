@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { MoreHorizontal, LogOut, Settings2 } from "lucide-react";
+import { MoreHorizontal, LogOut, Settings2, UserRound } from "lucide-react";
 import { signOutEverywhere, useSupabase } from "@/lib/supabase/client";
 import { useWorkspace } from "@/components/WorkspaceProvider";
+import { usePublicConfig } from "@/components/PublicConfigProvider";
+import { ProfileDialog } from "@/components/ProfileDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +22,9 @@ import { cn } from "@/lib/utils";
 export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
   const supabase = useSupabase();
   const { current, userEmail, userName } = useWorkspace();
+  // The profile is the back office's: only there can the user change their own name.
+  const editable = usePublicConfig().authVia === "backoffice";
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const shown = userName ?? userEmail;
   const initial = (shown.trim()[0] ?? "?").toUpperCase();
@@ -64,7 +70,13 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
           </span>
         </div>
 
-        <DropdownMenuItem asChild className="mt-1.5 gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
+        {editable && (
+          <DropdownMenuItem onSelect={() => setProfileOpen(true)} className="mt-1.5 gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
+            <UserRound className="size-4" />
+            Mon profil
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem asChild className={cn("gap-2.5 rounded-[10px] px-2.5 py-2 text-sm", !editable && "mt-1.5")}>
           <Link href="/administration">
             <Settings2 className="size-4" />
             Administration
@@ -81,6 +93,7 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
           Se déconnecter
         </DropdownMenuItem>
       </DropdownMenuContent>
+      {editable && <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />}
     </DropdownMenu>
   );
 }

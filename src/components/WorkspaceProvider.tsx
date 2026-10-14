@@ -14,6 +14,7 @@ interface WorkspaceContextValue {
   userEmail: string;
   /** The user's name as the back office knows it; null when it has none. */
   userName: string | null;
+  userFirstName: string | null;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -22,11 +23,13 @@ export function WorkspaceProvider({
   initialWorkspaces,
   userEmail,
   userName,
+  userFirstName,
   children,
 }: {
   initialWorkspaces: WorkspaceWithRole[];
   userEmail: string;
   userName: string | null;
+  userFirstName: string | null;
   children: React.ReactNode;
 }) {
   const [workspaces, setWorkspaces] = useState<WorkspaceWithRole[]>(initialWorkspaces);
@@ -58,7 +61,7 @@ export function WorkspaceProvider({
   );
 
   return (
-    <WorkspaceContext.Provider value={{ workspaces, current, setCurrentId, refresh, userEmail, userName }}>
+    <WorkspaceContext.Provider value={{ workspaces, current, setCurrentId, refresh, userEmail, userName, userFirstName }}>
       {children}
     </WorkspaceContext.Provider>
   );

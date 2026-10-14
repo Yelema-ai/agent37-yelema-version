@@ -52,7 +52,8 @@ export interface BoSession {
 
 export interface BoMe {
   /** `id` is the account's stable id: the user's connected apps (Composio) hang off it. */
-  user: { id: string; email: string; name: string | null; role: "admin" | "member" };
+  /** `name` is « Prénom Nom », computed by the back office from the two. */
+  user: { id: string; email: string; firstName: string | null; lastName: string | null; name: string | null; jobTitle: string | null; role: "admin" | "member" };
   workspace: { id: string; name: string; logoUrl: string | null };
   instance: { id: string } | null;
 }
@@ -263,6 +264,7 @@ export const backoffice = {
   logout: (token: string) => call<{ ok: true }>("/app/auth/logout", { method: "POST", token }),
 
   me: (token: string) => call<BoMe>("/app/me", { token }),
+  updateMe: (token: string, patch: { firstName?: string; lastName?: string; jobTitle?: string }) => call<BoMe>("/app/me", { method: "PATCH", token, body: patch }),
   instance: async (token: string): Promise<BoInstanceReading> => {
     const d = await call<{ instance: BoInstance | null; installation?: string; failedExperts?: unknown }>("/app/instance", { token });
     const known = d.installation === "running" || d.installation === "ready" || d.installation === "failed";
