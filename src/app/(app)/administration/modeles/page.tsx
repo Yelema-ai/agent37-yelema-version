@@ -1,13 +1,9 @@
-import { PageBody } from "@/components/app/PageBody";
-import { ModelsView } from "@/components/models/ModelsView";
+import { redirect } from "next/navigation";
 
-// Administration · Modèles : le compte de modèle sur lequel tournent les experts. Pour un admin,
-// celui de toute l'entreprise ou d'un membre ; pour un membre, d'où vient le sien, et sa propre clé
-// si son admin l'a permis. Le back-office garde et pose les clés ; l'app n'écrit sur aucune instance.
-export default function Page() {
-  return (
-    <PageBody>
-      <ModelsView />
-    </PageBody>
-  );
+// Modèles a rejoint Intégrations. La requête suit, pour un retour d'OpenRouter lancé avant le déplacement.
+export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const query = new URLSearchParams();
+  for (const [k, v] of Object.entries(await searchParams)) for (const one of [v].flat()) if (one !== undefined) query.append(k, one);
+  const qs = query.toString();
+  redirect(`/integrations/modeles${qs ? `?${qs}` : ""}`);
 }

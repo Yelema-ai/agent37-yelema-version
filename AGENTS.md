@@ -144,15 +144,17 @@ Browser ─▶ Next.js (this app) ─▶ control plane  https://api.agent37.com/
   them; `/` is the home, `/recruter` the gallery of every expert Yelema offers, and
   `/experts/{agentId}/{profileId}/{tab}` the expert's workspace (Discussion / Livrables /
   Routines). Without a profile segment the page is the instance's default Hermes home.
-  Administration (`/administration`) has four tabs, plus Facturation and Consommation for admins
-  where the back office signs users in, and Modèles for everyone there (the account of model the
-  experts run on: an admin sets it for the company or for a member, a member for themself, any
-  provider, without asking their admin), and MCP beside it, at
-  the same scopes (the client's own tool servers, plugged on its experts). Two are read-only lists for admins: the
-  workspace's members, and its instances by name and member (no id, no state, no way in). Two are
-  for everyone and act on the signed-in user's OWN instance, for all of its experts: Connecteurs
-  and Canaux (`src/components/MyInstance.tsx`). A member sees only those two. The app creates
-  neither members nor agents.
+  Intégrations (`/integrations`) holds what plugs into the experts. For everyone, acting on the
+  signed-in user's OWN instance, for all of its experts: Connecteurs and Canaux
+  (`src/components/MyInstance.tsx`). Where the back office signs users in, also E-mails for admins
+  (who may make each expert write), Modèles for everyone (the account of model the experts run on:
+  an admin sets it for the company or for a member, a member for themself, any provider, without
+  asking their admin), and MCP beside it, at the same scopes (the client's own tool servers, plugged
+  on its experts). Administration (`/administration`) keeps two read-only lists for admins (the
+  workspace's members, and its instances by name and member: no id, no state, no way in), plus,
+  where the back office signs users in, Facturation, Consommation and Organigramme for admins and
+  Entreprise for everyone. The old `/administration/{connecteurs,canaux,emails,modeles,mcp}`
+  addresses redirect. The app creates neither members nor agents.
 - **Two ways to know the user, one switch.** With `AUTH_VIA_BACKOFFICE=true` the Yelema back office
   signs users in and says what they see (`/api/v1/app/*`, `src/lib/backoffice.ts`): the session is
   one httpOnly cookie bound to its host (`__Host-`, `src/lib/session.ts`), renewed by the proxy, and the user's role, workspace,
@@ -168,6 +170,11 @@ Browser ─▶ Next.js (this app) ─▶ control plane  https://api.agent37.com/
   back office's public catalogue (`BACKOFFICE_URL`, `src/lib/catalogue.ts`), joined to installed
   profiles by the part of the profile name after `__`. Which experts a member HAS is what is
   installed (`agents.profiles`, written by the back office; the instance itself as a fallback).
+- **A member may rename their expert and change its picture** (`src/lib/expert-looks.ts`,
+  `/api/v1/app/experts/{key}`): the back office keeps both and writes the name in the expert's
+  SOUL.md itself, so it introduces itself and signs that way; the app only relays. The name and
+  picture come back in the instance view and win over the catalogue's. The drive folder and the
+  e-mail sender keep the catalogue's name; the catalogue (Recruter) keeps its own names and faces.
 - **The drive is `~/Livrables` on the member's instance**, and every files route refuses a path
   outside it (`src/lib/drive.ts`): the files API can otherwise read `~/.hermes` and `~/.yelema`.
 - **Connectors belong to the member.** An instance wired by the back office
@@ -196,11 +203,12 @@ Browser ─▶ Next.js (this app) ─▶ control plane  https://api.agent37.com/
 | `src/lib/tenant-resolver.ts`, `src/lib/tenant.ts`, `src/app/espace-*` | The client a request is for when one deployment serves every client: host lookup at the back office, the workspace a request is confined to, and the pages for an unknown or suspended client |
 | `src/lib/backoffice.ts`, `src/lib/session.ts`, `src/app/api/auth/**` | Sign-in through the back office: its client, the cookie session, and the login / logout / forgot / accept routes |
 | `src/app/api/billing/**`, `src/components/BillingView.tsx`, `src/app/(app)/administration/facturation/` | Facturation, for admins, signed in through the back office: plan, next due date, invoices and their PDF, read from the back office (`/api/v1/app/billing/*`). "Payer" opens the back office's own payment link; the app creates no payment |
-| `src/lib/llm.ts` (+ `.test.ts`), `src/app/api/llm/**`, `src/components/models/**`, `src/app/(app)/administration/modeles/` | Modèles, signed in through the back office: the client's own model key, for the company, a member or oneself (`/api/v1/app/llm/*`). The back office serves the providers, checks, keeps, installs and watches the key; the app shows it and turns each refusal code into a French sentence. Also a private OpenAI-compatible endpoint, and a subscription signed in inside the member's instance (a page to open and a code to type; no token passes here). `YelemaModels.tsx`: with no key at all, every member picks among the models Yelema offers to all its clients, for their instance or one expert (`PUT /api/llm/own/model`); the chat's model switcher lists the same models, as the instance reports them |
-| `src/lib/mcp-servers.ts` (+ `.test.ts`), `src/app/api/mcp/**`, `src/components/integrations/McpView.tsx`, `McpServerDialog.tsx`, `src/app/(app)/administration/mcp/` | MCP, signed in through the back office: the client's own tool servers, for the company, a member or oneself (`/api/v1/app/mcp/*`). A name, a public https address, and no token or a Bearer one (no OAuth 2.0). The back office checks, keeps the token, writes the server on the instances and never calls the address; the app shows what it serves and turns each refusal code into a French sentence. `state` says whether the writing went through, not whether the server answers |
+| `src/lib/llm.ts` (+ `.test.ts`), `src/app/api/llm/**`, `src/components/models/**`, `src/app/(app)/integrations/modeles/` | Modèles, signed in through the back office: the client's own model key, for the company, a member or oneself (`/api/v1/app/llm/*`). The back office serves the providers, checks, keeps, installs and watches the key; the app shows it and turns each refusal code into a French sentence. Also a private OpenAI-compatible endpoint, and a subscription signed in inside the member's instance (a page to open and a code to type; no token passes here). `YelemaModels.tsx`: with no key at all, every member picks among the models Yelema offers to all its clients, for their instance or one expert (`PUT /api/llm/own/model`); the chat's model switcher lists the same models, as the instance reports them |
+| `src/lib/mcp-servers.ts` (+ `.test.ts`), `src/app/api/mcp/**`, `src/components/integrations/McpView.tsx`, `McpServerDialog.tsx`, `src/app/(app)/integrations/mcp/` | MCP, signed in through the back office: the client's own tool servers, for the company, a member or oneself (`/api/v1/app/mcp/*`). A name, a public https address, and no token or a Bearer one (no OAuth 2.0). The back office checks, keeps the token, writes the server on the instances and never calls the address; the app shows what it serves and turns each refusal code into a French sentence. `state` says whether the writing went through, not whether the server answers |
 | `src/lib/openrouter-pkce.ts` (+ `.test.ts`), `src/app/api/llm/openrouter/` | OpenRouter in one click (OAuth PKCE): the server keeps the verifier in an httpOnly cookie, trades the code for a key and hands it to the back office; the key never reaches the browser |
 | `src/app/api/composio-usage/**`, `src/components/integrations/UsageView.tsx`, `src/app/(app)/administration/consommation/` | Consommation, for admins, signed in through the back office: what the experts' tools cost over a month, in all, by member, by application and call by call, read from the back office (`/api/v1/app/composio-usage`). Amounts come in thousandths of a CFA franc and are rounded to the franc on display only |
 | `src/lib/catalogue.ts`, `src/app/api/catalogue/**` | The back office's expert catalogue, cached, and its join with installed profiles |
+| `src/lib/expert-looks.ts` (+ `.test.ts`), `src/app/api/experts/[key]/**`, `src/components/experts/ExpertEditModal.tsx`, `AvatarConfigModal.tsx`, `avatarContracts.ts` | A member's own name and picture for an expert of their team, signed in through the back office: the name rule and the refusal sentences, the relay routes (rename, picture, portrait drawn by the studio from four choices, kept only when applied), and the two dialogs |
 | `src/components/experts/ExpertImage.tsx`, `images` in `next.config.ts` | Expert pictures resized by the image optimizer (the catalogue serves them full size); only Yelema hosts are optimized |
 | `src/components/experts/ExpertMedia.tsx`, `public/experts/vid/` | A card's picture, swapped for the expert's looping video on hover. The video is the catalogue's when it lists one (`loopVideoUrl`), else the file named after the expert's first name in `public/experts/vid`: a stopgap to delete once the back office serves them |
 | `src/app/globals.css`, `src/components/ui/**` | The Yelema skin: tokens (light and `.dark`), radii, Onest and Bricolage Grotesque, and the primitives that follow them |
@@ -215,7 +223,7 @@ Browser ─▶ Next.js (this app) ─▶ control plane  https://api.agent37.com/
 | `src/lib/telegram.ts` | Telegram Bot API calls made BEFORE anything is written into the agent (token check, owner lookup) |
 | `src/lib/channels.ts` | Channel types + the featured list, shared by the BFF and the Messaging tab |
 | `src/components/channels/**` | Canaux: channel list, Telegram flow, WhatsApp QR, generic credentials form |
-| `src/app/(app)/administration/**`, `src/components/MyInstance.tsx`, `src/components/useMyAgents.ts` | The Administration tabs (Membres and Instances for admins; Connecteurs and Canaux for everyone), and the signed-in user's own instance those two act on |
+| `src/app/(app)/administration/**`, `src/app/(app)/integrations/**`, `src/components/MyInstance.tsx`, `src/components/useMyAgents.ts` | The Administration tabs (Membres and Instances for admins, and the back office's) and the Intégrations tabs (Connecteurs and Canaux for everyone, then E-mails, Modèles, MCP), and the signed-in user's own instance Connecteurs and Canaux act on |
 | `src/app/(app)/experts/[agentId]/[[...onglet]]/`, `src/lib/expert-tabs.ts` | The expert workspace route and its URL grammar (instance, profile, tab) |
 | `src/config/agents.ts` | `SHAPE_PRESETS`, `DEFAULT_AGENT`, the `AGENT_TYPES` catalog, `PORT_LABELS` (labels only), and `templateAppPorts` — the per-template openable app ports (the API no longer reports per-instance ports) |
 | `src/config/branding.ts` | `appName` / `logoUrl` code constants (branding lives here, not in env) |

@@ -18,11 +18,14 @@ import { pinnedWorkspaceId } from "@/lib/tenant";
 // one its host belongs to (src/lib/tenant.ts). The user's session rides as a Bearer token. This
 // module is the only one that speaks that API.
 
-const TIMEOUT_MS = 15_000;
+// A cold compilation in development can take longer than a production answer.
+const TIMEOUT_MS = process.env.NODE_ENV === "development" ? 60_000 : 15_000;
 // Sending an e-mail with attachments goes on to the provider before it answers.
 const MAIL_SEND_TIMEOUT_MS = 90_000;
 // Saving a model key waits for the provider to say whether it accepts it.
 const SETTING_WRITE_TIMEOUT_MS = 30_000;
+// A portrait is drawn by the image model, which takes up to a minute.
+const AVATAR_GENERATE_TIMEOUT_MS = 120_000;
 // A reasoned answer of the company memory runs a model on the provider's side.
 const MEMORY_ASK_TIMEOUT_MS = 75_000;
 // A dictation is transcribed in about the time it was spoken (4 minutes at most).
@@ -70,8 +73,34 @@ export interface BoInstanceView {
   ready: boolean;
   /** Which Composio the instance's experts use. */
   tools: "yelema" | "agent37";
-  /** `profile` is the name to send to the instance; `key` joins the public catalogue. */
-  experts: { profile: string; key: string; version: string | null }[];
+  /**
+   * `profile` is the name to send to the instance; `key` joins the public catalogue. `displayName`
+   * and `avatarUrl` are what the member chose for it, null when they kept the catalogue's.
+   */
+  experts: { profile: string; key: string; version: string | null; displayName?: string | null; avatarUrl?: string | null }[];
+  /** Where a channel that receives by webhook is reached: the address to give Microsoft for Teams. */
+  channels?: { teams?: { endpoint: string | null } };
+}
+
+/** Where the expert's own name stands on the instance: written in its SOUL.md, or on its way. */
+export type ExpertIdentityState = "pending" | "applied" | "failed";
+
+/** An installed expert as its member made it: their name and picture over the catalogue's. */
+export interface ExpertLook {
+  key: string;
+  profile: string;
+  defaultName: string;
+  displayName: string | null;
+  role: string | null;
+  avatarUrl: string | null;
+  defaultAvatarUrl: string | null;
+  identity: { state: ExpertIdentityState | null };
+}
+
+/** A generated portrait, not yet the expert's: applied with `setExpertAvatar({ draftId })`. */
+export interface ExpertAvatarDraft {
+  draftId: string;
+  url: string;
 }
 
 export type BoInstance = BoInstanceView & { id: string };
@@ -132,6 +161,11 @@ export interface BoBilling {
 // A catalogue key or an invoice id goes into the back office's URL: only its plain form is let
 // through.
 const EXPERT_KEY = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+function expertKey(key: string): string {
+  if (!EXPERT_KEY.test(key)) throw new BackofficeError(404, "not_found", "Expert introuvable.");
+  return key;
+}
 const INVOICE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 function invoicePath(id: string, rest: string): string {
@@ -283,6 +317,18 @@ export const backoffice = {
     if (!EXPERT_KEY.test(key)) throw new BackofficeError(404, "not_found", "Expert introuvable.");
     return call<{ ok: true }>(`/app/experts/${key}/request`, { method: "POST", token });
   },
+  // A member's own name and picture for an expert installed on their instance. The back office checks
+  // the expert is theirs, keeps the choice, and writes the name in the expert's SOUL.md itself.
+  expertLook: (token: string, key: string) => call<ExpertLook>(`/app/experts/${expertKey(key)}`, { token }),
+  renameExpert: (token: string, key: string, displayName: string | null) =>
+    call<ExpertLook>(`/app/experts/${expertKey(key)}`, { method: "PATCH", token, body: { displayName }, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  // `form` carries either the picture (`file`) or a generated portrait to keep (`draftId`).
+  setExpertAvatar: (token: string, key: string, form: FormData) =>
+    call<ExpertLook>(`/app/experts/${expertKey(key)}/avatar`, { method: "PUT", token, form, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  resetExpertAvatar: (token: string, key: string) => call<ExpertLook>(`/app/experts/${expertKey(key)}/avatar`, { method: "DELETE", token }),
+  // The four choices and an optional reference face; the prompt is the back office's.
+  generateExpertAvatar: (token: string, key: string, form: FormData) =>
+    call<ExpertAvatarDraft>(`/app/experts/${expertKey(key)}/avatar/generate`, { method: "POST", token, form, timeoutMs: AVATAR_GENERATE_TIMEOUT_MS }),
   // The one call made in an instance's name rather than a user's: the Bearer is the instance's own
   // tool-proxy token, which the back office knows by its hash, and the workspace is the one of the
   // instance's row, not of the address that was called. The back office prices and stores each

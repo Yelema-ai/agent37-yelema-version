@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { toast } from "sonner";
-import { FolderOpen, Mail, MessageSquare, Repeat, Phone } from "lucide-react";
+import { FolderOpen, Mail, MessageSquare, Pencil, Repeat, Phone } from "lucide-react";
 import { agentTabPath, parseAgentRoute, type AgentTab } from "@/lib/expert-tabs";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useMyAgents } from "@/components/useMyAgents";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
+import { ExpertEditModal } from "@/components/experts/ExpertEditModal";
 import { ExpertImage } from "@/components/experts/ExpertImage";
+import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { ExpertEmails } from "@/components/experts/ExpertEmails";
 import { ExpertRoutines } from "@/components/experts/ExpertRoutines";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
@@ -127,6 +129,10 @@ export function AgentWorkspace({
     return () => window.removeEventListener("popstate", read);
   }, []);
 
+  // Its member may rename it and change its picture, where the back office keeps them.
+  const canEdit = usePublicConfig().authVia === "backoffice" && !!expert?.catalogueKey;
+  const [editOpen, setEditOpen] = useState(false);
+
   const chatPath = agentTabPath(agentId, "chat", profileId);
   // Write the open thread into the chat URL without adding a path segment. pushState for an explicit
   // switch (so Back returns to the previous thread); replaceState when promoting a freshly-minted
@@ -167,6 +173,17 @@ export function AgentWorkspace({
               <div className="relative isolate aspect-[1/1.02] shrink-0 overflow-hidden rounded-[22px] bg-[#8E6FB0] text-white">
                 {portrait && <ExpertImage src={portrait} sizes="238px" className="-z-20 object-cover object-[50%_15%]" />}
                 <div className="absolute inset-0 -z-10 bg-gradient-to-b from-transparent from-45% to-[rgba(8,5,16,.82)]" />
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setEditOpen(true)}
+                    title="Personnaliser son nom et son portrait"
+                    aria-label="Personnaliser son nom et son portrait"
+                    className="absolute right-2.5 top-2.5 grid size-8 place-items-center rounded-full bg-black/40 backdrop-blur-md transition-colors hover:bg-black/70"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                )}
                 <div className="absolute inset-x-3 bottom-3">
                   <p className="text-[17px] font-bold">{expert.displayName}</p>
                   {expert.role && <p className="text-[11px] font-semibold uppercase tracking-[0.06em] opacity-85">{expert.role}</p>}
@@ -231,6 +248,16 @@ export function AgentWorkspace({
                   <span className="block text-sm font-bold leading-tight text-ink">{expert.displayName}</span>
                   {inbox && <span className="block max-w-[150px] truncate text-[10px] text-ink-3">{inbox.address}</span>}
                 </span>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setEditOpen(true)}
+                    aria-label="Personnaliser son nom et son portrait"
+                    className="mr-2 grid size-7 shrink-0 place-items-center rounded-full bg-soft text-ink-2 hover:bg-soft-2"
+                  >
+                    <Pencil className="size-3" />
+                  </button>
+                )}
                 {callee && <CallButton expert={callee} className="mr-1 shrink-0" />}
                 {callee && <VoiceButton expert={callee} compact className="mr-2 size-8 shrink-0" />}
               </>
@@ -294,6 +321,7 @@ export function AgentWorkspace({
           )}
         </main>
       </div>
+      {canEdit && expert?.catalogueKey && <ExpertEditModal expertKey={expert.catalogueKey} open={editOpen} onOpenChange={setEditOpen} />}
     </ChatProvider>
   );
 }

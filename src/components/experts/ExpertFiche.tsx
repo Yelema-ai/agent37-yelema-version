@@ -3,10 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Check, FileText, Loader2, MapPin, MessageCircle, Play, Sparkles, UserPlus, type LucideIcon } from "lucide-react";
+import { Check, FileText, Loader2, MapPin, MessageCircle, Pencil, Play, Sparkles, UserPlus, type LucideIcon } from "lucide-react";
 import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch } from "@/lib/api";
+import { ExpertEditModal } from "@/components/experts/ExpertEditModal";
 import { ExpertImage } from "@/components/experts/ExpertImage";
 import { useCatalogue, useCatalogueExpert } from "@/components/experts/useCatalogue";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,7 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
   const canRequest = usePublicConfig().authVia === "backoffice";
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const expert = useCatalogueExpert(expertKey);
 
   async function request() {
@@ -197,6 +199,13 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
               <p className="font-semibold text-ink">{expert.name} est dans votre équipe</p>
               <p className="text-[13px] text-ink-3">Posez-lui une question ou confiez-lui une tâche dans sa discussion.</p>
             </div>
+            {/* Its name and picture are its member's to choose, where the back office keeps them. */}
+            {canRequest && (
+              <Button variant="outline" className="rounded-full" onClick={() => setEditOpen(true)}>
+                <Pencil />
+                Personnaliser
+              </Button>
+            )}
             <Button asChild className="rounded-full">
               <Link href={agentTabPath(mine.agentId, "chat", mine.profileId)}>
                 <MessageCircle />
@@ -226,6 +235,7 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
           </div>
         )}
       </div>
+      {mine && canRequest && <ExpertEditModal expertKey={expertKey} open={editOpen} onOpenChange={setEditOpen} />}
     </div>
   );
 }

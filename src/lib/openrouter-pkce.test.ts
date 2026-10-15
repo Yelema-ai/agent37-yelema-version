@@ -7,9 +7,9 @@ import { authorizeUrl, challengeOf, decodePending, encodePending, isCode, isScop
 describe("OpenRouter PKCE", () => {
   it("the authorize URL carries the S256 challenge and the state, never the verifier", () => {
     const p = startPkce({ kind: "client" }, "anthropic/claude-sonnet-5");
-    const url = new URL(authorizeUrl(p, "https://acme.app.yelema.ai/administration/modeles"));
+    const url = new URL(authorizeUrl(p, "https://acme.app.yelema.ai/integrations/modeles"));
     assert.equal(url.origin + url.pathname, "https://openrouter.ai/auth");
-    assert.equal(url.searchParams.get("callback_url"), "https://acme.app.yelema.ai/administration/modeles");
+    assert.equal(url.searchParams.get("callback_url"), "https://acme.app.yelema.ai/integrations/modeles");
     assert.equal(url.searchParams.get("code_challenge_method"), "S256");
     assert.equal(url.searchParams.get("code_challenge"), createHash("sha256").update(p.verifier).digest("base64url"));
     assert.equal(url.searchParams.get("state"), p.state);

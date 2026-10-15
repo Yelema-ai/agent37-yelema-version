@@ -4,7 +4,7 @@ import { loadCatalogue, matchCatalogue } from "@/lib/catalogue";
 import { expertDisplayName } from "@/lib/experts";
 import { orderExperts } from "@/lib/expert-order";
 import { authViaBackoffice } from "@/lib/runtime-config";
-import { currentInstallation } from "@/lib/session";
+import { currentInstallation, currentInstance } from "@/lib/session";
 import { listInstanceProfiles } from "@/lib/hermes-profiles";
 import { ApiError, dbError } from "@/lib/http";
 import type { AgentRow, Expert } from "@/lib/types";
@@ -88,8 +88,17 @@ async function installation(): Promise<{ installation: "running" | "ready" | "fa
   return (await currentInstallation().catch(() => null)) ?? none;
 }
 
+// The name and picture the member chose for each of their experts, by profile, as the back office
+// keeps them. None where it does not sign users in.
+async function memberLooks(): Promise<Map<string, { displayName: string | null; avatarUrl: string | null }>> {
+  if (!authViaBackoffice()) return new Map();
+  const instance = await currentInstance().catch(() => null);
+  return new Map((instance?.experts ?? []).map((e) => [e.profile, { displayName: e.displayName ?? null, avatarUrl: e.avatarUrl ?? null }]));
+}
+
 // The experts of these instances as the screens show them: each installed profile dressed by the
-// back office's catalogue (name, role, portrait), or named after its profile id without one. An
+// back office's catalogue (name, role, portrait), or named after its profile id without one, under
+// the name and picture its member chose. The drive folder keeps the catalogue's name. An
 // instance that cannot be read does not take the others down: it is reported in `unreadable`.
 // Shared by the experts route and the shell's first render, so both say the same thing.
 export async function userExperts(agents: AgentRow[]): Promise<UserExperts> {
@@ -98,13 +107,14 @@ export async function userExperts(agents: AgentRow[]): Promise<UserExperts> {
   // An instance being set up is not asked for its profiles: the experts are the ones the back
   // office reports installed, and the rest arrive when it is done.
   const readable = installing ? agents.filter((a) => Array.isArray(a.profiles) && a.profiles.length > 0) : agents;
-  const [{ profiles, unreadable }, catalogue] = await Promise.all([installedProfiles(readable), loadCatalogue()]);
+  const [{ profiles, unreadable }, catalogue, looks] = await Promise.all([installedProfiles(readable), loadCatalogue(), memberLooks()]);
 
   const experts: Expert[] = profiles.map((p) => {
     const entry = matchCatalogue(catalogue.experts, p.profileId);
+    const look = looks.get(p.profileId);
     return {
       profileId: p.profileId,
-      displayName: entry?.name ?? expertDisplayName(p.profileId),
+      displayName: look?.displayName || entry?.name || expertDisplayName(p.profileId),
       agentId: p.agent.agent37_id,
       agentName: p.agent.name,
       gateway: p.gateway,
@@ -113,7 +123,7 @@ export async function userExperts(agents: AgentRow[]): Promise<UserExperts> {
       role: entry?.role ?? null,
       title: entry?.title ?? null,
       tagline: entry?.tagline ?? null,
-      photoUrl: entry?.avatarUrl ?? null,
+      photoUrl: look?.avatarUrl || entry?.avatarUrl || null,
       driveFolder: entry?.driveFolder ?? entry?.name ?? null,
     };
   });

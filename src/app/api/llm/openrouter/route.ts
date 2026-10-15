@@ -7,7 +7,7 @@ import { noStore, settingsError, settingsToken } from "../_shared";
 
 const COOKIE = process.env.NODE_ENV === "production" ? "__Host-yelema_or_pkce" : "yelema_or_pkce";
 const COOKIE_OPTIONS = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/", maxAge: PKCE_MAX_AGE_S };
-const CALLBACK_PATH = "/administration/modeles";
+const CALLBACK_PATH = "/integrations/modeles";
 const FAILED = "La connexion à OpenRouter n’a pas abouti. Réessayez, ou collez une clé API.";
 
 // `POST /api/llm/openrouter` — starts OpenRouter's one-click connection: answers the page where the

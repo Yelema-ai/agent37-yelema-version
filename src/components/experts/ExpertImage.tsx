@@ -11,7 +11,7 @@ import Image from "next/image";
 function optimizable(src: string): boolean {
   try {
     const url = new URL(src);
-    return url.protocol === "https:" && url.hostname.endsWith(".yelema.ai") && url.pathname.startsWith("/api/public/experts/");
+    return url.protocol === "https:" && url.hostname.endsWith(".yelema.ai") && (url.pathname.startsWith("/api/public/experts/") || url.pathname.startsWith("/api/public/expert-avatars/"));
   } catch {
     return false;
   }
