@@ -63,7 +63,7 @@ export function TelegramConnect({
     });
 
   // Write the token (and whoever said hello) into the agent, then let the harness restart its gateway.
-  const connect = (allowed: TelegramOwner | null) =>
+  const connect = (allowed: TelegramOwner) =>
     run(async () => {
       await apiFetch(`/api/agents/${agentId}/channels/telegram`, {
         method: "PUT",
@@ -71,7 +71,7 @@ export function TelegramConnect({
           enabled: true,
           env: {
             TELEGRAM_BOT_TOKEN: token,
-            TELEGRAM_ALLOWED_USERS: allowed?.user_id ?? "",
+            TELEGRAM_ALLOWED_USERS: allowed.user_id,
           },
         }),
       });
@@ -212,14 +212,11 @@ export function TelegramConnect({
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </Button>
-            <Button variant="ghost" onClick={() => connect(null)} disabled={busy}>
-              {ownerUnavailable ? "Connecter quand même" : "Passer"}
-            </Button>
           </div>
           {ownerUnavailable ? (
             <p className="text-xs text-muted-foreground">
-              Ce bot est déjà relié à un autre service : Telegram ne nous indique pas à qui il appartient. Si vous le
-              connectez, toute personne qui le trouve pourra lui écrire.
+              Ce bot est déjà relié à un autre service : Telegram ne nous indique pas à qui il appartient, et vos experts
+              ne répondent qu’à une personne connue. Détachez-le de cet autre service, ou créez un nouveau bot.
             </p>
           ) : (
             <p className="flex items-center gap-2 text-xs text-muted-foreground">

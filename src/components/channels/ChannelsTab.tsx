@@ -17,6 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { channelBrand } from "@/components/channels/BrandIcons";
 import { ChannelCredentialsForm } from "@/components/channels/ChannelCredentialsForm";
+import { SlackConnect } from "@/components/channels/SlackConnect";
+import { TeamsConnect } from "@/components/channels/TeamsConnect";
 import { TelegramConnect } from "@/components/channels/TelegramConnect";
 import { TelegramTopics } from "@/components/channels/TelegramTopics";
 import { WhatsAppConnect } from "@/components/channels/WhatsAppConnect";
@@ -25,9 +27,9 @@ import { WhatsAppConnect } from "@/components/channels/WhatsAppConnect";
 // from their phone instead of only from this dashboard.
 //
 // The channel list is NOT hardcoded: it comes from the agent's own harness, which reports every
-// channel it supports plus the credentials each one wants. Telegram and WhatsApp get a purpose-built
-// panel (a bot to make, a QR to scan); everything else takes the generic credentials form built from
-// what the harness asked for. Adding a channel is a harness release, not a change here.
+// channel it supports plus the credentials each one wants. Telegram, WhatsApp, Teams and Slack get a
+// purpose-built panel (a bot to make, a QR to scan, an app to declare); everything else takes the
+// generic credentials form built from what the harness asked for.
 export function ChannelsTab({
   agentId,
   agent,
@@ -44,6 +46,7 @@ export function ChannelsTab({
   const reachable = !["stopped", "deleting", "deleted", "failed", "error"].includes(agent.live_status ?? "");
 
   const [channels, setChannels] = useState<MessagingPlatform[] | null>(null);
+  const [teamsEndpoint, setTeamsEndpoint] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -52,8 +55,9 @@ export function ChannelsTab({
     async (quiet = false) => {
       if (!quiet) setLoading(true);
       try {
-        const { channels: list } = await apiFetch<ChannelsResponse>(`/api/agents/${agentId}/channels`);
+        const { channels: list, teams_endpoint } = await apiFetch<ChannelsResponse>(`/api/agents/${agentId}/channels`);
         setChannels(list);
+        setTeamsEndpoint(teams_endpoint ?? null);
       } catch (e) {
         toast.error((e as Error).message);
       } finally {
@@ -90,6 +94,10 @@ export function ChannelsTab({
           <TelegramConnect agentId={agentId} agentName={agent.name} channel={open} onBack={back} />
         ) : open.id === "whatsapp" ? (
           <WhatsAppConnect agentId={agentId} channel={open} onBack={back} />
+        ) : open.id === "teams" ? (
+          <TeamsConnect agentId={agentId} channel={open} endpoint={teamsEndpoint} onBack={back} />
+        ) : open.id === "slack" ? (
+          <SlackConnect agentId={agentId} agentName={agent.name ?? ""} channel={open} onBack={back} />
         ) : (
           <ChannelCredentialsForm agentId={agentId} channel={open} onBack={back} />
         )}

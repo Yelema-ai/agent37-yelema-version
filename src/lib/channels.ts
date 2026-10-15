@@ -39,6 +39,9 @@ export interface MessagingPlatform {
 
 export interface ChannelsResponse {
   channels: MessagingPlatform[];
+  // Where Microsoft sends Teams messages for this agent (Azure Bot › Messaging endpoint); null until
+  // the back office has opened it.
+  teams_endpoint: string | null;
 }
 
 // The harness writes its own product name into the copy it ships ("Connect Hermes to Discord DMs").
@@ -75,18 +78,18 @@ export function isConnectableChannel(channel: MessagingPlatform): boolean {
   return channel.env_vars.length > 0 || isGuidedChannel(channel.id);
 }
 
-// The four channels the Messaging tab leads with, in this order. Everything else the harness
-// supports is still offered, folded under "More channels".
-export const FEATURED_CHANNELS = ["telegram", "whatsapp", "slack", "discord"] as const;
+// The channels the Messaging tab leads with, in this order. Everything else the harness supports is
+// still offered, folded under "More channels".
+export const FEATURED_CHANNELS = ["telegram", "whatsapp", "teams", "slack", "discord", "google_chat"] as const;
 
-// Telegram and WhatsApp connect through their own panel; the rest take a credentials form.
-export const GUIDED_CHANNELS = ["telegram", "whatsapp"] as const;
+// These connect through their own panel; the rest take the credentials form.
+export const GUIDED_CHANNELS = ["telegram", "whatsapp", "teams", "slack"] as const;
 
 export function isGuidedChannel(id: string): boolean {
   return (GUIDED_CHANNELS as readonly string[]).includes(id);
 }
 
-// Order the harness's list so the featured four lead, then everything else alphabetically.
+// Order the harness's list so the featured channels lead, then everything else alphabetically.
 export function sortChannels(channels: MessagingPlatform[]): MessagingPlatform[] {
   const rank = (id: string) => {
     const i = (FEATURED_CHANNELS as readonly string[]).indexOf(id);

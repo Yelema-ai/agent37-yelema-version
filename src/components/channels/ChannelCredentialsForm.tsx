@@ -9,13 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAsyncAction } from "@/components/useAsyncAction";
+import { isAllowlistField, isWritableField } from "@/lib/channel-rules";
 
 // The form for every channel that is a credential rather than a flow: Slack, Discord, and the two
 // dozen others the harness supports. Nothing about it is channel-specific: the fields, their labels,
 // which are secret, and where to get them all come from what the harness reported, so this one
 // component connects a channel this app has never heard of.
 //
-// Only the fields the harness marks required are asked for up front; the rest sit behind "Advanced".
+// The required fields and the allowlist are asked for up front; the rest sit behind "Advanced", and
+// what this app never writes (allow-all, Teams port, Google Chat HTTP callback) is not shown.
 // A secret that is already set stays blank and is left alone unless you type a replacement.
 export function ChannelCredentialsForm({
   agentId,
@@ -31,8 +33,9 @@ export function ChannelCredentialsForm({
   const { busy, run } = useAsyncAction();
 
   const connected = isChannelConnected(channel);
-  const primary = channel.env_vars.filter((f) => !f.advanced);
-  const advanced = channel.env_vars.filter((f) => f.advanced);
+  const fields = channel.env_vars.filter((f) => isWritableField(f.key));
+  const primary = fields.filter((f) => !f.advanced || isAllowlistField(f.key));
+  const advanced = fields.filter((f) => f.advanced && !isAllowlistField(f.key));
 
   const save = () =>
     run(async () => {
@@ -60,6 +63,7 @@ export function ChannelCredentialsForm({
           <FieldInput
             key={field.key}
             field={field}
+            hint={isAllowlistField(field.key) ? ALLOWLIST_HINTS[channel.id] : undefined}
             value={values[field.key]}
             onChange={(value) => setValues((v) => ({ ...v, [field.key]: value }))}
           />
@@ -101,7 +105,13 @@ export function ChannelCredentialsForm({
   );
 }
 
-// Shared by all three channel panels: the way back to the list, the channel's own description, its
+// How to find the people to allow, for the channels on this form; unknown ones keep the harness's line.
+const ALLOWLIST_HINTS: Record<string, string> = {
+  discord: "Identifiants Discord, séparés par des virgules. Pour les voir : Paramètres › Avancés › Mode développeur, puis clic droit sur une personne › Copier l’identifiant.",
+  google_chat: "Adresses e-mail Google des personnes qui pourront écrire à vos experts, séparées par des virgules.",
+};
+
+// Shared by every channel panel: the way back to the list, the channel's own description, its
 // live error if it has one, and a link to whoever issues its credentials.
 export function ChannelPanelHeader({
   channel,
@@ -140,20 +150,25 @@ export function ChannelPanelHeader({
   );
 }
 
-function FieldInput({
+export function FieldInput({
   field,
   value,
   onChange,
+  label,
+  hint,
 }: {
   field: ChannelField;
   value: string | undefined;
   onChange: (value: string) => void;
+  // A guided panel's own wording over the harness's English one.
+  label?: string;
+  hint?: string;
 }) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={field.key} className="text-xs">
-        {field.prompt || field.key}
-        {!field.required && <span className="ml-1 font-normal text-muted-foreground">(facultatif)</span>}
+        {label ?? (isAllowlistField(field.key) ? "Personnes autorisées" : field.prompt || field.key)}
+        {!field.required && !isAllowlistField(field.key) && <span className="ml-1 font-normal text-muted-foreground">(facultatif)</span>}
       </Label>
       <Input
         id={field.key}
@@ -163,8 +178,8 @@ function FieldInput({
         placeholder={field.is_set ? field.redacted_value ?? "Déjà renseigné" : ""}
         onChange={(e) => onChange(e.target.value)}
       />
-      {(field.help || field.description) && (
-        <p className="text-xs text-muted-foreground">{field.help || field.description}</p>
+      {(hint || field.help || field.description) && (
+        <p className="text-xs text-muted-foreground">{hint || field.help || field.description}</p>
       )}
       {field.url && (
         <a

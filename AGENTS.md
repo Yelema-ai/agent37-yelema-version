@@ -218,11 +218,13 @@ Browser ─▶ Next.js (this app) ─▶ control plane  https://api.agent37.com/
 | `src/lib/hermes-cron.ts`, `src/app/api/agents/[id]/routines/**` | Routines: Hermes's scheduler through its API server (port 8642, `yelema-hermes` image). A profile installed after the instance's start has no key: on a `401` the module runs the image's own key script in the instance, then asks again |
 | `src/components/home`, `src/components/experts`, `src/components/integrations` | Home, gallery, sheet, routines, connectors |
 | `src/app/api/agents/[id]/computer/`, `src/components/experts/ComputerProvider.tsx`, `ExpertComputer.tsx` | "Son ordinateur": the instance's screen live beside the chat (noVNC, 60-second signed URL), and taking over mouse and keyboard |
-| `src/app/api/agents/[id]/channels/**` | Messaging channels BFF (list / write / disconnect, Telegram checks, WhatsApp pairing) |
+| `src/app/api/agents/[id]/channels/**` | Messaging channels BFF (list + Teams address / write / disconnect, Telegram checks, WhatsApp pairing) |
 | `src/lib/hermes-messaging.ts` | The agent's own messaging API, reached over `exec`; the only module that speaks it |
 | `src/lib/telegram.ts` | Telegram Bot API calls made BEFORE anything is written into the agent (token check, owner lookup) |
 | `src/lib/channels.ts` | Channel types + the featured list, shared by the BFF and the Messaging tab |
-| `src/components/channels/**` | Canaux: channel list, Telegram flow, WhatsApp QR, generic credentials form |
+| `src/lib/channel-rules.ts` | What a channel write may carry: allowlist required and shaped per channel, allow-all / Teams port / Google HTTP callback never written |
+| `src/lib/channel-checks.ts` + `teams.ts`, `slack.ts`, `discord.ts`, `google-chat.ts`, `telegram.ts` | Each provider's credential check, run before a write (French message, provider text to the log only) |
+| `src/components/channels/**` | Canaux: channel list, Telegram flow, WhatsApp QR, Teams (Azure Bot + address from the back office), Slack (manifest), generic credentials form |
 | `src/app/(app)/administration/**`, `src/app/(app)/integrations/**`, `src/components/MyInstance.tsx`, `src/components/useMyAgents.ts` | The Administration tabs (Membres and Instances for admins, and the back office's) and the Intégrations tabs (Connecteurs and Canaux for everyone, then E-mails, Modèles, MCP), and the signed-in user's own instance Connecteurs and Canaux act on |
 | `src/app/(app)/experts/[agentId]/[[...onglet]]/`, `src/lib/expert-tabs.ts` | The expert workspace route and its URL grammar (instance, profile, tab) |
 | `src/config/agents.ts` | `SHAPE_PRESETS`, `DEFAULT_AGENT`, the `AGENT_TYPES` catalog, `PORT_LABELS` (labels only), and `templateAppPorts` — the per-template openable app ports (the API no longer reports per-instance ports) |
@@ -278,11 +280,18 @@ Dockerfile goes away once every client is on Vercel.
   agent calls go through `src/app/api/**` → `src/lib/agent37.ts`.
 - **A messaging channel is a door into the agent, so fill its allowlist.** Every channel
   takes an allowed-users field; empty means anyone who finds the bot reaches the agent,
-  its files, and its connected accounts. The Telegram flow learns the owner from the
-  first message sent to the bot rather than asking for a numeric id nobody knows.
-- **Check a channel credential before writing it** where the provider lets you (Telegram's
-  `getMe`). The agent's messaging gateway refuses to start on a bad token, which takes
-  every other channel on that agent down with it.
+  its files, and its connected accounts. `PUT …/channels/[channel]` refuses to switch a
+  channel on with an empty one, and never sends `*_ALLOW_ALL_USERS`. The Telegram flow
+  learns the owner from the first message sent to the bot rather than asking for a
+  numeric id nobody knows. Ids: Telegram digits, Teams Entra object ids, Slack member ids
+  (`U…`), Discord user ids, Google Chat e-mails.
+- **Check a channel credential before writing it** (`src/lib/channel-checks.ts`: Telegram
+  `getMe`, Microsoft Entra token, Slack `auth.test` + `apps.connections.open`, Discord
+  `users/@me`, Google service-account token). The agent's messaging gateway refuses to
+  start on a bad token, which takes every other channel on that agent down with it.
+- **Teams listens on the port the back office opened** (`channels.teams.endpoint` in
+  `/app/instance`, the default profile's address); the app shows it and never writes
+  `TEAMS_PORT`/`TEAMS_HOST`. Google Chat receives over Pub/Sub only.
 - **An id from the browser is checked before it goes into an Agent37 URL** (`urlId` in
   `src/lib/agent37.ts`): the key sent with the call is workspace-wide, so `../` in an id would aim
   it at another instance.

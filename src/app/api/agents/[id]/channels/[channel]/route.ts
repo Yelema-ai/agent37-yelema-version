@@ -12,6 +12,8 @@ import {
   writePlatform,
 } from "@/lib/hermes-messaging";
 import { assertBotTokenShape, checkBotToken, findBotOwner } from "@/lib/telegram";
+import { checkChannelCredentials } from "@/lib/channel-checks";
+import { prepareChannelWrite } from "@/lib/channel-rules";
 import type { MessagingPlatform, TelegramPairingState, WhatsappPairing, WhatsappPairingState } from "@/lib/channels";
 
 // Every handler here is one or more execs into the instance, and a write also restarts the agent's
@@ -29,34 +31,22 @@ async function refreshed(agentId: string, channelId: string): Promise<MessagingP
 }
 
 // Connect (or re-configure) a channel: write its credentials, switch it on, and let the harness
-// restart its gateway. Admin-only, because a channel is a door into the agent.
-//
-// A Telegram token is checked against Telegram FIRST: the messaging gateway refuses to start on a
-// bad token, so writing one unchecked would take every other channel on the agent down with it.
+// restart its gateway. Admin-only, because a channel is a door into the agent. Nothing is written
+// without an allowlist, and every new credential is checked with its provider first: the messaging
+// gateway refuses to start on a bad one, which would take every other channel down with it.
 export async function PUT(request: Request, { params }: Ctx) {
   try {
     const { id, channel } = await params;
     await requireAgentAccess(id);
 
-    const body = await readJson<{ env?: Record<string, string>; enabled?: boolean }>(request);
+    const body = await readJson<{ env?: Record<string, unknown>; enabled?: boolean }>(request);
     const platform = await getPlatform(id, channel);
+    const enabling = body.enabled ?? true;
+    const { env, problem } = prepareChannelWrite(platform, body.env, enabling);
+    if (problem) throw new ApiError(400, "invalid_request", problem);
+    if (enabling) await checkChannelCredentials(platform, env);
 
-    const env: Record<string, string> = {};
-    for (const field of platform.env_vars) {
-      const value = body.env?.[field.key];
-      // An untouched secret arrives absent, not blank: leave what the agent already holds.
-      if (typeof value !== "string") continue;
-      env[field.key] = value.trim();
-    }
-    const missing = platform.env_vars.filter((f) => f.required && !f.is_set && !env[f.key]);
-    if (missing.length > 0) {
-      throw new ApiError(400, "invalid_request", `${missing.map((f) => f.prompt || f.key).join(", ")} is required`);
-    }
-    if (channel === "telegram" && env.TELEGRAM_BOT_TOKEN) {
-      await checkBotToken(assertBotTokenShape(env.TELEGRAM_BOT_TOKEN));
-    }
-
-    await writePlatform(id, channel, { enabled: body.enabled ?? true, env });
+    await writePlatform(id, channel, { enabled: enabling, env });
     return json({ channel: await refreshed(id, channel) });
   } catch (e) {
     return handleError(e);
