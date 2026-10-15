@@ -80,6 +80,32 @@ export function writeVoicePrefs(expert: string, prefs: VoicePrefs): void {
   } catch {}
 }
 
+// ---- Narrowing the list: gender × country ------------------------------------------------------------
+
+export interface VoiceFilter {
+  gender: "female" | "male" | null;
+  country: string | null;
+}
+
+/** "neutral" voices are often mislabelled at Aethex: they only show under "all genders". */
+const fits = (v: VoiceOption, f: VoiceFilter): boolean => (!f.gender || v.gender === f.gender) && (!f.country || v.country === f.country);
+
+export const filterVoices = (voices: VoiceOption[], f: VoiceFilter): VoiceOption[] => voices.filter((v) => fits(v, f));
+
+/** Genders and countries still on offer, each under the other choice, so both rows narrow each other. */
+export function voiceFacets(voices: VoiceOption[], f: VoiceFilter): { genders: ("female" | "male")[]; countries: string[] } {
+  const genders = new Set(filterVoices(voices, { ...f, gender: null }).map((v) => v.gender));
+  const countries = new Set(filterVoices(voices, { ...f, country: null }).map((v) => v.country));
+  return {
+    genders: (["female", "male"] as const).filter((g) => genders.has(g)),
+    countries: [...countries].sort((a, b) => countryName(a).localeCompare(countryName(b), "fr")),
+  };
+}
+
+const REGIONS = new Intl.DisplayNames(["fr"], { type: "region" });
+export const countryName = (code: string): string => REGIONS.of(code) ?? code;
+export const countryFlag = (code: string): string => String.fromCodePoint(...[...code.toUpperCase()].map((c) => 0x1f1a5 + c.charCodeAt(0)));
+
 /** The voice a call takes: the one chosen for the language, else its default, else its first. */
 export function chosenVoice(voices: VoiceOption[], prefs: VoicePrefs): VoiceOption | null {
   const ofLanguage = voices.filter((v) => v.language === prefs.language);

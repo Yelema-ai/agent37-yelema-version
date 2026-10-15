@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { callDuration, callHeaders, chosenVoice, parseVoicePrefs, signalingStep } from "./voice.ts";
+import { callDuration, callHeaders, chosenVoice, countryFlag, countryName, filterVoices, parseVoicePrefs, signalingStep, voiceFacets, type VoiceOption } from "./voice.ts";
 
 test("a relayed step is only one the SDK sends, with its own method", () => {
   assert.equal(signalingStep("conv_abc-1", "offer", "POST"), "offer");
@@ -53,4 +53,18 @@ test("call duration reads as spoken", () => {
   assert.equal(callDuration(120), "2 min");
   assert.equal(callDuration(45), "45 s");
   assert.equal(callDuration(null), "");
+});
+
+test("gender × country: each row narrows the other; neutral voices only under all genders", () => {
+  const v = (key: string, gender: VoiceOption["gender"], country: string): VoiceOption => ({ key, label: key, language: "fr", gender, country, previewUrl: "", default: false });
+  const voices = [v("claire", "female", "FR"), v("nicolas", "male", "FR"), v("adjoua", "female", "CI"), v("kouame", "neutral", "CI"), v("mamadou", "male", "SN")];
+  const keys = (f: Parameters<typeof filterVoices>[1]) => filterVoices(voices, f).map((x) => x.key);
+  assert.deepEqual(keys({ gender: null, country: null }), ["claire", "nicolas", "adjoua", "kouame", "mamadou"]);
+  assert.deepEqual(keys({ gender: "female", country: "FR" }), ["claire"]);
+  assert.deepEqual(keys({ gender: "male", country: null }), ["nicolas", "mamadou"]);
+  assert.deepEqual(voiceFacets(voices, { gender: null, country: null }), { genders: ["female", "male"], countries: ["CI", "FR", "SN"] });
+  assert.deepEqual(voiceFacets(voices, { gender: "female", country: null }).countries, ["CI", "FR"]);
+  assert.deepEqual(voiceFacets(voices, { gender: null, country: "SN" }).genders, ["male"]);
+  assert.equal(countryName("CI"), "Côte d’Ivoire");
+  assert.equal(countryFlag("fr"), "🇫🇷");
 });

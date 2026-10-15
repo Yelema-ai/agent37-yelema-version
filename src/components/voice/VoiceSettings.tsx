@@ -3,11 +3,27 @@
 import { useEffect, useRef, useState } from "react";
 import { Pause, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { chosenVoice, VOICE_LANGUAGES, type VoiceOption, type VoicePrefs } from "@/lib/voice";
+import {
+  chosenVoice,
+  countryFlag,
+  countryName,
+  filterVoices,
+  voiceFacets,
+  VOICE_LANGUAGES,
+  type VoiceFilter,
+  type VoiceOption,
+  type VoicePrefs,
+} from "@/lib/voice";
+
+const ALL: VoiceFilter = { gender: null, country: null };
+const GENDER_LABEL = { female: "Femme", male: "Homme", neutral: "Neutre" } as const;
 
 /** Language and voice of the user's calls, chosen ahead so "Appeler" calls at once. */
 export function VoiceSettings({ voices, prefs, onChange }: { voices: VoiceOption[]; prefs: VoicePrefs; onChange: (prefs: VoicePrefs) => void }) {
+  const [filter, setFilter] = useState<VoiceFilter>(ALL);
   const chosen = chosenVoice(voices, prefs);
+  const ofLanguage = voices.filter((v) => v.language === prefs.language);
+  const facets = voiceFacets(ofLanguage, filter);
   return (
     <div className="flex flex-col gap-2">
       <div className="flex gap-1 rounded-xl bg-soft p-1">
@@ -15,18 +31,49 @@ export function VoiceSettings({ voices, prefs, onChange }: { voices: VoiceOption
           <button
             key={l.id}
             type="button"
-            onClick={() => onChange({ ...prefs, language: l.id })}
+            onClick={() => (setFilter(ALL), onChange({ ...prefs, language: l.id }))}
             className={cn("flex-1 rounded-[10px] py-1.5 text-[13px] font-semibold", prefs.language === l.id ? "bg-surface text-ink shadow-sm" : "text-ink-2")}
           >
             {l.label}
           </button>
         ))}
       </div>
+      <Chips
+        label="Genre"
+        options={facets.genders.map((g) => ({ id: g, text: GENDER_LABEL[g] }))}
+        value={filter.gender}
+        onChange={(gender) => setFilter({ ...filter, gender })}
+      />
+      {facets.countries.length > 1 || filter.country ? (
+        <Chips
+          label="Pays"
+          options={facets.countries.map((c) => ({ id: c, text: `${countryFlag(c)} ${countryName(c)}` }))}
+          value={filter.country}
+          onChange={(country) => setFilter({ ...filter, country })}
+        />
+      ) : null}
       <VoicePicker
-        voices={voices.filter((v) => v.language === prefs.language)}
+        voices={filterVoices(ofLanguage, filter)}
         value={chosen?.key ?? null}
         onChange={(key) => onChange({ ...prefs, voices: { ...prefs.voices, [prefs.language]: key } })}
       />
+    </div>
+  );
+}
+
+/** One filter row: "Tous" plus the values still on offer. */
+function Chips<T extends string>({ label, options, value, onChange }: { label: string; options: { id: T; text: string }[]; value: T | null; onChange: (v: T | null) => void }) {
+  const chip = (active: boolean) => cn("shrink-0 rounded-full border px-2.5 py-1 text-[12px] font-semibold", active ? "border-brand bg-tint text-ink" : "border-line text-ink-2 hover:bg-soft");
+  return (
+    <div className="flex items-center gap-1.5 overflow-x-auto" role="group" aria-label={label}>
+      <button type="button" onClick={() => onChange(null)} className={chip(value === null)} aria-pressed={value === null}>
+        Tous
+      </button>
+      {options.map((o) => (
+        <button key={o.id} type="button" onClick={() => onChange(value === o.id ? null : o.id)} className={chip(value === o.id)} aria-pressed={value === o.id}>
+          {o.text}
+        </button>
+      ))}
     </div>
   );
 }
@@ -52,7 +99,9 @@ function VoicePicker({ voices, value, onChange }: { voices: VoiceOption[]; value
           <button type="button" onClick={() => onChange(v.key)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-pressed={value === v.key}>
             <span className={cn("size-3.5 shrink-0 rounded-full border-2", value === v.key ? "border-brand bg-brand" : "border-line")} />
             <span className="truncate text-sm font-semibold text-ink">{v.label}</span>
-            <span className="text-[11px] text-ink-3">{v.gender === "female" ? "Femme" : v.gender === "male" ? "Homme" : "Neutre"}</span>
+            <span className="shrink-0 text-[11px] text-ink-3">
+              {GENDER_LABEL[v.gender]} · <span title={countryName(v.country)}>{countryFlag(v.country)} {countryName(v.country)}</span>
+            </span>
           </button>
           <button type="button" onClick={() => listen(v)} className="rounded-full p-1.5 text-ink-2 hover:bg-soft" aria-label={`Écouter ${v.label}`}>
             {playing === v.key ? <Pause className="size-4" /> : <Play className="size-4" />}
