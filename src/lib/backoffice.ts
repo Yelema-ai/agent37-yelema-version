@@ -320,6 +320,9 @@ export const backoffice = {
   voiceVoices: async (token: string) => (await call<{ items: VoiceOption[] }>("/app/voice/voices", { token })).items,
   // A dictation of the chat (WAV/FLAC/Ogg), transcribed by the back office's speech service.
   voiceTranscribe: (token: string, form: FormData) => call<{ text: string }>("/app/voice/transcribe", { method: "POST", token, form, timeoutMs: DICTATION_TIMEOUT_MS }),
+  // A voice note an instance received (Telegram…), relayed with its token by /api/stt.
+  voiceNoteTranscribe: (instanceToken: string, workspace: string, form: FormData) =>
+    call<{ text: string }>("/app/voice/instance-transcribe", { method: "POST", token: instanceToken, workspace, form, timeoutMs: DICTATION_TIMEOUT_MS }),
   voiceStart: (token: string, headers: Record<string, string>, body: unknown) =>
     call<Record<string, unknown>>("/app/voice/calls", { method: "POST", token, body, headers }),
   voiceSignal: (token: string, conversationId: string, step: SignalingStep, body: unknown) =>
