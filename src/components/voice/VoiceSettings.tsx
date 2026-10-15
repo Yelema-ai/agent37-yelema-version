@@ -25,7 +25,7 @@ export function VoiceSettings({ voices, prefs, onChange }: { voices: VoiceOption
   const ofLanguage = voices.filter((v) => v.language === prefs.language);
   const facets = voiceFacets(ofLanguage, filter);
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-2">
       <div className="flex gap-1 rounded-xl bg-soft p-1">
         {VOICE_LANGUAGES.map((l) => (
           <button
@@ -65,7 +65,7 @@ export function VoiceSettings({ voices, prefs, onChange }: { voices: VoiceOption
 function Chips<T extends string>({ label, options, value, onChange }: { label: string; options: { id: T; text: string }[]; value: T | null; onChange: (v: T | null) => void }) {
   const chip = (active: boolean) => cn("shrink-0 rounded-full border px-2.5 py-1 text-[12px] font-semibold", active ? "border-brand bg-tint text-ink" : "border-line text-ink-2 hover:bg-soft");
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto" role="group" aria-label={label}>
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={label}>
       <button type="button" onClick={() => onChange(null)} className={chip(value === null)} aria-pressed={value === null}>
         Tous
       </button>
