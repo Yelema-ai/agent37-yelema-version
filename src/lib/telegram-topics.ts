@@ -19,13 +19,16 @@ const HERMES = 'export PATH="$HOME/.local/bin:$PATH";';
 export const NO_HOME_CHANNEL = "routage : aucun home channel Telegram";
 export const NO_BOT_TOKEN = "routage : TELEGRAM_BOT_TOKEN absent du profil default";
 
-// Multiplex the default gateway, then one topic per profile (idempotent: a profile that already has a
-// topic is skipped). Uses Hermes's own python: the PATH python3 has neither ruamel.yaml nor requests.
+// Every member of the /sethome group may talk to the experts; private chats stay with the owner
+// (TELEGRAM_ALLOWED_USERS). Multiplex the default gateway, then one topic per profile (idempotent: a
+// profile that already has a topic is skipped). Uses Hermes's own python: the PATH python3 has neither
+// ruamel.yaml nor requests.
 export const ROUTE_PROFILES_COMMAND = [
   HERMES,
   'H="hermes -p default";',
   'CHAT="$($H config get platforms.telegram.home_channel.chat_id --raw 2>/dev/null || true)";',
   `case "$CHAT" in ""|"Config key not set"*) echo "${NO_HOME_CHANNEL}, taper /sethome dans le groupe forum, puis relancer"; exit 0;; esac;`,
+  '$H config set TELEGRAM_GROUP_ALLOWED_CHATS "$CHAT" >/dev/null && echo "accès : tout le groupe $CHAT";',
   'TOK="$($H config get TELEGRAM_BOT_TOKEN --raw 2>/dev/null || true)";',
   `case "$TOK" in ""|"Config key not set"*) echo "${NO_BOT_TOKEN}, bot à configurer"; exit 0;; esac;`,
   '[ "$($H config get gateway.multiplex_profiles 2>/dev/null)" = true ] || $H gateway migrate --multiplex -y;',
@@ -68,7 +71,7 @@ export function routingFailure(output: string): string {
   return "Certains sujets n’ont pas pu être créés. Réessayez dans un instant.";
 }
 
-export const TOPICS_CREATED = "Les sujets des experts sont créés : écrivez à chacun dans son sujet.";
+export const TOPICS_CREATED = "Les sujets des experts sont créés : tous les membres du groupe peuvent écrire à chacun dans son sujet.";
 export const RESTART_FAILED = "Les sujets sont créés, mais la messagerie n’a pas redémarré. Réessayez dans un instant.";
 
 // hermes-experts/scripts/add_profile_route.py, verbatim except punctuation in comments and messages.

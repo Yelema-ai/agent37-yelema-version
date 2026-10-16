@@ -203,7 +203,8 @@ export function TelegramConnect({
         <div className="space-y-4">
           <p className="text-sm">
             Ouvrez <span className="font-medium">@{bot.username}</span> et envoyez-lui un message. La première personne
-            qui lui écrit est la seule à qui vos experts répondront.
+            qui lui écrit est la seule à qui vos experts répondront en privé ; dans le groupe des experts, tous ses
+            membres pourront leur écrire.
           </p>
           <div className="flex items-center gap-2">
             <Button asChild variant="outline">
@@ -266,7 +267,7 @@ export function TelegramConnect({
               Déconnecter
             </Button>
           </div>
-          {owner?.name && <p className="text-xs text-muted-foreground">Répond uniquement à {owner.name}.</p>}
+          {owner?.name && <p className="text-xs text-muted-foreground">En privé, répond uniquement à {owner.name}.</p>}
         </div>
       )}
     </div>
