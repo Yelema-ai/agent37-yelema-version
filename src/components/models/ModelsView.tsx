@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
 import { CUSTOM_PROVIDER, LLM_SOURCE_LABELS, llmPending, type LlmKey, type LlmKeyDraft, type LlmLogin, type LlmOverview, type LlmProvider, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { cn } from "@/lib/utils";
+import { AccountsBoard } from "./AccountsBoard";
 import { CustomEndpointDialog } from "./CustomEndpointDialog";
 import { MemberSources, StateBadge } from "./MemberSources";
 import { ProviderDialog } from "./ProviderDialog";
@@ -127,6 +128,8 @@ export function ModelsView() {
   const mine = scope.kind === "own" ? data?.mine : null;
   const inherited = member ? LLM_SOURCE_LABELS[member.source] : mine ? LLM_SOURCE_LABELS[mine.source] : STARTER;
   const state = key?.state ?? (scope.kind === "member" ? member?.state : mine?.state);
+  // Back-office à comptes multiples : le tableau ordonné remplace la grille d'un seul fournisseur.
+  const setup = scope.kind === "client" ? data?.clientSetup : scope.kind === "member" ? member?.setup : data?.setup;
 
   return (
     <div className="space-y-6">
@@ -182,6 +185,22 @@ export function ModelsView() {
         />
       )}
 
+      {data && setup && (
+        <AccountsBoard
+          setup={setup}
+          scope={scope}
+          scopeLabel={scopeLabel}
+          catalogue={data.catalogue}
+          logins={data.logins ?? []}
+          customEndpoints={data.customEndpoints === true}
+          onChanged={async () => {
+            setTries(0);
+            await load();
+          }}
+        />
+      )}
+
+      {!setup && (<>
       <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
         <div className="relative max-w-md flex-1">
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
@@ -333,6 +352,8 @@ export function ModelsView() {
           )}
         </div>
       )}
+
+      </>)}
 
       {admin && scope.kind === "client" && data?.members && <MemberSources members={data.members} onPick={(id) => setScope({ kind: "member", id })} />}
 
