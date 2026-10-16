@@ -425,8 +425,6 @@ export const backoffice = {
     if (!path) throw new BackofficeError(404, "not_found", "Ce serveur est introuvable.");
     return call<McpWritten>(path, { method: "DELETE", token });
   },
-  setMcpSettings: (token: string, settings: { membersMayAddMcp: boolean }) =>
-    call<{ membersMayAddMcp: boolean }>("/app/mcp/settings", { method: "PUT", token, body: settings }),
 
   // The company memory. The two reads are made in an instance's name, like reportComposioCalls: the
   // back office maps the token to its member and answers only from the compartments the org chart

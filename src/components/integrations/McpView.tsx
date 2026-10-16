@@ -100,7 +100,6 @@ export function McpView() {
   const servers = (scope.kind === "client" ? data?.client : scope.kind === "member" ? member?.servers : data?.own) ?? [];
   // Sur l'instance d'un membre, les serveurs de l'entreprise s'ajoutent aux siens ; à nom égal, le sien l'emporte.
   const inherited = scope.kind === "member" ? (data?.client ?? []).filter((c) => !servers.some((s) => s.name === c.name)) : [];
-  const editable = admin || data?.membersMayAddMcp === true;
   const scopeLabel = scope.kind === "client" ? "tous les experts de l’entreprise" : scope.kind === "member" ? `les experts de ${member?.name ?? member?.email ?? "ce membre"}` : "vos experts";
 
   async function written(call: Promise<McpWritten>, done: string) {
@@ -120,15 +119,6 @@ export function McpView() {
     await written(apiFetch<McpWritten>(`${scopeUrl(scope)}/${encodeURIComponent(removing.id)}`, { method: "DELETE" }), `Serveur ${removing.name} supprimé`);
   }
 
-  async function allowMembers(open: boolean) {
-    try {
-      await apiFetch("/api/mcp/settings", { method: "PUT", body: JSON.stringify({ membersMayAddMcp: open }) });
-      await load();
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
-
   if (error && !data) return <p className="max-w-xl rounded-xl bg-ko-pale px-4 py-3 text-sm text-ko">{error}</p>;
 
   return (
@@ -138,21 +128,13 @@ export function McpView() {
           <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Serveurs MCP</h2>
           <p className="mt-1 max-w-xl text-sm text-ink-3">Connectez vos serveurs Model Context Protocol (MCP) pour étendre les capacités de vos experts.</p>
         </div>
-        {editable && (
-          <Button onClick={() => setAdding(true)} className="self-start sm:self-auto">
-            <Plus /> Ajouter un serveur MCP
-          </Button>
-        )}
+        <Button onClick={() => setAdding(true)} className="self-start sm:self-auto">
+          <Plus /> Ajouter un serveur MCP
+        </Button>
       </div>
 
       {admin && data?.members && (
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <ScopePicker members={data.members} value={scope} onChange={setScope} />
-          <label className="flex cursor-pointer select-none items-center gap-2 text-xs text-ink-2">
-            <input type="checkbox" role="switch" checked={data.membersMayAddMcp} onChange={(e) => void allowMembers(e.target.checked)} className="h-4 w-4 rounded border-line accent-[var(--color-brand)]" />
-            Les membres peuvent ajouter leurs propres serveurs
-          </label>
-        </div>
+        <ScopePicker members={data.members} value={scope} onChange={setScope} />
       )}
 
       <div className="flex items-start gap-3.5 rounded-[22px] border border-line bg-surface p-4 text-sm text-ink-2">
@@ -167,10 +149,6 @@ export function McpView() {
         </div>
       </div>
 
-      {data && !editable && (
-        <p className="rounded-xl bg-soft px-4 py-3 text-sm text-ink-2">L’ajout de serveurs est réservé aux administrateurs de votre espace. Demandez au vôtre de l’ouvrir aux membres, ou de brancher le serveur pour vous.</p>
-      )}
-
       <div className="space-y-3">
         <p className="text-[13px] font-semibold uppercase tracking-wider text-ink-3">Serveurs connectés ({data ? servers.length + inherited.length : "…"})</p>
         {!data ? (
@@ -180,7 +158,7 @@ export function McpView() {
         ) : servers.length + inherited.length > 0 ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {servers.map((s) => (
-              <ServerCard key={s.id} server={s} onRemove={editable ? () => setRemoving(s) : undefined} />
+              <ServerCard key={s.id} server={s} onRemove={() => setRemoving(s)} />
             ))}
             {inherited.map((s) => (
               <ServerCard key={s.id} server={s} note="De l’entreprise" />
@@ -193,12 +171,10 @@ export function McpView() {
             </div>
             <p className="text-sm font-semibold text-ink">Aucun serveur MCP personnalisé</p>
             <p className="mt-1 max-w-sm text-xs text-ink-3">Ajoutez vos serveurs MCP pour connecter vos sources de données et vos outils à vos experts.</p>
-            {editable && (
-              <Button onClick={() => setAdding(true)} variant="outline" size="sm" className="mt-4">
-                <Plus />
-                Ajouter un serveur MCP
-              </Button>
-            )}
+            <Button onClick={() => setAdding(true)} variant="outline" size="sm" className="mt-4">
+              <Plus />
+              Ajouter un serveur MCP
+            </Button>
           </div>
         )}
         {servers.some((s) => s.state === "failed") && (

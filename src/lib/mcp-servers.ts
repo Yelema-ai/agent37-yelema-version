@@ -32,7 +32,6 @@ export interface McpMember {
 export interface McpOverview {
   /** The signed-in user's own servers. */
   own: McpServer[];
-  membersMayAddMcp: boolean;
   /** Admins only. */
   client?: McpServer[];
   members?: McpMember[];

@@ -57,7 +57,7 @@ describe("the back office's paths", () => {
 
 describe("mcpPending", () => {
   const server = (state: McpServer["state"]): McpServer => ({ id: "1", name: "crm", url: "https://mcp.exemple.com/sse", auth: "none", hint: null, state, updatedAt: null });
-  const base: McpOverview = { own: [], membersMayAddMcp: false };
+  const base: McpOverview = { own: [] };
 
   it("is true while a server is still being written anywhere the caller can see", () => {
     assert.equal(mcpPending(base), false);
