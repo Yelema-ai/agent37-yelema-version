@@ -24,6 +24,8 @@ export interface ChatMessage {
   thinking?: string;
   tools?: ToolEvent[];
   attachments?: MessageAttachment[];
+  /** Sent while the expert was still answering: waits its turn in the thread's queue. */
+  queued?: boolean;
 }
 
 export interface ModelOption {

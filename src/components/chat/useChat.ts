@@ -103,7 +103,18 @@ interface LiveRun {
   /** Latest immutable snapshot of the assistant bubble — updated via patchRun. */
   assistant: ChatMessage;
   done: boolean;
+  /** Messages sent while this turn runs, dispatched one by one on the same session once it ends. */
+  queue: Queued[];
 }
+
+interface Queued {
+  user: ChatMessage;
+  settings: SendSettings;
+}
+
+// A turn that just ended can still hold the session for a moment (409 session_busy): wait it out.
+const BUSY_RETRIES = 20;
+const BUSY_WAIT_MS = 3000;
 
 // --- Transcript merging ------------------------------------------------------------------------
 
@@ -121,7 +132,8 @@ function mapHistory(history: SessionDetail["history"]): ChatMessage[] {
 // bubbles; once it's done, the transcript holds the whole turn and wins.
 function mergeLiveRun(history: ChatMessage[], run: LiveRun): ChatMessage[] {
   if (run.done) return history;
-  return run.user ? [...history, run.user, run.assistant] : [...history, run.assistant];
+  const queued = run.queue.map((q) => q.user);
+  return run.user ? [...history, run.user, run.assistant, ...queued] : [...history, run.assistant, ...queued];
 }
 
 export function useChat({ agentId, profile, sessionId, onSessionCreated, onActivity }: UseChatArgs) {
@@ -141,6 +153,8 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
   // Set just before we promote a freshly-created session, so the load effect doesn't clobber
   // the in-flight stream with a history fetch when `sessionId` flips to the new id.
   const skipLoadRef = useRef<string | null>(null);
+  // Starts a turn; behind a ref because consume() (defined first) dispatches the queue with it.
+  const startTurnRef = useRef<(sessionId: string | null, item: Queued, rest: Queued[]) => void>(() => {});
 
   // Latest provider callbacks behind stable refs, so the long-lived stream consumers and the
   // load effect don't churn identity when the provider re-renders (e.g. on tab flips).
@@ -289,6 +303,10 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
           content: m.content || (streamError ? `_${streamError}_` : ""),
           tools: (m.tools ?? []).map((t) => (t.status === "running" ? { ...t, status: "completed" as const } : t)),
         }));
+        // The next queued message goes out on the same session — unless the user stopped or
+        // deleted the thread. A stream that died without a terminal event may leave the session
+        // busy a while longer; startTurn waits out the 409.
+        const next = !run.abort.signal.aborted && run.sessionId ? run.queue.shift() : undefined;
         if (!sawTerminal && !run.abort.signal.aborted) {
           // The stream died without a terminal event — the turn may still be running server-side.
           // Drop the in-memory run: the next visit to the thread reads the session's
@@ -296,7 +314,7 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
           forgetRun(run);
         }
         if (isViewed(run)) {
-          setIsStreaming(false);
+          if (!next) setIsStreaming(false);
           if (streamError) setError(streamError);
           if (sawTerminal && run.user === null && run.sessionId) {
             // A reattached run has no user bubble; the turn just persisted, so swap the live
@@ -305,6 +323,7 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
             void refreshHistory(run.sessionId);
           }
         }
+        if (next) startTurnRef.current(run.sessionId, next, run.queue.splice(0));
       }
     },
     [patchRun, isViewed, forgetRun, refreshHistory]
@@ -322,6 +341,7 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
         user: null,
         assistant: { id: uid("a"), role: "assistant", content: "", tools: [] },
         done: false,
+        queue: [],
       };
       runsRef.current.set(sid, run);
       void (async () => {
@@ -453,58 +473,47 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
     };
   }, [agentId, q, sessionId, startReattach, forgetRun, refreshHistory]);
 
-  const send = useCallback(
-    async (text: string, settings: SendSettings = {}) => {
-      const trimmed = text.trim();
+  // One turn on a session: its bubbles (a queued one loses its "en attente" mark), then the stream.
+  const startTurn = useCallback(
+    async (sessionId: string | null, { user, settings }: Queued, rest: Queued[]) => {
       const files = settings.files ?? [];
-      if ((!trimmed && files.length === 0) || isStreaming) return;
-      setError(null);
-
-      const userMsg: ChatMessage = {
-        id: uid("u"),
-        role: "user",
-        content: trimmed,
-        attachments: settings.attachments?.length ? settings.attachments : undefined,
-      };
+      const userMsg: ChatMessage = { ...user, queued: undefined };
       const assistant: ChatMessage = { id: uid("a"), role: "assistant", content: "", tools: [] };
-      setMessages((prev) => [...prev, userMsg, assistant]);
-      setIsStreaming(true);
-
-      const run: LiveRun = {
-        sessionId: activeSessionRef.current,
-        responseId: null,
-        abort: new AbortController(),
-        user: userMsg,
-        assistant,
-        done: false,
-      };
-      if (run.sessionId) {
-        runsRef.current.set(run.sessionId, run);
+      const run: LiveRun = { sessionId, responseId: null, abort: new AbortController(), user: userMsg, assistant, done: false, queue: rest };
+      if (sessionId) {
+        runsRef.current.set(sessionId, run);
         // Bubble an existing thread to the top of the rail as soon as it gets a new turn.
-        onActivityRef.current?.(run.sessionId);
+        onActivityRef.current?.(sessionId);
       } else {
         newChatRunRef.current = run;
       }
+      if (isViewed(run)) {
+        setMessages((prev) => {
+          const i = prev.findIndex((m) => m.id === user.id);
+          return i < 0 ? [...prev, userMsg, assistant] : [...prev.slice(0, i), userMsg, assistant, ...prev.slice(i + 1)];
+        });
+        setIsStreaming(true);
+      }
 
       try {
-        const res = await fetch(`/api/agents/${agentId}/chat/responses`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input: trimmed,
-            profile: profile ?? undefined,
-            session_id: run.sessionId ?? undefined,
-            model: settings.model ?? undefined,
-            provider: settings.provider ?? undefined,
-            reasoning_effort: settings.reasoningEffort ?? undefined,
-            files: files.length ? files : undefined,
-          }),
-          signal: run.abort.signal,
+        const body = JSON.stringify({
+          input: userMsg.content,
+          profile: profile ?? undefined,
+          session_id: sessionId ?? undefined,
+          model: settings.model ?? undefined,
+          provider: settings.provider ?? undefined,
+          reasoning_effort: settings.reasoningEffort ?? undefined,
+          files: files.length ? files : undefined,
         });
+        let res: Response;
+        for (let attempt = 0; ; attempt++) {
+          res = await fetch(`/api/agents/${agentId}/chat/responses`, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: run.abort.signal });
+          if (res.status !== 409 || attempt >= BUSY_RETRIES) break;
+          await new Promise((r) => setTimeout(r, BUSY_WAIT_MS));
+          if (run.abort.signal.aborted) throw new DOMException("Arrêté", "AbortError");
+        }
 
         if (!res.ok || !res.body) {
-          // A 409 means the previous turn is still wrapping up (session busy) — soften it. The
-          // status carries the semantics, so we don't have to match the error text.
           if (res.status === 409) {
             throw new Error("Votre expert termine sa réponse précédente. Patientez un instant, puis réessayez.");
           }
@@ -518,24 +527,57 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
         // Drop the in-memory run: if only the local stream died (not the turn), revisiting the
         // thread rediscovers it from the session's active_response_id and reattaches.
         forgetRun(run);
-        if (viewed) {
-          setIsStreaming(false);
-          if ((e as Error).name !== "AbortError") setError((e as Error).message || "Une erreur est survenue. Réessayez dans un instant.");
+        const aborted = (e as Error).name === "AbortError";
+        const next = !aborted && run.sessionId ? run.queue.shift() : undefined;
+        // consume() may already have handed the queue to a newer turn: leave its state alone.
+        const current = run.sessionId ? runsRef.current.get(run.sessionId) : newChatRunRef.current;
+        if (viewed && !(current && current !== run && !current.done)) {
+          if (!next) setIsStreaming(false);
+          if (!aborted) setError((e as Error).message || "Une erreur est survenue. Réessayez dans un instant.");
         }
+        if (next) void startTurnRef.current(run.sessionId, next, run.queue.splice(0));
       }
     },
-    [agentId, profile, isStreaming, consume, isViewed, forgetRun]
+    [agentId, profile, consume, isViewed, forgetRun]
+  );
+  startTurnRef.current = startTurn;
+
+  // Like Telegram: a message sent while the expert answers is queued, then goes out on its own turn.
+  const send = useCallback(
+    (text: string, settings: SendSettings = {}) => {
+      const trimmed = text.trim();
+      if (!trimmed && !(settings.files ?? []).length) return;
+      const user: ChatMessage = {
+        id: uid("u"),
+        role: "user",
+        content: trimmed,
+        attachments: settings.attachments?.length ? settings.attachments : undefined,
+      };
+      const live = activeSessionRef.current ? runsRef.current.get(activeSessionRef.current) : newChatRunRef.current;
+      if (live && !live.done) {
+        const queued = { ...user, queued: true };
+        live.queue.push({ user: queued, settings });
+        setMessages((prev) => [...prev, queued]);
+        return;
+      }
+      setError(null);
+      void startTurn(activeSessionRef.current, { user, settings }, []);
+    },
+    [startTurn]
   );
 
   // Stop the current turn: abort the local stream and cancel it upstream so the agent stops work.
   const stop = useCallback(() => {
     const run = activeSessionRef.current ? runsRef.current.get(activeSessionRef.current) : newChatRunRef.current;
     if (run && !run.done) {
+      // Stop ends the whole burst: the messages still waiting are dropped with the turn.
+      run.queue.length = 0;
       run.done = true;
       run.abort.abort();
       cancelUpstream(run.responseId);
       forgetRun(run);
     }
+    setMessages((prev) => (prev.some((m) => m.queued) ? prev.filter((m) => !m.queued) : prev));
     setIsStreaming(false);
   }, [cancelUpstream, forgetRun]);
 

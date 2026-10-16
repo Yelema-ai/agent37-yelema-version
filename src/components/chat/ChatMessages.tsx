@@ -123,6 +123,8 @@ export function ChatMessages({
 }) {
   // The instance whose drive the paths in a reply point into (they become download links).
   const { agentId } = useChatContext();
+  // The reply being written: the last assistant bubble, even with queued messages below it.
+  const liveIndex = isStreaming ? messages.findLastIndex((m) => m.role === "assistant") : -1;
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6 sm:px-6">
       {messages.map((m, i) => {
@@ -133,26 +135,27 @@ export function ChatMessages({
               <div className="flex max-w-[85%] flex-col items-end gap-1.5">
                 {attachments.length > 0 && <MessageAttachments attachments={attachments} />}
                 {m.content && (
-                  <div className="whitespace-pre-wrap break-words rounded-[18px] rounded-br-md bg-brand px-4 py-2.5 text-[15px] text-on-brand">
+                  <div className={cn("whitespace-pre-wrap break-words rounded-[18px] rounded-br-md bg-brand px-4 py-2.5 text-[15px] text-on-brand", m.queued && "opacity-60")}>
                     {m.content}
                   </div>
                 )}
+                {m.queued && <span className="text-xs text-ink-3">En attente</span>}
               </div>
             </div>
           );
         }
 
-        const lastAssistant = i === messages.length - 1 && m.role === "assistant";
+        const live = i === liveIndex;
         const tools = m.tools ?? [];
         const showDots =
-          lastAssistant && isStreaming && !m.content && !m.thinking && !tools.some((t) => t.status === "running");
+          live && !m.content && !m.thinking && !tools.some((t) => t.status === "running");
 
         return (
           <div key={m.id} className="flex items-start gap-3">
             {face && <ExpertAvatar expert={face} size="xs" className="mt-0.5" />}
             <div className="min-w-0 max-w-full flex-1 text-[15px] text-ink">
-              {m.thinking && <ThinkingBlock content={m.thinking} live={lastAssistant && isStreaming && !m.content} />}
-              {tools.length > 0 && <Steps tools={tools} live={lastAssistant && isStreaming} />}
+              {m.thinking && <ThinkingBlock content={m.thinking} live={live && !m.content} />}
+              {tools.length > 0 && <Steps tools={tools} live={live} />}
               {m.content ? <Markdown content={m.content} agentId={agentId} /> : showDots ? <TypingDots /> : null}
             </div>
           </div>

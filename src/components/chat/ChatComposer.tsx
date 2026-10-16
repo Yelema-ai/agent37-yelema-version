@@ -81,10 +81,10 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
   });
   const dictating = dictation.state !== "idle";
 
-  const canSend = (text.trim().length > 0 || att.hasFiles) && !att.blocksSend && !isStreaming && !dictating;
+  // Sending stays open while the expert answers: the message is queued behind the running turn.
+  const canSend = (text.trim().length > 0 || att.hasFiles) && !att.blocksSend && !dictating;
 
   const submit = () => {
-    if (isStreaming) return;
     const trimmed = text.trim();
     if ((!trimmed && !att.hasFiles) || att.blocksSend) return;
     const attachments = att.takeAttachments();
@@ -129,12 +129,11 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
       ) : (
       <div className="flex items-center gap-2 px-3 pb-3">
         <div className="flex min-w-0 items-center gap-1.5">
-          <AttachButton onFiles={att.addFiles} disabled={isStreaming} />
+          <AttachButton onFiles={att.addFiles} />
           {canDictate && (
             <button
               type="button"
               onClick={() => void dictation.start()}
-              disabled={isStreaming}
               aria-label="Dicter un message"
               title="Dicter un message"
               className="inline-flex size-9 items-center justify-center rounded-xl text-ink-2 transition-colors hover:bg-soft hover:text-ink disabled:opacity-40"
@@ -148,18 +147,16 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
               model={settings.model}
               defaultModel={defaultModel}
               defaultLabel={defaultLabel}
-              disabled={isStreaming}
               onChange={(model, provider) => setSettings((s) => ({ ...s, model, provider }))}
             />
           )}
           <EffortMenu
             value={settings.reasoningEffort}
-            disabled={isStreaming}
             onChange={(reasoningEffort) => setSettings((s) => ({ ...s, reasoningEffort }))}
           />
         </div>
-        <div className="ml-auto flex shrink-0 items-center">
-          {isStreaming ? (
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {isStreaming && (
             <button
               type="button"
               onClick={onStop}
@@ -167,7 +164,8 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
             >
               <Square className="h-3 w-3" fill="currentColor" strokeWidth={0} /> Arrêter
             </button>
-          ) : (
+          )}
+          {(!isStreaming || canSend) && (
             <button
               type="button"
               onClick={submit}
