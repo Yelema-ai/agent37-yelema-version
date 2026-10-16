@@ -1,3 +1,4 @@
+import type { AccountDraft, LayoutDraft, LlmAccount } from "@/lib/llm-accounts";
 import "server-only";
 import type { CompanyProfile } from "@/lib/company";
 import type { ComposioCall } from "@/lib/composio-usage";
@@ -409,6 +410,16 @@ export const backoffice = {
     call<LlmWritten>("/app/llm/own/model", { method: "PUT", token, body: choice, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   setLlmSettings: (token: string, settings: { membersMayBringKey: boolean }) =>
     call<{ membersMayBringKey: boolean }>("/app/llm/settings", { method: "PUT", token, body: settings }),
+  // Several accounts per provider and their order (backup accounts and models). `scope` is checked
+  // into `own`, `client` or a member id before it reaches a path.
+  addLlmAccount: (token: string, scope: string, draft: AccountDraft) =>
+    call<{ ok: true; state: "pending" | "applied"; account: LlmAccount }>(`/app/llm/accounts?scope=${encodeURIComponent(scope)}`, { method: "POST", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS * 2 }),
+  llmAccount: (token: string, id: string) => call<LlmAccount>(`/app/llm/accounts/${id}`, { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  patchLlmAccount: (token: string, id: string, patch: { label?: string; secret?: string }) =>
+    call<LlmWritten>(`/app/llm/accounts/${id}`, { method: "PATCH", token, body: patch, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  removeLlmAccount: (token: string, id: string) => call<LlmWritten>(`/app/llm/accounts/${id}`, { method: "DELETE", token }),
+  setLlmLayout: (token: string, scope: string, layout: LayoutDraft) =>
+    call<LlmWritten>(`/app/llm/layout?scope=${encodeURIComponent(scope)}`, { method: "PUT", token, body: layout, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
 
   // The client's own tool servers (MCP). The back office checks the name, the address and the
   // token, encrypts the token, writes the server on the instances in the background and never calls

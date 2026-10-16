@@ -4,6 +4,8 @@
 // into the sentences a member reads. Contract: yelema-platform docs/specs/client-api-v1/app.md,
 // "Clés de modèle du client".
 
+import { ACCOUNT_REFUSALS, type LlmSetup } from "./llm-accounts.ts";
+
 const PROVIDER_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 /** `refused`: the provider no longer accepts the key; the experts do not answer until it is replaced or removed. */
@@ -56,6 +58,8 @@ export interface LlmMember {
   source: LlmSource;
   state: LlmState;
   own: LlmKey | null;
+  /** The member's own accounts; absent from an older back office. */
+  setup?: LlmSetup;
 }
 
 export interface LlmOverview {
@@ -73,6 +77,10 @@ export interface LlmOverview {
   /** Admins only. */
   client?: LlmKey | null;
   members?: LlmMember[];
+  /** The caller's own accounts, grouped by provider; absent from an older back office. */
+  setup?: LlmSetup;
+  /** Admins only: the company's accounts. */
+  clientSetup?: LlmSetup;
 }
 
 /** The models Yelema offers to all its clients (its default first), and what the caller picked. */
@@ -215,7 +223,7 @@ const REFUSALS: Record<string, string> = {
  * these (the caller then answers its usual sentence). The back office's own text is never shown.
  */
 export function llmRefusalMessage(code: string, suggestions: readonly unknown[] = []): string | null {
-  const sentence = Object.hasOwn(REFUSALS, code) ? REFUSALS[code] : undefined;
+  const sentence = Object.hasOwn(REFUSALS, code) ? REFUSALS[code] : Object.hasOwn(ACCOUNT_REFUSALS, code) ? ACCOUNT_REFUSALS[code] : undefined;
   if (!sentence) return null;
   // Model names come from the provider's list: only plain ones are shown, and only a few.
   const models = suggestions.filter((m): m is string => typeof m === "string" && /^[A-Za-z0-9][A-Za-z0-9._:/-]{1,120}$/.test(m)).slice(0, 6);
@@ -238,5 +246,6 @@ export const LLM_STATE_LABELS: Record<LlmState, string> = {
 
 /** True while the back office is still installing a key somewhere the caller can see. */
 export function llmPending(o: LlmOverview): boolean {
-  return [o.mine?.state, o.own?.state, o.client?.state, ...(o.members ?? []).map((m) => m.state)].includes("pending");
+  const setups = [o.setup, o.clientSetup, ...(o.members ?? []).map((m) => m.setup)];
+  return [o.mine?.state, o.own?.state, o.client?.state, ...(o.members ?? []).map((m) => m.state), ...setups.map((s) => s?.state)].includes("pending");
 }
