@@ -1,4 +1,5 @@
 import "server-only";
+import { coldStartWait } from "./cold-start";
 import type {
   Agent,
   Budget,
@@ -154,12 +155,16 @@ export async function instancePortFetch(id: string, port: number, path: string, 
 // JSON helper against an instance's Agents API — same parse + Agent37Error semantics as `call`,
 // without the 402 wallet hint (a data-plane 402 is budget exhaustion mid-chat, not wallet funding).
 async function instanceCall<T>(id: string, path: string, init?: RequestInit): Promise<T> {
-  const res = await instanceFetch(id, path, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
-  });
-
-  return parseAgent37<T>(res);
+  for (let attempt = 0; ; attempt += 1) {
+    const res = await instanceFetch(id, path, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    });
+    const wait = coldStartWait(init?.method, res.status, attempt);
+    if (wait === null) return parseAgent37<T>(res);
+    await res.body?.cancel();
+    await new Promise((r) => setTimeout(r, wait));
+  }
 }
 
 // Reads, and the instance's own surfaces (chat, files, exec, one signed URL). Nothing here creates,
