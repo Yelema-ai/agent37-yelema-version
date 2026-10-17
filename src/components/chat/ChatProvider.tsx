@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from "sonner";
 import { useChatPresence } from "@/components/activity/hooks";
 import { apiFetch } from "@/lib/api";
+import { mergeRail, movedUpstream } from "@/lib/chat-rail";
 import { profileQuery } from "@/lib/profile-id";
 import type { MergedAgent } from "@/lib/types";
 import { type ChatSession } from "./types";
@@ -23,6 +24,12 @@ interface ChatContextValue {
   // Ping the composer to refocus its textarea (e.g. after an attachment lands).
   requestComposerFocus: () => void;
   loadingSessions: boolean;
+  // Re-read the rail from the instance (button, focus, every 30 s); the last failure, if any.
+  reloadSessions: () => void;
+  refreshingSessions: boolean;
+  sessionsError: string | null;
+  // Bumped when the instance reports new activity on the open thread (another channel, a routine).
+  threadVersion: number;
   selectSession: (sessionId: string | null) => void;
   startNewChat: () => void;
   // `promote: false` records the rail row without opening the thread — used when a backgrounded
@@ -102,23 +109,63 @@ export function ChatProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onChatTab]);
 
-  // Load the rail from upstream — labels and ordering arrive ready from the sessions route.
+  // The rail follows the instance: first load (retried while it wakes up), then every 30 s while the
+  // tab is visible, on focus, and on demand. A failed read keeps the rows already shown.
+  const [refreshingSessions, setRefreshingSessions] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [threadVersion, setThreadVersion] = useState(0);
+  const serverRail = useRef<ChatSession[] | null>(null);
+  const openRef = useRef<string | null>(null);
+  openRef.current = activeSessionId;
+  const loadSeq = useRef(0);
+
+  const reloadSessions = useCallback(
+    async (retries = 0): Promise<void> => {
+      const seq = ++loadSeq.current;
+      setRefreshingSessions(true);
+      try {
+        const res = await apiFetch<{ sessions: ChatSession[] }>(`/api/agents/${agentId}/chat/sessions${q}`);
+        if (seq !== loadSeq.current) return;
+        if (movedUpstream(serverRail.current, res.sessions, openRef.current)) setThreadVersion((v) => v + 1);
+        serverRail.current = res.sessions;
+        setSessions((prev) => mergeRail(res.sessions, prev));
+        setSessionsError(null);
+      } catch (e) {
+        if (seq !== loadSeq.current) return;
+        if (retries > 0) {
+          await new Promise((r) => setTimeout(r, 3_000));
+          if (seq === loadSeq.current) return reloadSessions(retries - 1);
+          return;
+        }
+        setSessionsError(e instanceof Error ? e.message : "Liste des conversations indisponible");
+      } finally {
+        if (seq === loadSeq.current) {
+          setRefreshingSessions(false);
+          setLoadingSessions(false);
+        }
+      }
+    },
+    [agentId, q]
+  );
+
   useEffect(() => {
-    let cancelled = false;
-
-    apiFetch<{ sessions: ChatSession[] }>(`/api/agents/${agentId}/chat/sessions${q}`)
-      .then((res) => {
-        if (!cancelled) setSessions(res.sessions);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoadingSessions(false);
-      });
-
-    return () => {
-      cancelled = true;
+    serverRail.current = null;
+    setSessions([]);
+    setLoadingSessions(true);
+    void reloadSessions(3);
+    const tick = () => {
+      if (document.visibilityState === "visible") void reloadSessions();
     };
-  }, [agentId, q]);
+    const timer = setInterval(tick, 30_000);
+    document.addEventListener("visibilitychange", tick);
+    window.addEventListener("focus", tick);
+    return () => {
+      loadSeq.current += 1;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+      window.removeEventListener("focus", tick);
+    };
+  }, [reloadSessions]);
 
   const requestComposerFocus = useCallback(() => setComposerFocusToken((n) => n + 1), []);
 
@@ -245,6 +292,10 @@ export function ChatProvider({
       composerFocusToken,
       requestComposerFocus,
       loadingSessions,
+      reloadSessions: () => void reloadSessions(),
+      refreshingSessions,
+      sessionsError,
+      threadVersion,
       selectSession,
       startNewChat,
       onSessionCreated,
@@ -253,7 +304,7 @@ export function ChatProvider({
       renameSession,
       bumpSession,
     }),
-    [agentId, profile, agents, sessions, activeSessionId, onChatTab, composerFocusToken, requestComposerFocus, loadingSessions, selectSession, startNewChat, onSessionCreated, registerRunKiller, deleteSession, renameSession, bumpSession]
+    [agentId, profile, agents, sessions, activeSessionId, onChatTab, composerFocusToken, requestComposerFocus, loadingSessions, reloadSessions, refreshingSessions, sessionsError, threadVersion, selectSession, startNewChat, onSessionCreated, registerRunKiller, deleteSession, renameSession, bumpSession]
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

@@ -36,11 +36,13 @@ export function ChatView({ initialMessage }: { initialMessage?: string | null })
     onSessionCreated,
     registerRunKiller,
     bumpSession,
+    threadVersion,
   } = useChatContext();
   const { messages, isStreaming, loadingHistory, error, send, stop, killRun } = useChat({
     agentId,
     profile,
     sessionId: activeSessionId,
+    refreshToken: threadVersion,
     onSessionCreated,
     onActivity: bumpSession,
   });

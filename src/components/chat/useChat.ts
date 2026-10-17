@@ -21,6 +21,8 @@ interface UseChatArgs {
   // on every session read: the instance does not remember it per session.
   profile: string | null;
   sessionId: string | null;
+  // Bumped by the provider when the instance reports new activity on this thread: re-read it.
+  refreshToken?: number;
   // Called once when a brand-new conversation mints its session id mid-stream. The provider
   // records the rail row; `promote` says whether to also make it the open thread (false when the
   // user has already moved on and the run is finishing in the background).
@@ -158,7 +160,7 @@ function takeUnread(run: LiveRun, pending: string): Queued[] {
   return [{ user: { id: uid("u"), role: "user", content: pending.trim() }, settings }];
 }
 
-export function useChat({ agentId, profile, sessionId, onSessionCreated, onActivity }: UseChatArgs) {
+export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessionCreated, onActivity }: UseChatArgs) {
   const q = profileQuery(profile);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -245,6 +247,12 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
     },
     [agentId, q]
   );
+
+  // Activity from another channel (Telegram, a routine…) on the open thread; skipped mid-turn.
+  useEffect(() => {
+    if (refreshToken && sessionId) void refreshHistory(sessionId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshToken]);
 
   // Drain a turn's SSE stream into its run. Shared by send() and reattach; runs to completion
   // even when the thread is backgrounded — only the on-screen mirroring is gated.

@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useConversationStatus } from "@/components/activity/hooks";
-import { Loader2, Pencil, Plus, Repeat, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Repeat, RotateCw, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { cn } from "@/lib/utils";
 import { useChatContext } from "./ChatProvider";
@@ -47,7 +47,7 @@ function ConversationBadge({ status }: { status: keyof typeof BADGES }) {
 // The conversation rail of one expert, folded into the expert's left column. Selecting or starting a
 // thread updates the chat URL (?session=) so refresh/Back/share reopen it.
 export function ChatSidebar() {
-  const { agentId, profile, sessions, activeSessionId, onChatTab, loadingSessions, selectSession, startNewChat, deleteSession, renameSession } =
+  const { agentId, profile, sessions, activeSessionId, onChatTab, loadingSessions, reloadSessions, refreshingSessions, sessionsError, selectSession, startNewChat, deleteSession, renameSession } =
     useChatContext();
   const statusOf = useConversationStatus(agentId, profile);
   // The open thread stays "active" even when you're on another tab (so its stream isn't cancelled),
@@ -90,6 +90,17 @@ export function ChatSidebar() {
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center justify-between px-2.5 pb-2 pt-1">
           <span className="text-xs font-semibold uppercase tracking-wide text-ink-3">Conversations</span>
+          <span className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={reloadSessions}
+            disabled={refreshingSessions}
+            aria-label="Actualiser"
+            title="Actualiser"
+            className="grid h-8 w-8 place-items-center rounded-lg text-ink-3 hover:bg-soft hover:text-ink disabled:opacity-60"
+          >
+            <RotateCw className={`h-4 w-4${refreshingSessions ? " animate-spin" : ""}`} />
+          </button>
           <button
             type="button"
             onClick={startNewChat}
@@ -99,7 +110,16 @@ export function ChatSidebar() {
           >
             <Plus className="h-4 w-4" />
           </button>
+          </span>
         </div>
+        {sessionsError ? (
+          <p className="px-2.5 pb-2 text-xs text-ink-3">
+            Liste non mise à jour : l’instance ne répond pas.{" "}
+            <button type="button" onClick={reloadSessions} className="underline">
+              Réessayer
+            </button>
+          </p>
+        ) : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {loadingSessions ? (
