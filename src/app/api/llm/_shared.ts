@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { BackofficeError } from "@/lib/backoffice";
-import { ApiError, apiError, handleError, readJson } from "@/lib/http";
-import { llmRefusalMessage, parseKeyDraft, type LlmKeyDraft } from "@/lib/llm";
+import { ApiError, apiError, handleError } from "@/lib/http";
+import { llmRefusalMessage } from "@/lib/llm";
 import { authViaBackoffice } from "@/lib/runtime-config";
 import { readSession } from "@/lib/session";
 
@@ -13,12 +13,6 @@ export async function settingsToken(): Promise<string> {
   const session = await readSession();
   if (!session) throw new ApiError(401, "unauthorized", "Connectez-vous pour continuer.");
   return session.accessToken;
-}
-
-export async function keyDraft(request: Request): Promise<LlmKeyDraft> {
-  const draft = parseKeyDraft(await readJson(request));
-  if (!draft) throw new ApiError(400, "bad_request", "Cette demande n’a pas pu être traitée.");
-  return draft;
 }
 
 export function noStore<T>(data: T): NextResponse {

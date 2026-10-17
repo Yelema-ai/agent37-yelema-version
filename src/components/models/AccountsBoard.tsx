@@ -4,22 +4,23 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type CollisionDetection, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Layers, Plus, Server } from "lucide-react";
+import { GripVertical, Layers, Plus, Server, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import { CUSTOM_PROVIDER, type LlmLogin, type LlmProvider, type SettingScope } from "@/lib/llm";
-import { layoutOf, moveItem, scopeParam, type LlmGroup, type LlmSetup } from "@/lib/llm-accounts";
+import { layoutOf, layoutScope, moveItem, type LlmGroup, type LlmSetup } from "@/lib/llm-accounts";
+import type { ModelGroup } from "@/lib/model-options";
 import { cn } from "@/lib/utils";
 import { AccountRow } from "./AccountRow";
 import { AddAccountDialog } from "./AddAccountDialog";
 import { GroupModels } from "./GroupModels";
 import { ProviderLogo } from "./ProviderLogo";
 
-type Catalogues = { catalogue: LlmProvider[]; logins: LlmLogin[] };
+export type Catalogues = { catalogue: LlmProvider[]; logins: LlmLogin[] };
 
 /** Nom, marque et nature d'un groupe, lus sur son premier compte (le catalogue ne connaît pas l'id Hermes). */
-function describe(group: LlmGroup, { catalogue, logins }: Catalogues) {
+export function describe(group: LlmGroup, { catalogue, logins }: Catalogues) {
   const first = group.accounts[0];
   const login = logins.find((l) => l.id === first?.provider);
   if (first?.provider === CUSTOM_PROVIDER) return { name: first.name ?? "Serveur privé", family: "custom", login: false };
@@ -39,14 +40,20 @@ const sameKind: CollisionDetection = (args) => {
 
 const kindOf = (provider: string, isLogin: boolean) => (isLogin ? "Connexion" : provider === CUSTOM_PROVIDER ? "Serveur" : provider.endsWith("-oauth") ? "Abonnement" : "Clé");
 
-// Les comptes d'une portée, rangés par fournisseur, dans l'ordre où l'instance les essaie : tous les
-// comptes du premier fournisseur, puis ses modèles de secours, puis le fournisseur suivant… Glisser un
-// fournisseur ou un compte enregistre aussitôt le nouvel ordre ; une erreur le remet comme il était.
-export function AccountsBoard({ setup, scope, scopeLabel, catalogue, logins, customEndpoints, onChanged }: Catalogues & {
+// Les comptes d'une instance, rangés par fournisseur, dans l'ordre où elle les essaie : tous les
+// comptes du premier fournisseur, puis ses modèles de secours, puis le fournisseur suivant, puis le
+// moteur Yelema. Glisser enregistre aussitôt le nouvel ordre ; une erreur le remet comme il était.
+export function AccountsBoard({ setup, scope, title, picker, scopeLabel, catalogue, logins, customEndpoints, canShare, models, onChanged }: Catalogues & {
   setup: LlmSetup;
   scope: SettingScope;
+  title: string;
+  /** Le choix de l'instance regardée (admin), dans l'en-tête. */
+  picker?: React.ReactNode;
   scopeLabel: string;
   customEndpoints: boolean;
+  canShare: boolean;
+  /** Les modèles par fournisseur ; null tant qu'ils ne sont pas lus. */
+  models: ModelGroup[] | null;
   onChanged: () => Promise<void>;
 }) {
   const [groups, setGroups] = useState(setup.groups);
@@ -64,7 +71,7 @@ export function AccountsBoard({ setup, scope, scopeLabel, catalogue, logins, cus
       setGroups(next);
       setSaving(true);
       try {
-        await apiFetch(`/api/llm/layout?scope=${encodeURIComponent(scopeParam(scope) ?? "own")}`, { method: "PUT", body: JSON.stringify(layoutOf(next)) });
+        await apiFetch(`/api/llm/layout?scope=${encodeURIComponent(layoutScope(next, scope) ?? "own")}`, { method: "PUT", body: JSON.stringify(layoutOf(next, setup.profiles)) });
         await onChanged();
       } catch (e) {
         setGroups(before);
@@ -73,7 +80,7 @@ export function AccountsBoard({ setup, scope, scopeLabel, catalogue, logins, cus
         setSaving(false);
       }
     },
-    [groups, scope, onChanged],
+    [groups, scope, setup.profiles, onChanged],
   );
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
@@ -95,24 +102,32 @@ export function AccountsBoard({ setup, scope, scopeLabel, catalogue, logins, cus
   return (
     <section className="space-y-3" aria-busy={saving}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-ink-3">
-          <Layers className="h-3.5 w-3.5 text-brand" /> Comptes et modèles de {scopeLabel}
-        </h2>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-ink-3">
+            <Layers className="h-3.5 w-3.5 text-brand" /> {title}
+          </h2>
+          {picker}
+        </div>
         <Button size="sm" onClick={() => setAdding(true)} className="h-8 gap-1.5 rounded-full px-3.5 text-xs">
           <Plus className="h-3.5 w-3.5" /> Ajouter un compte
         </Button>
       </div>
 
       {groups.length === 0 ? (
-        <button type="button" onClick={() => setAdding(true)} className="w-full rounded-[22px] border border-dashed border-line bg-surface/40 p-6 text-center text-sm text-ink-2 hover:border-brand/40">
-          Aucun compte : vos experts tournent sur le moteur inclus de Yelema. Ajoutez un compte principal, puis autant de comptes de secours que vous voulez.
-        </button>
+        <div className="flex flex-col items-center gap-3 rounded-[22px] border border-dashed border-line bg-surface/40 p-6 text-center">
+          <p className="text-sm text-ink-2">Vos experts utilisent le moteur Yelema.</p>
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)} className="h-8 gap-1.5 rounded-full px-3.5 text-xs">
+            <Plus className="h-3.5 w-3.5" /> Ajouter un compte
+          </Button>
+        </div>
       ) : (
         <DndContext id={dndId} sensors={sensors} collisionDetection={sameKind} onDragEnd={onDragEnd}>
           <SortableContext items={groups.map((g) => G + g.provider)} strategy={verticalListSortingStrategy}>
             <ol className="space-y-3">
-              {groups.map((g, gi) => (
-                <GroupCard key={g.provider} group={g} rank={gi} info={describe(g, { catalogue, logins })} disabled={saving} onModels={(m) => void save(groups.map((x, i) => (i === gi ? { ...x, ...m } : x)))}>
+              {groups.map((g, gi) => {
+                const info = describe(g, { catalogue, logins });
+                return (
+                <GroupCard key={g.provider} group={g} rank={gi} info={info} options={optionsFor(g, models, info.name)} disabled={saving} onModels={(m) => void save(groups.map((x, i) => (i === gi ? { ...x, ...m } : x)))}>
                   <SortableContext items={g.accounts.map((a) => A + a.id)} strategy={verticalListSortingStrategy}>
                       <ul className="space-y-1.5">
                         {g.accounts.map((a, ai) => {
@@ -122,22 +137,32 @@ export function AccountsBoard({ setup, scope, scopeLabel, catalogue, logins, cus
                       </ul>
                   </SortableContext>
                 </GroupCard>
-              ))}
+                );
+              })}
             </ol>
           </SortableContext>
         </DndContext>
       )}
 
-      <p className="flex items-center gap-2 rounded-2xl border border-line bg-soft/40 px-3 py-2 text-[11px] text-ink-3">
-        <Server className="h-3.5 w-3.5 shrink-0" /> Dernier recours, toujours après vos comptes : le modèle Agent37, puis la passerelle Yelema.
-      </p>
+      {groups.length > 0 && (
+        <p className="flex items-center gap-2 rounded-2xl border border-line bg-soft/40 px-3 py-2 text-xs text-ink-2">
+          <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand" />
+          <span><span className="font-semibold">Dernier recours</span> · Moteur Yelema (inclus dans l’abonnement)</span>
+        </p>
+      )}
 
-      <AddAccountDialog open={adding} scope={scope} scopeLabel={scopeLabel} catalogue={catalogue} logins={scope.kind === "client" ? [] : logins} customEndpoints={customEndpoints} onAdded={onChanged} onClose={() => setAdding(false)} />
+      <AddAccountDialog open={adding} scope={scope} scopeLabel={scopeLabel} catalogue={catalogue} logins={scope.kind === "client" ? [] : logins} customEndpoints={customEndpoints} canShare={canShare} onAdded={onChanged} onClose={() => setAdding(false)} />
     </section>
   );
 }
 
-function GroupCard({ group, rank, info, disabled, onModels, children }: { group: LlmGroup; rank: number; info: ReturnType<typeof describe>; disabled: boolean; onModels: (m: { model: string; fallbacks: string[] }) => void; children: React.ReactNode }) {
+/** Les modèles du fournisseur d'un groupe ; à défaut, ceux que ses comptes nomment déjà. */
+function optionsFor(group: LlmGroup, models: ModelGroup[] | null, name: string): ModelGroup[] {
+  const listed = models?.filter((m) => m.provider === group.provider && m.source !== "yelema") ?? [];
+  return listed.length ? listed : [{ provider: group.provider, label: name, source: "account", models: [group.model, ...group.fallbacks].map((id) => ({ id, label: id })) }];
+}
+
+function GroupCard({ group, rank, info, options, disabled, onModels, children }: { group: LlmGroup; rank: number; info: ReturnType<typeof describe>; options: ModelGroup[]; disabled: boolean; onModels: (m: { model: string; fallbacks: string[] }) => void; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: G + group.provider });
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("space-y-2.5 rounded-[22px] border border-line bg-surface p-3 sm:p-4", rank === 0 && "border-brand/40 ring-1 ring-brand/20", isDragging && "relative z-10 shadow-xl")}>
@@ -153,7 +178,7 @@ function GroupCard({ group, rank, info, disabled, onModels, children }: { group:
           </p>
           <p className="text-[11px] text-ink-3">{group.accounts.length} compte{group.accounts.length > 1 ? "s" : ""}, essayé{group.accounts.length > 1 ? "s" : ""} dans l’ordre</p>
         </div>
-        <GroupModels model={group.model} fallbacks={group.fallbacks} onChange={onModels} disabled={disabled} />
+        <GroupModels provider={group.provider} options={options} model={group.model} fallbacks={group.fallbacks} onChange={onModels} disabled={disabled} />
       </div>
       {children}
     </li>

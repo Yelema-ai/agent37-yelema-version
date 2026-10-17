@@ -33,7 +33,10 @@ export function AccountRow({ account, rank, kind, isLogin, onChanged }: { accoun
       </button>
       <span className="w-5 text-center text-[11px] font-semibold tabular-nums text-ink-3">{rank}</span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-semibold text-ink">{name}</p>
+        <p className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-ink">
+          <span className="truncate">{name}</span>
+          {account.shared && <span className="shrink-0 rounded-full bg-soft px-2 py-0.5 text-[10px] font-medium text-ink-3">partagé avec l’entreprise</span>}
+        </p>
         <p className="truncate font-mono text-[11px] text-ink-3">{account.name && account.baseUrl ? `${account.baseUrl}` : account.hint || (isLogin ? "Connexion par compte" : "")}</p>
       </div>
       <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", TONE[account.state])}>{ACCOUNT_STATE_LABELS[account.state]}</span>
@@ -59,7 +62,7 @@ export function AccountRow({ account, rank, kind, isLogin, onChanged }: { accoun
         open={removing}
         onOpenChange={setRemoving}
         title={`Retirer « ${name} » ?`}
-        description="Ce compte sera retiré des instances concernées. Les experts passeront au compte suivant. La conversation en cours sera interrompue."
+        description={`${account.shared ? "Ce compte est partagé avec l’entreprise : il sera retiré de l’instance de chaque membre sans compte." : "Ce compte sera retiré des instances concernées."} Les experts passeront au compte suivant. La conversation en cours sera interrompue.`}
         confirmText="Retirer"
         destructive
         onConfirm={async () => {

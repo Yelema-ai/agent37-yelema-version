@@ -6,8 +6,6 @@
 
 import { ACCOUNT_REFUSALS, type LlmSetup } from "./llm-accounts.ts";
 
-const PROVIDER_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
-
 /** `refused`: the provider no longer accepts the key; the experts do not answer until it is replaced or removed. */
 export type LlmState = "applied" | "pending" | "failed" | "refused";
 /** Whose account an instance's model runs on. `agent37` is the fallback when Yelema's own is down. */
@@ -123,26 +121,6 @@ export interface LlmLogin {
   family: string;
 }
 
-/**
- * Where the sign-in of a subscription stands. While `pending`, the account's holder opens
- * `verificationUrl` and types `userCode` there; the tokens stay inside the instance.
- */
-export interface LlmLoginView {
-  status: "none" | "pending" | "approved" | "denied" | "expired" | "error";
-  verificationUrl?: string;
-  userCode?: string;
-  expiresAt?: string;
-}
-
-/** A sign-in request from a body: a provider id and a model, nothing else; null when it is not one. */
-export function parseLoginDraft(body: unknown): { provider: string; model: string } | null {
-  if (!body || typeof body !== "object") return null;
-  const { provider, model } = body as Record<string, unknown>;
-  if (typeof provider !== "string" || !PROVIDER_ID.test(provider)) return null;
-  if (typeof model !== "string" || !model.trim() || model.length > 121) return null;
-  return { provider, model: model.trim() };
-}
-
 /** The page the member is sent to must be a web page over TLS: the address comes from an instance. */
 export function safeVerificationUrl(url: unknown): string | null {
   if (typeof url !== "string") return null;
@@ -170,35 +148,6 @@ export function scopePath(base: string, scope: SettingScope): string | null {
   if (scope.kind === "client") return `${base}/client`;
   if (scope.kind === "own") return `${base}/own`;
   return isMemberId(scope.id) ? `${base}/members/${scope.id}` : null;
-}
-
-export interface LlmKeyDraft {
-  provider: string;
-  /** Left out: the key in place is kept and only the model changes. */
-  secret?: string;
-  model: string;
-  /** A private endpoint only. */
-  name?: string;
-  baseUrl?: string;
-}
-
-// Loose bounds only: the back office holds the real rules (the provider's key format, the models of
-// the account). These keep an oversized or mistyped body from travelling at all.
-
-/** A key draft from a request body, with nothing but its three fields; null when it is not one. */
-export function parseKeyDraft(body: unknown): LlmKeyDraft | null {
-  if (!body || typeof body !== "object") return null;
-  const { provider, secret, model } = body as Record<string, unknown>;
-  if (typeof provider !== "string" || !PROVIDER_ID.test(provider)) return null;
-  if (typeof model !== "string" || !model.trim() || model.length > 121) return null;
-  if (secret !== undefined && (typeof secret !== "string" || secret.length > 4200)) return null;
-  const key = typeof secret === "string" ? secret.trim() : "";
-  const draft = { provider, model: model.trim(), ...(key ? { secret: key } : {}) };
-  if (provider !== CUSTOM_PROVIDER) return draft;
-  const { name, baseUrl } = body as Record<string, unknown>;
-  if (typeof name !== "string" || !name.trim() || name.length > 60) return null;
-  if (typeof baseUrl !== "string" || !baseUrl.trim() || baseUrl.length > 2000) return null;
-  return { ...draft, name: name.trim(), baseUrl: baseUrl.trim() };
 }
 
 const REFUSALS: Record<string, string> = {

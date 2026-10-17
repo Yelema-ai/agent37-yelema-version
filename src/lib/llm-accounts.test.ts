@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { llmPending, llmRefusalMessage, type LlmOverview } from "./llm.ts";
-import { cleanModel, layoutOf, moveItem, parseAccountDraft, parseAccountPatch, parseLayout, parseScopeParam, scopeParam, type LlmGroup } from "./llm-accounts.ts";
+import { cleanModel, layoutOf, layoutScope, moveItem, parseAccountDraft, parseAccountPatch, parseLayout, parseScopeParam, scopeParam, type LlmGroup } from "./llm-accounts.ts";
 
 const group = (provider: string, ids: string[], model = "m-1"): LlmGroup => ({ provider, model, fallbacks: [], accounts: ids.map((id) => ({ id, provider: "anthropic-api", label: "", hint: "…abcd", verified: true, state: "active" })) });
 
@@ -54,5 +54,24 @@ describe("contrôles d’entrée de l’app (le back-office tient les vraies rè
     const base = { catalogue: [], mine: null, own: null, membersMayBringKey: false } as unknown as LlmOverview;
     assert.equal(llmPending({ ...base, setup: { groups: [], state: "pending" } }), true);
     assert.equal(llmPending({ ...base, setup: { groups: [], state: "applied" } }), false);
+  });
+});
+
+describe("modèle par expert dans l’ordre envoyé", () => {
+  it("la carte des experts passe telle quelle, null compris ; une entrée mal formée refuse tout", () => {
+    const groups = [group("anthropic", ["1"], "claude-opus-5-5")];
+    const profiles = { fatima: { provider: "custom:Yelema", model: "gpt-5.5" }, djeneba: null };
+    assert.deepEqual(parseLayout(layoutOf(groups, profiles)), layoutOf(groups, profiles));
+    assert.equal("profiles" in layoutOf(groups), false);
+    for (const bad of [[], "x", { "Fatima!": null }, { fatima: { provider: "anthropic" } }, { fatima: { provider: "a b", model: "m-1" } }, { fatima: { provider: "anthropic", model: "x'; id" } }]) {
+      assert.equal(parseLayout({ ...layoutOf(groups), profiles: bad }), null, JSON.stringify(bad));
+    }
+  });
+
+  it("une instance qui ne montre que les comptes de l’entreprise range ceux-là", () => {
+    const shared = (g: LlmGroup): LlmGroup => ({ ...g, accounts: g.accounts.map((a) => ({ ...a, shared: true })) });
+    assert.equal(layoutScope([shared(group("anthropic", ["1"]))], { kind: "own" }), "client");
+    assert.equal(layoutScope([group("anthropic", ["1"])], { kind: "member", id: "7" }), "7");
+    assert.equal(layoutScope([], { kind: "own" }), "own");
   });
 });

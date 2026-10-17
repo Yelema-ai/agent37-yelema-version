@@ -1,9 +1,10 @@
 import type { AccountDraft, LayoutDraft, LlmAccount } from "@/lib/llm-accounts";
+import type { ModelGroup } from "@/lib/model-options";
 import "server-only";
 import type { CompanyProfile } from "@/lib/company";
 import type { ComposioCall } from "@/lib/composio-usage";
 import { mcpScopePath, mcpServerPath, type McpOverview, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
-import { scopePath, type LlmKeyDraft, type LlmModelChoice, type LlmLoginView, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
+import { scopePath, type LlmModelChoice, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { mailPath, type MailDetail, type MailDraft, type MailInbox, type MailRights, type MailRightsPatch, type MailSummary } from "@/lib/mail";
 import { isPublicId, type MemoryList, type MemoryNote, type MemoryPatch, type OrgAssignmentDraft, type OrgChart, type OrgGrantDraft, type OrgMember, type OrgRole } from "@/lib/memory";
 import { backofficeUrl } from "@/lib/runtime-config";
@@ -401,15 +402,6 @@ export const backoffice = {
   // it on the instances in the background and watches it; it reads the caller's role on the session
   // and refuses with a code the route turns into a sentence (src/lib/llm.ts). A key never comes back.
   llm: (token: string) => call<LlmOverview>("/app/llm", { token }),
-  setLlmKey: (token: string, scope: SettingScope, draft: LlmKeyDraft) =>
-    call<LlmWritten>(settingPath("/app/llm", scope), { method: "PUT", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
-  removeLlmKey: (token: string, scope: SettingScope) => call<LlmWritten>(settingPath("/app/llm", scope), { method: "DELETE", token }),
-  // A subscription instead of a key: the back office starts the provider's own sign-in inside the
-  // member's instance and answers the page to open and the code to type there; the tokens never
-  // leave the instance. Not for the whole company: an account signs in on one instance.
-  startLlmLogin: (token: string, scope: SettingScope, draft: { provider: string; model: string }) =>
-    call<LlmLoginView>(`${settingPath("/app/llm", scope)}/provider-login`, { method: "POST", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS * 2 }),
-  llmLogin: (token: string, scope: SettingScope) => call<LlmLoginView>(`${settingPath("/app/llm", scope)}/provider-login`, { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   // The model the caller picks among Yelema's own, for their instance or one of their experts.
   setLlmModel: (token: string, choice: LlmModelChoice) =>
     call<LlmWritten>("/app/llm/own/model", { method: "PUT", token, body: choice, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
@@ -423,6 +415,8 @@ export const backoffice = {
   patchLlmAccount: (token: string, id: string, patch: { label?: string; secret?: string }) =>
     call<LlmWritten>(`/app/llm/accounts/${id}`, { method: "PATCH", token, body: patch, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   removeLlmAccount: (token: string, id: string) => call<LlmWritten>(`/app/llm/accounts/${id}`, { method: "DELETE", token }),
+  llmModels: (token: string, scope: string, provider?: string) =>
+    call<{ groups: ModelGroup[] }>(`/app/llm/models?scope=${encodeURIComponent(scope)}${provider ? `&provider=${encodeURIComponent(provider)}` : ""}`, { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   setLlmLayout: (token: string, scope: string, layout: LayoutDraft) =>
     call<LlmWritten>(`/app/llm/layout?scope=${encodeURIComponent(scope)}`, { method: "PUT", token, body: layout, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
 

@@ -20,7 +20,18 @@ export interface LlmAccount {
   login?: { verificationUrl: string; userCode: string; expiresAt: string };
   name?: string;
   baseUrl?: string;
+  /** Comes from the company's accounts, shown on an instance that has none of its own. */
+  shared?: boolean;
 }
+
+/** A model on a given provider: what an expert, or every expert, runs on. */
+export interface ModelChoice {
+  provider: string;
+  model: string;
+}
+
+/** Per expert (Hermes profile): its own model, or null for « like every expert ». */
+export type ProfileModels = Record<string, ModelChoice | null>;
 
 export interface LlmGroup {
   /** Hermes provider (`anthropic`, `gemini`, `openai-codex`, `custom:<name>`): what the layout sends back. */
@@ -33,6 +44,8 @@ export interface LlmGroup {
 export interface LlmSetup {
   groups: LlmGroup[];
   state: "applied" | "pending" | "failed";
+  /** Absent from an older back office. */
+  profiles?: ProfileModels;
 }
 
 export interface AccountDraft {
@@ -46,12 +59,15 @@ export interface AccountDraft {
 
 export interface LayoutDraft {
   groups: { provider: string; model: string; fallbacks: string[]; accounts: string[] }[];
+  profiles?: ProfileModels;
 }
 
 const PROVIDER_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const HERMES_PROVIDER = /^(custom:[A-Za-z][A-Za-z0-9_-]{1,39}|[a-z0-9][a-z0-9-]{0,63})$/;
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/-]{1,120}$/;
 const ACCOUNT_ID = /^\d{1,12}$/;
+const PROFILE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+const MAX_PROFILES = 100;
 export const MAX_FALLBACKS = 5;
 
 export const isAccountId = (v: unknown): v is string => typeof v === "string" && ACCOUNT_ID.test(v);
@@ -108,13 +124,40 @@ export function parseLayout(body: unknown): LayoutDraft | null {
     if (!accounts.length || accounts.length > 20 || !accounts.every(isAccountId)) return null;
     out.push({ provider: g.provider, model: g.model, fallbacks: fallbacks as string[], accounts: accounts as string[] });
   }
-  return { groups: out };
+  const raw = (body as { profiles?: unknown }).profiles;
+  if (raw === undefined) return { groups: out };
+  const profiles = parseProfiles(raw);
+  return profiles ? { groups: out, profiles } : null;
+}
+
+function parseProfiles(raw: unknown): ProfileModels | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length > MAX_PROFILES) return null;
+  const out: ProfileModels = {};
+  for (const [profile, v] of entries) {
+    if (!PROFILE.test(profile)) return null;
+    if (v === null) out[profile] = null;
+    else {
+      const { provider, model } = (v ?? {}) as Record<string, unknown>;
+      if (typeof provider !== "string" || !HERMES_PROVIDER.test(provider) || typeof model !== "string" || !MODEL.test(model)) return null;
+      out[profile] = { provider, model };
+    }
+  }
+  return out;
 }
 
 /** The layout to send for groups as shown. */
-export const layoutOf = (groups: readonly LlmGroup[]): LayoutDraft => ({
+export const layoutOf = (groups: readonly LlmGroup[], profiles?: ProfileModels): LayoutDraft => ({
   groups: groups.map((g) => ({ provider: g.provider, model: g.model, fallbacks: g.fallbacks, accounts: g.accounts.map((a) => a.id) })),
+  ...(profiles ? { profiles } : {}),
 });
+
+/** Where a layout is saved: an instance showing only the company's accounts reorders those. */
+export const layoutScope = (groups: readonly LlmGroup[], scope: SettingScope): string | null => {
+  const accounts = groups.flatMap((g) => g.accounts);
+  return accounts.length > 0 && accounts.every((a) => a.shared) ? "client" : scopeParam(scope);
+};
 
 /** `list` with the item at `from` moved to `to` (indices in the original list). */
 export function moveItem<T>(list: readonly T[], from: number, to: number): T[] {
