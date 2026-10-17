@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Loader2, MoreHorizontal, Plug, Plus, Search, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { isConnectionActive as isActive } from "@/lib/expert-tools";
 import { DEFAULT_INTEGRATION_TOOLKITS, catalogToolkit, composioLogoUrl } from "@/lib/integration-catalog";
 import type {
   IntegrationConnection,
@@ -28,10 +29,6 @@ const POLL_TIMEOUT_MS = 45000;
 
 function slugKey(slug: string | null | undefined): string {
   return (slug || "").toLowerCase();
-}
-
-function isActive(c: IntegrationConnection): boolean {
-  return (c.status || "").toUpperCase() === "ACTIVE" && !c.isDisabled;
 }
 
 function activeCount(conns: IntegrationConnection[], slug: string): number {

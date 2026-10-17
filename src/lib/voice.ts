@@ -123,11 +123,18 @@ export interface CallRecord {
   startedAt: string;
   endedAt: string | null;
   durationSeconds: number | null;
-  /** Written by the expert once the call is over. */
+  /** Written by the expert once the call is over, from the exact transcript it was handed. */
   subject: string | null;
-  /** Just ended: the expert is probably still writing its subject. */
+  /** 3 to 5 short lines: asked, decided or done, still to do. Empty until written. */
+  summary: string[];
+  /** Just ended: the expert is probably still writing its subject and summary. */
   subjectPending: boolean;
 }
+
+// The back office hands the expert the call's exact transcript in the call's session. It is full of
+// transcription errors: the chat shows that it was handed over, never the text. Prefix set by the back office.
+const CALL_TRANSCRIPT = /^(Transcription exacte de l'appel vocal|Exact transcript of the voice call) /;
+export const isCallTranscript = (content: string): boolean => CALL_TRANSCRIPT.test(content);
 
 /** "3 min 16 s", "45 s". */
 export function callDuration(seconds: number | null): string {

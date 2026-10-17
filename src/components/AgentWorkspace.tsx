@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { toast } from "sonner";
-import { FolderOpen, Mail, MessageSquare, Pencil, Repeat, Phone } from "lucide-react";
+import { FolderOpen, Mail, MessageSquare, Pencil, Repeat, Phone, Wrench } from "lucide-react";
 import { agentTabPath, parseAgentRoute, type AgentTab } from "@/lib/expert-tabs";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useMyAgents } from "@/components/useMyAgents";
@@ -13,6 +13,8 @@ import { ExpertImage } from "@/components/experts/ExpertImage";
 import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { ExpertEmails } from "@/components/experts/ExpertEmails";
 import { ExpertRoutines } from "@/components/experts/ExpertRoutines";
+import { ExpertReadiness } from "@/components/experts/ExpertReadiness";
+import { ExpertTools } from "@/components/experts/ExpertTools";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { useCatalogueExpert } from "@/components/experts/useCatalogue";
 import { useMailInboxes } from "@/components/experts/useMailInboxes";
@@ -32,6 +34,7 @@ const TABS: { id: AgentTab; label: string; icon: typeof MessageSquare }[] = [
   { id: "chat", label: "Discussion", icon: MessageSquare },
   { id: "files", label: "Livrables", icon: FolderOpen },
   { id: "routines", label: "Routines", icon: Repeat },
+  { id: "tools", label: "Outils", icon: Wrench },
   { id: "emails", label: "E-mails", icon: Mail },
   { id: "calls", label: "Appels", icon: Phone },
 ];
@@ -91,7 +94,7 @@ export function AgentWorkspace({
   // only for an expert that has an inbox.
   // Calls are offered where voice is on, for an expert of the catalogue.
   const voiceOn = useVoices().length > 0;
-  const tabs = TABS.filter((t) => (t.id === "routines" ? profileId !== null : t.id === "emails" ? inbox !== null : t.id === "calls" ? voiceOn && Boolean(expert?.catalogueKey) : true));
+  const tabs = TABS.filter((t) => (t.id === "routines" || t.id === "tools" ? profileId !== null : t.id === "emails" ? inbox !== null : t.id === "calls" ? voiceOn && Boolean(expert?.catalogueKey) : true));
   const sheet = useCatalogueExpert(expert?.catalogueKey);
   const expertName = expert?.displayName ?? (profileId ? expertDisplayName(profileId) : "");
   // The rail's picture: the face, or the full-body portrait cropped to it.
@@ -199,6 +202,9 @@ export function AgentWorkspace({
                   )}
                 </div>
               </div>
+              {profileId && (
+                <ExpertReadiness agentId={agentId} profileId={profileId} expertName={expertName} onOpenTools={() => selectTab("tools")} className="mx-1.5 mt-2 self-start" />
+              )}
               {expert.tagline && <p className="px-1.5 pb-1 pt-2 text-[13px] text-ink-3">{expert.tagline}</p>}
               {callee && (
                 <div className="mx-1.5 mb-2 mt-1 flex gap-1.5">
@@ -258,6 +264,7 @@ export function AgentWorkspace({
                     <Pencil className="size-3" />
                   </button>
                 )}
+                {profileId && <ExpertReadiness agentId={agentId} profileId={profileId} expertName={expertName} onOpenTools={() => selectTab("tools")} className="mr-2 shrink-0" />}
                 {callee && <CallButton expert={callee} className="mr-1 shrink-0" />}
                 {callee && <VoiceButton expert={callee} compact className="mr-2 size-8 shrink-0" />}
               </>
@@ -302,6 +309,13 @@ export function AgentWorkspace({
                     driveFolder: expert?.driveFolder ?? expertName,
                   }}
                 />
+              </div>
+            </div>
+          )}
+          {currentTab === "tools" && profileId && (
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-4xl p-6 md:px-10 md:py-8">
+                <ExpertTools agentId={agentId} profileId={profileId} expertName={expertName} />
               </div>
             </div>
           )}

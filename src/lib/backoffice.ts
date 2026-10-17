@@ -5,7 +5,7 @@ import type { ComposioCall } from "@/lib/composio-usage";
 import { mcpScopePath, mcpServerPath, type McpOverview, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
 import { scopePath, type LlmKeyDraft, type LlmModelChoice, type LlmLoginView, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { mailPath, type MailDetail, type MailDraft, type MailInbox, type MailRights, type MailRightsPatch, type MailSummary } from "@/lib/mail";
-import { isPublicId, type MemoryList, type MemoryNote, type MemoryPatch, type OrgChart, type OrgGrantDraft } from "@/lib/memory";
+import { isPublicId, type MemoryList, type MemoryNote, type MemoryPatch, type OrgAssignmentDraft, type OrgChart, type OrgGrantDraft, type OrgMember, type OrgRole } from "@/lib/memory";
 import { backofficeUrl } from "@/lib/runtime-config";
 import { SIGNALING_METHOD, type CallRecord, type SignalingStep, type VoiceOption } from "@/lib/voice";
 import { pinnedWorkspaceId } from "@/lib/tenant";
@@ -131,6 +131,11 @@ export interface BoMember {
 }
 
 export type BoOpenedSession = { session: BoSession } & BoMe;
+
+/** The org chart as the back office sends it: an expert's `name` is the member's, or null. */
+export type BackofficeOrgChart = Omit<OrgChart, "members"> & {
+  members: (Omit<OrgMember, "experts"> & { experts?: { profile: string; key: string; name: string | null }[] })[];
+};
 
 /** One invoice of the workspace. Amounts are in major units (XOF has no decimals); dates are ISO. */
 export interface BoInvoice {
@@ -461,12 +466,17 @@ export const backoffice = {
 
   // The org chart that walls the memory, for the workspace's admins. The back office keeps it; the
   // app holds no copy.
-  org: (token: string) => call<OrgChart>("/app/org", { token }),
+  org: (token: string) => call<BackofficeOrgChart>("/app/org", { token }),
   createUnit: (token: string, unit: { name: string; parent?: string | null }) => call<{ id: string }>("/app/org/units", { method: "POST", token, body: unit }),
   updateUnit: (token: string, id: string, patch: { name?: string; parent?: string | null }) => call<{ ok: true }>(ownPath("/app/org/units", id), { method: "PATCH", token, body: patch }),
   deleteUnit: (token: string, id: string) => call<{ ok: true }>(ownPath("/app/org/units", id), { method: "DELETE", token }),
   placeMember: (token: string, id: string, place: { unit?: string | null; unitRole?: "member" | "head" }) =>
     call<{ ok: true }>(ownPath("/app/org/members", id), { method: "PATCH", token, body: place }),
+  // A member's place, or one expert's, in a unit; 409 for the same place twice.
+  createAssignment: (token: string, draft: OrgAssignmentDraft) => call<{ id: string }>("/app/org/assignments", { method: "POST", token, body: draft }),
+  updateAssignment: (token: string, id: string, patch: { role?: OrgRole; unit?: string }) =>
+    call<{ ok: true }>(ownPath("/app/org/assignments", id), { method: "PATCH", token, body: patch }),
+  deleteAssignment: (token: string, id: string) => call<{ ok: true }>(ownPath("/app/org/assignments", id), { method: "DELETE", token }),
   createGrant: (token: string, grant: OrgGrantDraft) => call<{ id: string }>("/app/org/grants", { method: "POST", token, body: grant }),
   deleteGrant: (token: string, id: string) => call<{ ok: true }>(ownPath("/app/org/grants", id), { method: "DELETE", token }),
 };

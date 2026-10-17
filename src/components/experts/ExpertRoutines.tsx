@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { routineBulkMessage, runPool } from "@/lib/bulk";
 import type { Routine } from "@/lib/routines";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -17,6 +18,7 @@ export function ExpertRoutines({ agentId, expert }: { agentId: string; expert: R
   const [routines, setRoutines] = useState<Routine[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [editing, setEditing] = useState<{ routine: Routine | null; key: number } | null>(null);
   const [removing, setRemoving] = useState<Routine | null>(null);
   const [history, setHistory] = useState<Routine | null>(null);
@@ -55,6 +57,26 @@ export function ExpertRoutines({ agentId, expert }: { agentId: string; expert: R
     }
   }
 
+  // The same PATCH as one switch, three at a time: the instance answers each in turn anyway.
+  async function bulk(list: Routine[], enabled: boolean): Promise<boolean> {
+    const todo = list.filter((r) => r.suggested || r.enabled !== enabled);
+    if (!todo.length) return true;
+    setBulkBusy(true);
+    try {
+      const results = await runPool(todo, 3, (r) =>
+        apiFetch<{ routine: Routine }>(`${base}/${r.id}`, { method: "PATCH", body: JSON.stringify({ expert: expertKey, enabled }) })
+      );
+      for (const res of results) if (res.status === "fulfilled") replace(res.value.routine);
+      const failed = results.filter((res) => res.status === "rejected").length;
+      const message = routineBulkMessage(enabled ? "activate" : "pause", todo.length - failed, failed);
+      if (failed) toast.error(`${message}.`);
+      else toast.success(`${message}.`);
+      return failed === 0;
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   async function runNow(r: Routine) {
     setBusyId(r.id);
     try {
@@ -82,6 +104,8 @@ export function ExpertRoutines({ agentId, expert }: { agentId: string; expert: R
     onHistory: setHistory,
     onEdit: (r: Routine) => setEditing({ routine: r, key: Date.now() }),
     onRemove: setRemoving,
+    onBulk: bulk,
+    bulkBusy,
   };
   const active = routines?.filter((r) => !r.suggested) ?? [];
   const suggested = routines?.filter((r) => r.suggested) ?? [];
@@ -131,8 +155,15 @@ export function ExpertRoutines({ agentId, expert }: { agentId: string; expert: R
 
           {suggested.length > 0 && (
             <section className={panel}>
-              <h2 className="text-base font-semibold text-ink">Proposées par {expert.name}</h2>
-              <p className="mt-1 text-sm text-ink-3">Activez-les en un clic, vous les modifiez ensuite.</p>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h2 className="text-base font-semibold text-ink">Proposées par {expert.name}</h2>
+                  <p className="mt-1 text-sm text-ink-3">Activez-les en un clic, vous les modifiez ensuite.</p>
+                </div>
+                <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => void bulk(suggested, true)}>
+                  {bulkBusy && <Loader2 className="animate-spin" />} Tout activer ({suggested.length})
+                </Button>
+              </div>
               <RoutinesTable routines={suggested} suggested {...actions} />
             </section>
           )}

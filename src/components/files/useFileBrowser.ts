@@ -3,23 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { apiFetch, readApiError } from "@/lib/api";
+import { runPool } from "@/lib/bulk";
 import { isDriveRoot } from "@/lib/drive-paths";
 import { TOO_LARGE, tooLarge } from "@/lib/upload-limit";
 import { useDropZone } from "../useDropZone";
 import { joinPath, type FileEntry, type FileListResponse } from "./types";
-
-// Run `worker` over `items` with at most `limit` in flight. Folder uploads fan out to one PUT per
-// file; an unbounded Promise.all would open hundreds of sockets (and buffer hundreds of bodies) at
-// once, so we cap concurrency.
-async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
-  let next = 0;
-  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      await worker(items[next++]);
-    }
-  });
-  await Promise.all(runners);
-}
 
 // Owns the Files tab's directory state + mutations. One hook instance per pane, callbacks
 // memoised, a ref-counted drag overlay. The current directory's resolved absolute `path` comes

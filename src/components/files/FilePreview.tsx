@@ -16,10 +16,13 @@ import { contentUrl, previewKind, type FileEntry } from "./types";
 export function FilePreview({
   agentId,
   entry,
+  title,
   onClose,
 }: {
   agentId: string;
   entry: FileEntry | null;
+  /** What the file is, when its name says less (a deliverable's title). */
+  title?: string;
   onClose: () => void;
 }) {
   const open = !!entry;
@@ -29,7 +32,7 @@ export function FilePreview({
         {entry && (
           <>
             <DialogHeader>
-              <DialogTitle className="truncate pr-8">{entry.name}</DialogTitle>
+              <DialogTitle className="truncate pr-8">{title ?? entry.name}</DialogTitle>
             </DialogHeader>
             <PreviewBody agentId={agentId} entry={entry} />
             <div className="flex justify-end">

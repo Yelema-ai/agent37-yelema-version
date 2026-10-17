@@ -7,8 +7,8 @@ import { callDuration, type CallRecord } from "@/lib/voice";
 import { Button } from "@/components/ui/button";
 import { CallButton } from "./CallButton";
 
-// The "Appels" tab of an expert: the member's calls with it, newest first, each with the subject the
-// expert wrote once the call was over. A subject still being written is read again shortly.
+// The "Appels" tab of an expert: the member's calls with it, newest first, each with the subject and
+// summary the expert wrote once the call was over (never the raw transcript). Pending ones are read again shortly.
 
 const PENDING_POLL_MS = 15_000;
 
@@ -71,8 +71,15 @@ export function ExpertCalls({ expert }: { expert: { key: string; name: string; p
               <PhoneCall className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-ink">
-                  {c.subject ?? (c.status === "open" ? "Appel en cours" : c.subjectPending ? "Sujet en cours de rédaction…" : c.status === "failed" ? "Appel interrompu" : "Sans sujet")}
+                  {c.subject ?? (c.status === "open" ? "Appel en cours" : c.subjectPending ? "Compte rendu en cours de rédaction…" : c.status === "failed" ? "Appel interrompu" : "Sans sujet")}
                 </p>
+                {c.summary?.length ? (
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[13px] text-ink-2">
+                    {c.summary.map((line, k) => (
+                      <li key={k}>{line}</li>
+                    ))}
+                  </ul>
+                ) : null}
                 <p className="text-[12px] text-ink-3">
                   {when(c.startedAt)}
                   {c.durationSeconds != null && ` · ${callDuration(c.durationSeconds)}`}

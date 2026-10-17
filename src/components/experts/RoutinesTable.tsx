@@ -34,6 +34,10 @@ function Switch({ on, label, disabled, onChange }: { on: boolean; label: string;
   );
 }
 
+function Check({ on, label, onChange }: { on: boolean; label: string; onChange: () => void }) {
+  return <input type="checkbox" checked={on} onChange={onChange} aria-label={label} className="size-4 cursor-pointer accent-primary" />;
+}
+
 function When({ iso, empty }: { iso: string | null; empty: string }) {
   const at = iso ? Date.parse(iso) : Number.NaN;
   if (Number.isNaN(at)) return <span className="text-ink-3">{empty}</span>;
@@ -52,6 +56,9 @@ export interface RoutineActions {
   onHistory: (r: Routine) => void;
   onEdit: (r: Routine) => void;
   onRemove: (r: Routine) => void;
+  /** Turn the chosen routines on or off; true when the whole selection went through. */
+  onBulk: (routines: Routine[], enabled: boolean) => Promise<boolean>;
+  bulkBusy: boolean;
 }
 
 // One section's routines as a table, 5 rows a page by default. `suggested`: shipped with the expert
@@ -59,15 +66,59 @@ export interface RoutineActions {
 export function RoutinesTable({ routines, suggested = false, ...act }: { routines: Routine[]; suggested?: boolean } & RoutineActions) {
   const [size, setSize] = useState(SIZES[0]);
   const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const shown = paginate(routines, page, size);
   const th = "px-3 py-2 text-left text-xs font-semibold text-ink-3";
+  // Ids of routines that left this list (activated, deleted) are simply ignored.
+  const chosen = routines.filter((r) => selected.has(r.id));
+  const pageAll = shown.items.length > 0 && shown.items.every((r) => selected.has(r.id));
+  const setMany = (list: Routine[], on: boolean) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      for (const r of list) {
+        if (on) next.add(r.id);
+        else next.delete(r.id);
+      }
+      return next;
+    });
+  async function bulk(enabled: boolean) {
+    if (await act.onBulk(chosen, enabled)) setSelected(new Set());
+  }
 
   return (
     <>
+      {chosen.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-soft px-3 py-2 text-[13px] text-ink-2">
+          <span className="font-semibold text-ink">
+            {chosen.length} sélectionnée{chosen.length > 1 ? "s" : ""}
+          </span>
+          {pageAll && chosen.length < routines.length && (
+            <button type="button" className="text-brand-ink hover:underline" onClick={() => setMany(routines, true)}>
+              Sélectionner les {routines.length} routines
+            </button>
+          )}
+          <span className="ml-auto flex flex-wrap gap-1.5">
+            <Button size="sm" disabled={act.bulkBusy} onClick={() => void bulk(true)}>
+              {act.bulkBusy && <Loader2 className="animate-spin" />} Activer
+            </Button>
+            {!suggested && (
+              <Button size="sm" variant="outline" disabled={act.bulkBusy} onClick={() => void bulk(false)}>
+                Mettre en pause
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" disabled={act.bulkBusy} onClick={() => setSelected(new Set())}>
+              Désélectionner
+            </Button>
+          </span>
+        </div>
+      )}
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[720px] text-sm">
           <thead className="border-b border-line">
             <tr>
+              <th className={cn(th, "w-10")}>
+                <Check label="Sélectionner les routines de la page" on={pageAll} onChange={() => setMany(shown.items, !pageAll)} />
+              </th>
               <th className={th}>Nom</th>
               <th className={th}>Horaire</th>
               {!suggested && <th className={th}>État</th>}
@@ -83,6 +134,9 @@ export function RoutinesTable({ routines, suggested = false, ...act }: { routine
               const busy = act.busyId === r.id;
               return (
                 <tr key={r.id} className="align-top">
+                  <td className="px-3 py-3.5">
+                    <Check label={`Sélectionner ${r.name}`} on={selected.has(r.id)} onChange={() => setMany([r], !selected.has(r.id))} />
+                  </td>
                   <td className="max-w-[18rem] px-3 py-3">
                     <p className="font-semibold text-ink">{r.name}</p>
                     <p className="line-clamp-2 text-[13px] text-ink-3">{r.summary}</p>

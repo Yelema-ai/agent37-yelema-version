@@ -40,6 +40,25 @@ export interface OrgUnit {
   id: string;
   name: string;
   parent: string | null;
+  /** Deposits kept for this unit only. */
+  documents: number;
+}
+
+export type OrgRole = "member" | "head";
+
+/** One place of a member in a unit: for their whole instance (`profile` null) or for one expert. */
+export interface OrgPlacement {
+  id: string;
+  unit: string;
+  role: OrgRole;
+  profile: string | null;
+}
+
+/** An expert installed for a member; `label` is the member's name for it, else the catalogue's. */
+export interface OrgExpert {
+  profile: string;
+  key: string;
+  label: string;
 }
 
 export interface OrgMember {
@@ -47,7 +66,9 @@ export interface OrgMember {
   name: string | null;
   email: string | null;
   unit: string | null;
-  unitRole: "member" | "head";
+  unitRole: OrgRole;
+  units: OrgPlacement[];
+  experts: OrgExpert[];
 }
 
 export interface OrgGrant {
@@ -62,7 +83,11 @@ export interface OrgChart {
   units: OrgUnit[];
   members: OrgMember[];
   grants: OrgGrant[];
+  /** Deposits read by the whole company. */
+  documents: number;
 }
+
+export type OrgAssignmentDraft = { unit: string; member: string; profile?: string | null; role?: OrgRole };
 
 export type OrgGrantDraft = { unit: string; right: "read" | "write" } & ({ user: string } | { granteeUnit: string });
 
@@ -71,9 +96,9 @@ const PUBLIC_ID = /^[a-z]{2,5}_[A-Za-z0-9]{6,40}$/;
 export const isPublicId = (v: unknown): v is string => typeof v === "string" && PUBLIC_ID.test(v);
 
 /** The units in tree order, each with its depth. A unit caught in a loop is listed at the top. */
-export function orderUnits(units: OrgUnit[]): { unit: OrgUnit; depth: number }[] {
+export function orderUnits<U extends Pick<OrgUnit, "id" | "parent">>(units: U[]): { unit: U; depth: number }[] {
   const ids = new Set(units.map((u) => u.id));
-  const out: { unit: OrgUnit; depth: number }[] = [];
+  const out: { unit: U; depth: number }[] = [];
   const seen = new Set<string>();
   const walk = (parent: string | null, depth: number) => {
     for (const unit of units) {

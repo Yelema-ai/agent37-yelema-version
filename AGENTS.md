@@ -143,7 +143,7 @@ Browser ─▶ Next.js (this app) ─▶ control plane  https://api.agent37.com/
   (`client__expert`) installed on the member's instance. The shell (`src/components/app`) lists
   them; `/` is the home, `/recruter` the gallery of every expert Yelema offers, and
   `/experts/{agentId}/{profileId}/{tab}` the expert's workspace (Discussion / Livrables /
-  Routines). Without a profile segment the page is the instance's default Hermes home.
+  Routines / Outils). Without a profile segment the page is the instance's default Hermes home.
   Intégrations (`/integrations`) holds what plugs into the experts. For everyone, acting on the
   signed-in user's OWN instance, for all of its experts: Connecteurs and Canaux
   (`src/components/MyInstance.tsx`). Where the back office signs users in, also E-mails for admins
@@ -208,6 +208,7 @@ Browser ─▶ Next.js (this app) ─▶ control plane  https://api.agent37.com/
 | `src/lib/openrouter-pkce.ts` (+ `.test.ts`), `src/app/api/llm/openrouter/` | OpenRouter in one click (OAuth PKCE): the server keeps the verifier in an httpOnly cookie, trades the code for a key and hands it to the back office; the key never reaches the browser |
 | `src/app/api/composio-usage/**`, `src/components/integrations/UsageView.tsx`, `src/app/(app)/administration/consommation/` | Consommation, for admins, signed in through the back office: what the experts' tools cost over a month, in all, by member, by application and call by call, read from the back office (`/api/v1/app/composio-usage`). Amounts come in thousandths of a CFA franc and are rounded to the franc on display only |
 | `src/lib/catalogue.ts`, `src/app/api/catalogue/**` | The back office's expert catalogue, cached, and its join with installed profiles |
+| `src/lib/org-chart.ts` (+ `.test.ts`), `src/app/api/org/**`, `src/components/memory/OrgChartView.tsx`, `src/components/memory/org-chart/` | Organigramme, for admins, signed in through the back office (`/api/v1/app/org/*`): boxes with native drag and drop (a unit onto a unit, a member or one expert onto a unit), a side panel with the same gestures by select, exceptions under « Avancé ». The tree logic is a port of the back office's board model; the back office keeps the chart and refuses loops and duplicates |
 | `src/lib/expert-looks.ts` (+ `.test.ts`), `src/app/api/experts/[key]/**`, `src/components/experts/ExpertEditModal.tsx`, `AvatarConfigModal.tsx`, `avatarContracts.ts` | A member's own name and picture for an expert of their team, signed in through the back office: the name rule and the refusal sentences, the relay routes (rename, picture, portrait drawn by the studio from four choices, kept only when applied), and the two dialogs |
 | `src/components/experts/ExpertImage.tsx`, `images` in `next.config.ts` | Expert pictures resized by the image optimizer (the catalogue serves them full size); only Yelema hosts are optimized |
 | `src/components/experts/ExpertMedia.tsx`, `public/experts/vid/` | A card's picture, swapped for the expert's looping video on hover. The video is the catalogue's when it lists one (`loopVideoUrl`), else the file named after the expert's first name in `public/experts/vid`: a stopgap to delete once the back office serves them |
@@ -216,6 +217,16 @@ Browser ─▶ Next.js (this app) ─▶ control plane  https://api.agent37.com/
 | `src/app/api/catalogue/[key]/request/` | A member asks for an expert they do not have: passed on to the back office, which tells Yelema's team. The app installs nothing |
 | `src/lib/drive.ts`, `src/lib/drive-paths.ts` | The drive (`~/Livrables`) and the path guard every files route applies |
 | `src/lib/hermes-cron.ts`, `src/app/api/agents/[id]/routines/**` | Routines: Hermes's scheduler through its API server (port 8642, `yelema-hermes` image). A profile installed after the instance's start has no key: on a `401` the module runs the image's own key script in the instance, then asks again |
+| `src/lib/routines.ts` (runs), `src/app/api/agents/[id]/routines/[routineId]/runs/` | A routine's past runs: the conversations Hermes opens for it, its preamble and `[SILENT]` answers recognised |
+| `src/components/experts/RoutinesTable.tsx`, `RoutineDialog.tsx`, `RoutineHistoryDialog.tsx` | Routines as a paginated table with bulk selection (Activer / Mettre en pause / Tout activer, `src/lib/bulk.ts`: three PATCH at a time), the create/edit form, a routine's run history |
+| `src/lib/deliverables.ts` (+ `.test.ts`), `src/app/api/agents/[id]/files/tree/`, `src/components/files/DeliverablesView.tsx`, `DeliverableRow.tsx` | Livrables: an expert's folder scanned three levels deep in one call, read as subjects then dated deliverables (`<TYPE>_<SUJET>_<jour>_<date>`); `_memoire` hidden, `_inbox` behind « À classer », `sources/` and `archives/` folded inside their deliverable. « Tous les fichiers » opens the plain browser |
+| `src/lib/jour-zero.ts` (+ `.test.ts`), `src/app/api/agents/[id]/experts/[profile]/jour-zero/`, `src/components/experts/ExpertReadiness.tsx` | The expert's day-zero preparation (`~/Livrables/<Expert>/_memoire/jour-zero.json`, written by the expert), validated, as a chip on its page and its checks behind it |
+| `src/lib/expert-tools.ts` (+ `.test.ts`), `src/app/api/agents/[id]/experts/[profile]/outils/`, `src/components/experts/ExpertTools.tsx` | Outils tab: the pack's `outils-recommandes.json` read from the profile, validated, matched to the member's connectors and MCP servers (to connect / ready / included) |
+| `src/lib/tool-steps.ts` (+ `.test.ts`), `src/components/chat/ChatSteps.tsx` | What the expert is doing, in plain French, from the chat stream's tool calls: the live line and the folded « Étapes » |
+| `src/lib/chat-queue.ts` (+ `.test.ts`) | Messages sent during an answer, sent together as the next turn |
+| `src/lib/paginate.ts` (+ `.test.ts`), `src/components/Pager.tsx` | One page of a list, and the pager under it |
+| `src/lib/fr-dates.ts` (+ `.test.ts`) | Relative and full French dates, in the routines' time zone |
+| `src/components/memory/MemoryGroups.tsx` | Enterprise memory deposits, one folding block per compartment |
 | `src/components/home`, `src/components/experts`, `src/components/integrations` | Home, gallery, sheet, routines, connectors |
 | `src/app/api/agents/[id]/computer/`, `src/components/experts/ComputerProvider.tsx`, `ExpertComputer.tsx` | "Son ordinateur": the instance's screen live beside the chat (noVNC, 60-second signed URL), and taking over mouse and keyboard |
 | `src/app/api/agents/[id]/channels/**` | Messaging channels BFF (list + Teams address / write / disconnect, Telegram checks, WhatsApp pairing) |

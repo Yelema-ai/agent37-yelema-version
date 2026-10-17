@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, FileText, Image as ImageIcon, Loader2, Repeat } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Image as ImageIcon, Loader2, PhoneCall, Repeat } from "lucide-react";
 import { isRoutineRun, isSilentRun, routineRunText, SILENT_RUN_LABEL } from "@/lib/routines";
+import { isCallTranscript } from "@/lib/voice";
 import { cn } from "@/lib/utils";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import type { Expert } from "@/lib/types";
@@ -108,6 +109,13 @@ export function ChatMessages({
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6 sm:px-6">
       {messages.map((m, i) => {
+        if (m.role === "user" && isCallTranscript(m.content)) {
+          return (
+            <p key={m.id} className="flex items-center justify-center gap-2 text-xs text-ink-3">
+              <PhoneCall className="h-3.5 w-3.5" /> Transcription de l’appel transmise à l’expert
+            </p>
+          );
+        }
         if (m.role === "user" && isRoutineRun(m.content)) {
           return <RoutineBrief key={m.id} content={m.content} />;
         }

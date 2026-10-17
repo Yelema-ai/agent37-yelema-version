@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { callDuration, callHeaders, chosenVoice, countryFlag, countryName, filterVoices, parseVoicePrefs, signalingStep, voiceFacets, type VoiceOption } from "./voice.ts";
+import { callDuration, callHeaders, chosenVoice, countryFlag, countryName, filterVoices, isCallTranscript, parseVoicePrefs, signalingStep, voiceFacets, type VoiceOption } from "./voice.ts";
 
 test("a relayed step is only one the SDK sends, with its own method", () => {
   assert.equal(signalingStep("conv_abc-1", "offer", "POST"), "offer");
@@ -67,4 +67,11 @@ test("gender × country: each row narrows the other; neutral voices only under a
   assert.deepEqual(voiceFacets(voices, { gender: null, country: "SN" }).genders, ["male"]);
   assert.equal(countryName("CI"), "Côte d’Ivoire");
   assert.equal(countryFlag("fr"), "🇫🇷");
+});
+
+test("a call transcript handed to the expert is recognised by its prefix, in both languages", () => {
+  assert.equal(isCallTranscript("Transcription exacte de l'appel vocal du 17/10/2026 à 14:05 UTC (pour mémoire…)"), true);
+  assert.equal(isCallTranscript("Exact transcript of the voice call of 17/10/2026 at 14:05 UTC — part 1/2 (for the record…)"), true);
+  assert.equal(isCallTranscript("Peux-tu me donner la transcription exacte de l'appel vocal ?"), false);
+  assert.equal(isCallTranscript("Demande faite pendant un appel vocal : …"), false);
 });
