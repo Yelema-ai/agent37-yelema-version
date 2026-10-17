@@ -35,3 +35,9 @@ export function steerText(content: string): string {
   const start = c.indexOf("\n");
   return start < 0 ? content : c.slice(start + 1, -STEER_CLOSE.length).trim();
 }
+
+/** `item` placed just before the bubble `beforeId` (a reply in progress), else at the end. */
+export function insertBefore<T extends { id: string }>(list: readonly T[], beforeId: string, item: T): T[] {
+  const i = list.findIndex((m) => m.id === beforeId);
+  return i < 0 ? [...list, item] : [...list.slice(0, i), item, ...list.slice(i)];
+}

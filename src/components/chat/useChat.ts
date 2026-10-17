@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, readApiError } from "@/lib/api";
-import { batchQueued, steerText, unreadSteerCount } from "@/lib/chat-queue";
+import { batchQueued, insertBefore, steerText, unreadSteerCount } from "@/lib/chat-queue";
 import { profileQuery } from "@/lib/profile-id";
 import { toolPhrase } from "@/lib/tool-steps";
 import { useTurnReporter } from "@/components/activity/hooks";
@@ -116,7 +116,7 @@ interface LiveRun {
   /** Latest immutable snapshot of the assistant bubble — updated via patchRun. */
   assistant: ChatMessage;
   done: boolean;
-  /** Messages steered into this turn (in flight or accepted), shown after the reply. */
+  /** Messages steered into this turn (in flight or accepted), shown before the reply they join. */
   steered: Queued[];
   /** Steer requests still in flight: the turn's end waits for them before dispatching the queue. */
   steers: Set<Promise<void>>;
@@ -149,7 +149,7 @@ function mapHistory(history: SessionDetail["history"]): ChatMessage[] {
 // bubbles; once it's done, the transcript holds the whole turn and wins.
 function mergeLiveRun(history: ChatMessage[], run: LiveRun): ChatMessage[] {
   if (run.done) return history;
-  return [...history, ...run.users, run.assistant, ...run.steered.map((q) => q.user), ...run.queue.map((q) => q.user)];
+  return [...history, ...run.users, ...run.steered.map((q) => q.user), run.assistant, ...run.queue.map((q) => q.user)];
 }
 
 // The steers Hermes left unread: their own bubbles when they match, else one bubble with its text.
@@ -495,7 +495,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
             // keep the run's bubbles (or refetch when a reattached run has no user bubble).
             if (res.active_response_id === run.responseId) {
               if (run.users.length) {
-                setMessages([...history, ...run.users, run.assistant, ...run.steered.map((q) => q.user)]);
+                setMessages([...history, ...run.users, ...run.steered.map((q) => q.user), run.assistant]);
               } else {
                 setMessages(history);
                 void refreshHistory(sessionId);
@@ -603,7 +603,8 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
         run.steered = run.steered.filter((q) => q !== item);
         const queued = { ...item.user, queued: true };
         run.queue.push({ ...item, user: queued });
-        if (isViewed(run)) setMessages((prev) => prev.map((m) => (m.id === queued.id ? queued : m)));
+        // Not part of this reply after all: it waits after it, as the next turn.
+        if (isViewed(run)) setMessages((prev) => [...prev.filter((m) => m.id !== queued.id), queued]);
       };
       const p = apiFetch<{ accepted?: boolean }>(`/api/agents/${agentId}/chat/responses/${run.responseId}/steer`, {
         method: "POST",
@@ -632,7 +633,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
       const live = activeSessionRef.current ? runsRef.current.get(activeSessionRef.current) : newChatRunRef.current;
       if (live && !live.done) {
         if (live.responseId && !(settings.files ?? []).length && !live.queue.length) {
-          setMessages((prev) => [...prev, user]);
+          setMessages((prev) => insertBefore(prev, live.assistant.id, user));
           steer(live, { user, settings });
           return;
         }
