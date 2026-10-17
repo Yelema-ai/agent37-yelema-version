@@ -15,6 +15,9 @@ export interface Routine {
   enabled: boolean;
   // Shipped with the expert and never turned on: shown under "Proposées par …".
   suggested: boolean;
+  // ISO date-times from Hermes; null before the first run, or while paused for the next one.
+  lastRunAt: string | null;
+  nextRunAt: string | null;
 }
 
 // The time zone schedules are read in. The instances run on UTC, which is Abidjan's time all year.
@@ -70,18 +73,77 @@ export function nameFrom(task: string): string {
   return cut.slice(0, cut.lastIndexOf(" ") > 20 ? cut.lastIndexOf(" ") : 50);
 }
 
-// The run of a routine opens with Hermes's own instructions to the expert ("[IMPORTANT: You are
-// running as a scheduled cron job. …]") before the routine's text: the transcript shows the text.
+// ---- Runs ----
+
+// A routine's run opens with Hermes's own instructions to the expert (cron/scheduler_prompt.py),
+// after any skill it loads, before the routine's text.
 const RUN_PREAMBLE = "[IMPORTANT: You are running as a scheduled cron job.";
 
-export function routineRunText(content: string): string {
-  if (!content.startsWith(RUN_PREAMBLE)) return content;
-  const end = content.indexOf("]\n\n");
-  return end < 0 ? content : content.slice(end + 3);
+export function isRoutineRun(content: string): boolean {
+  return content.includes(RUN_PREAMBLE);
 }
 
-// What a routine run answers when there is nothing to report.
-export const SILENT_RUN = "[SILENT]";
+// The routine's own instructions, without Hermes's preamble nor the skills loaded before it.
+export function routineRunText(content: string): string {
+  const start = content.indexOf(RUN_PREAMBLE);
+  if (start < 0) return content;
+  const end = content.indexOf("]\n\n", start);
+  return end < 0 ? content : content.slice(end + 3).trim();
+}
+
+// A run with nothing to report answers [SILENT] (or SILENT / NO_REPLY), alone or on its first or last
+// line: Hermes's own rule (gateway/response_filters.py), which then sends nothing.
+const SILENT_LINE = /^\[?(SILENT|NO[_ ]REPLY)\]?[.!]?$/i;
+
+export function isSilentRun(answer: string): boolean {
+  const text = answer.trim();
+  if (!text) return false;
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  return text.toUpperCase().startsWith("[SILENT]") || [text, lines[0], lines[lines.length - 1]].some((l) => SILENT_LINE.test(l));
+}
+
+export const SILENT_RUN_LABEL = "Rien à signaler : la routine n’a rien envoyé.";
+
+// Hermes names a run's conversation "<routine name> · Oct 16 09:00" and its id "cron_<routine>_<time>".
+const RUN_TITLE_DATE = / · [A-Z][a-z]{2} \d{1,2} \d{2}:\d{2}( #\d+)?$/;
+
+export interface SessionHint {
+  id: string;
+  title?: string | null;
+  preview?: string | null;
+}
+
+// The routine a conversation is a run of, by name, or null for a conversation a person started.
+export function routineOfSession({ id, title, preview }: SessionHint): string | null {
+  const t = (title ?? "").trim();
+  if (!id.startsWith("cron_") && !isRoutineRun(preview ?? "") && !(RUN_TITLE_DATE.test(t) && (preview ?? "").startsWith("[IMPORTANT:"))) {
+    return null;
+  }
+  return t.replace(RUN_TITLE_DATE, "").trim() || "Routine";
+}
+
+// Whether a conversation is one of THIS routine's runs: its id, else its title (name cut as Hermes does).
+export function isRunOf(session: SessionHint, routine: { id: string; hermesName: string }): boolean {
+  if (session.id.startsWith(`cron_${routine.id}_`)) return true;
+  const base = routine.hermesName.split(/\s+/).join(" ").slice(0, 60).trim();
+  return !!base && routineOfSession(session) !== null && (session.title ?? "").startsWith(`${base} · `);
+}
+
+export type RunOutcome = "sent" | "silent" | "failed";
+
+export interface RoutineRun {
+  sessionId: string;
+  /** Epoch milliseconds. */
+  at: number;
+  /** null when the conversation could not be read. */
+  outcome: RunOutcome | null;
+}
+
+// What a run came to, from its last answer: none or [CRON_FAILURE] is a failure.
+export function runOutcome(lastAnswer: string | null): RunOutcome {
+  if (!lastAnswer?.trim() || lastAnswer.trim().startsWith("[CRON_FAILURE]")) return "failed";
+  return isSilentRun(lastAnswer) ? "silent" : "sent";
+}
 
 // ---- Schedules ----
 

@@ -111,6 +111,7 @@ interface HermesJob {
   state?: string;
   paused_reason?: string | null;
   last_run_at?: string | null;
+  next_run_at?: string | null;
   deliver?: string | null;
   schedule: { kind: string; expr?: string; run_at?: string; display?: string };
 }
@@ -142,6 +143,8 @@ function toRoutine(job: HermesJob, expertName: string): Routine {
     schedule,
     enabled: job.enabled,
     suggested: !job.enabled && !job.last_run_at && (job.paused_reason ?? "").startsWith(SHIPPED),
+    lastRunAt: job.last_run_at ?? null,
+    nextRunAt: job.enabled ? (job.next_run_at ?? null) : null,
   };
 }
 
@@ -185,6 +188,12 @@ export const hermesCron = {
     }
     const { job } = await hermes<{ job: HermesJob }>(agentId, "POST", jobPath(profile, id, enabled ? "/resume" : "/pause"));
     return toRoutine(job, expertName);
+  },
+
+  // The name Hermes gives the routine's runs (their conversations are titled after it).
+  hermesName: async (agentId: string, profile: string, id: string): Promise<string> => {
+    const { job } = await hermes<{ job: HermesJob }>(agentId, "GET", jobPath(profile, id));
+    return job.name ?? "";
   },
 
   remove: (agentId: string, profile: string, id: string) =>

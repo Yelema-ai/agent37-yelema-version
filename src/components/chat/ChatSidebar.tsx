@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Repeat, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { cn } from "@/lib/utils";
 import { useChatContext } from "./ChatProvider";
@@ -96,7 +96,7 @@ export function ChatSidebar() {
                 <div className="px-2.5 pb-1 pt-2 text-[11px] font-semibold text-ink-3">{g.label}</div>
                 <nav className="flex flex-col gap-0.5">
                   {g.items.map((s) => {
-                    const label = s.title || "Nouvelle conversation";
+                    const label = s.routine ? `Routine : ${s.routine}` : s.title || "Nouvelle conversation";
                     return (
                       <div key={s.session_id} className="group relative">
                         {editingId === s.session_id ? (
@@ -127,6 +127,7 @@ export function ChatSidebar() {
                                 highlightedSessionId === s.session_id ? "bg-soft-2 font-semibold text-ink" : "text-ink-2 hover:bg-soft"
                               )}
                             >
+                              {s.routine && <Repeat className="mr-1.5 h-3.5 w-3.5 shrink-0 text-ink-3" aria-hidden />}
                               <span className="truncate">{label}</span>
                             </button>
                             <button

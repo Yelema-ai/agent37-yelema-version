@@ -4,23 +4,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch, readApiError } from "@/lib/api";
-import type { MemoryItem, MemoryList, MemoryStatus } from "@/lib/memory";
+import type { MemoryItem, MemoryList } from "@/lib/memory";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { HiddenFileInput } from "@/components/HiddenFileInput";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MemoryGroups } from "./MemoryGroups";
 
 // The company memory: what the experts know of the company. Everyone sees the deposits of their own
 // compartments; whoever may deposit adds a note or a document. The back office sends each deposit
 // to the memory in the background and applies the org chart on every question an expert asks.
 
-const STATUS: Record<MemoryStatus, { label: string; variant: "success" | "warning" | "muted" | "destructive" }> = {
-  pending: { label: "Envoi en cours", variant: "warning" },
-  synced: { label: "Lisible par les experts", variant: "success" },
-  skipped: { label: "Non envoyé", variant: "muted" },
-  error: { label: "Envoi impossible", variant: "destructive" },
-};
 const ALL = "";
 const FIELD = "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm font-normal text-ink focus-visible:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/15";
 const SELECT = "w-full flex h-11 max-w-full rounded-xl border border-line bg-surface px-3 text-[15px] font-normal text-ink focus-visible:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/15";
@@ -55,7 +49,6 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
   }, [waiting, list, load]);
 
   const targets = [...(list?.canDepositForAll ? [{ id: ALL, name: "Toute l’entreprise" }] : []), ...(list?.units.filter((u) => u.canDeposit) ?? [])];
-  const unitName = (id: string | null) => (id === null ? "Toute l’entreprise" : (list?.units.find((u) => u.id === id)?.name ?? "Unité"));
   // The first compartment the member may deposit in, while none is chosen.
   const target = targets.some((t) => t.id === unit) ? unit : (targets[0]?.id ?? ALL);
 
@@ -164,42 +157,9 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
 
       {list?.items.length === 0 && <p className="mt-6 rounded-[22px] border border-line bg-surface p-8 text-center text-sm text-ink-3">La mémoire est vide pour l’instant.</p>}
 
-      <ul className="mt-5 space-y-3">
-        {list?.items.map((item) => (
-          <li key={item.id} className="rounded-[22px] border border-line bg-surface p-5">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h3 className="font-bold text-ink">{item.title}</h3>
-                <p className="text-[13px] text-ink-3">
-                  {unitName(item.unit)} ·{" "}
-                  {item.kind === "document" ? (
-                    <a href={`/api/memory/items/${item.id}/file`} download className="font-semibold text-brand-ink underline-offset-2 hover:underline">
-                      {item.fileName ?? "Document"}
-                    </a>
-                  ) : item.kind === "note" ? (
-                    "Note"
-                  ) : (
-                    "Site web"
-                  )}
-                </p>
-              </div>
-              <Badge variant={item.active ? STATUS[item.status].variant : "muted"}>{item.active ? STATUS[item.status].label : "Désactivé"}</Badge>
-            </div>
-            {item.error && item.active && <p className="mt-2 text-sm text-ink-3">{item.error}</p>}
-            {item.note && <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-ink-2">{item.note}</p>}
-            {item.canEdit && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={() => void patch(item, { active: !item.active })}>
-                  {item.active ? "Désactiver" : "Réactiver"}
-                </Button>
-                <Button variant="ghost" size="sm" className="text-ko" onClick={() => setRemoving(item)}>
-                  Supprimer
-                </Button>
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
+      {list && list.items.length > 0 && (
+        <MemoryGroups list={list} onToggle={(item) => void patch(item, { active: !item.active })} onRemove={setRemoving} />
+      )}
 
       <ConfirmDialog
         open={removing !== null}

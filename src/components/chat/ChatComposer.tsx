@@ -129,18 +129,6 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
       ) : (
       <div className="flex items-center gap-2 px-3 pb-3">
         <div className="flex min-w-0 items-center gap-1.5">
-          <AttachButton onFiles={att.addFiles} />
-          {canDictate && (
-            <button
-              type="button"
-              onClick={() => void dictation.start()}
-              aria-label="Dicter un message"
-              title="Dicter un message"
-              className="inline-flex size-9 items-center justify-center rounded-xl text-ink-2 transition-colors hover:bg-soft hover:text-ink disabled:opacity-40"
-            >
-              <Mic className="h-[18px] w-[18px]" />
-            </button>
-          )}
           {groups.length > 0 && (
             <ModelMenu
               groups={groups}
@@ -155,7 +143,19 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
             onChange={(reasoningEffort) => setSettings((s) => ({ ...s, reasoningEffort }))}
           />
         </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <AttachButton onFiles={att.addFiles} />
+          {canDictate && (
+            <button
+              type="button"
+              onClick={() => void dictation.start()}
+              aria-label="Dicter un message"
+              title="Dicter un message"
+              className="inline-flex size-9 items-center justify-center rounded-xl text-ink-2 transition-colors hover:bg-soft hover:text-ink disabled:opacity-40"
+            >
+              <Mic className="h-[18px] w-[18px]" />
+            </button>
+          )}
           {isStreaming && (
             <button
               type="button"

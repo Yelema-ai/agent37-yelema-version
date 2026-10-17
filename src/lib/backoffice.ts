@@ -440,10 +440,11 @@ export const backoffice = {
   // The company memory. The two reads are made in an instance's name, like reportComposioCalls: the
   // back office maps the token to its member and answers only from the compartments the org chart
   // opens to that member. A reasoned answer goes through a model on the provider's side.
-  memoryAsk: (instanceToken: string, workspace: string, question: string) =>
-    call<{ answer: string | null }>("/app/memory/ask", { method: "POST", token: instanceToken, workspace, body: { question }, timeoutMs: MEMORY_ASK_TIMEOUT_MS }),
-  memorySearch: (instanceToken: string, workspace: string, query: string, limit?: number) =>
-    call<{ items: { title: string; excerpt: string }[] }>("/app/memory/search", { method: "POST", token: instanceToken, workspace, body: { query, limit }, timeoutMs: MEMORY_ASK_TIMEOUT_MS }),
+  // `profile`: the expert asking, when its instance says which one (header X-Yelema-Profile).
+  memoryAsk: (instanceToken: string, workspace: string, question: string, profile?: string) =>
+    call<{ answer: string | null }>("/app/memory/ask", { method: "POST", token: instanceToken, workspace, body: { question, profile }, timeoutMs: MEMORY_ASK_TIMEOUT_MS }),
+  memorySearch: (instanceToken: string, workspace: string, query: string, limit?: number, profile?: string) =>
+    call<{ items: { title: string; excerpt: string }[] }>("/app/memory/search", { method: "POST", token: instanceToken, workspace, body: { query, limit, profile }, timeoutMs: MEMORY_ASK_TIMEOUT_MS }),
   // The company profile: where it stands for any member, the logo for a workspace admin only.
   companyProfile: (token: string) => call<CompanyProfile>("/app/workspace/profile", { token }),
   uploadLogo: (token: string, form: FormData) => call<CompanyProfile>("/app/workspace/logo", { method: "POST", token, form, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),

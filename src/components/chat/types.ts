@@ -5,7 +5,10 @@ export type ToolStatus = "running" | "completed" | "error";
 export interface ToolEvent {
   tool: string;
   status: ToolStatus;
-  label?: string;
+  /** What the expert is doing, in plain French (lib/tool-steps). */
+  phrase: string;
+  /** Announced while the model writes the call; replaced by its start. */
+  generating?: boolean;
   durationMs?: number;
 }
 
@@ -136,4 +139,6 @@ export interface ChatSession {
   // When it was last active (seconds or milliseconds, as Hermes reports it), for the rail's
   // Aujourd'hui / Hier / … groups.
   last_active: number;
+  // The routine this conversation is a run of, or null/absent for one a person started.
+  routine?: string | null;
 }

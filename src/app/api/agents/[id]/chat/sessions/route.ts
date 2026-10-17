@@ -2,6 +2,7 @@ import { agent37 } from "@/lib/agent37";
 import { requireAgentAccess } from "@/lib/auth";
 import { handleError, json } from "@/lib/http";
 import { profileQuery, resolveProfile } from "@/lib/profiles";
+import { routineOfSession } from "@/lib/routines";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -22,6 +23,8 @@ export async function GET(request: Request, { params }: Ctx) {
         session_id: s.id,
         title: s.title?.trim() || s.preview?.trim() || null,
         last_active: s.last_active ?? s.started_at ?? 0,
+        // A routine's run, by the routine's name: shown as such, never as the member's own words.
+        routine: routineOfSession(s),
       }))
       .sort((a, b) => b.last_active - a.last_active);
 

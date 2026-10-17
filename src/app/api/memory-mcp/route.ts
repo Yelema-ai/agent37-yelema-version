@@ -1,5 +1,6 @@
 import { backoffice, BackofficeError } from "@/lib/backoffice";
 import { answerRpc, type MemoryBackend } from "@/lib/memory-mcp";
+import { isProfileId } from "@/lib/profile-id";
 import { authViaBackoffice } from "@/lib/runtime-config";
 import { pinnedWorkspaceId } from "@/lib/tenant";
 import { TenantError } from "@/lib/tenant-resolver";
@@ -38,9 +39,12 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, { status: 400 });
   }
 
+  // The expert asking, if its instance names it; a malformed value is ignored, not trusted.
+  const header = request.headers.get("x-yelema-profile")?.trim() ?? "";
+  const profile = isProfileId(header) ? header : undefined;
   const backend: MemoryBackend = {
-    ask: async (question) => (await backoffice.memoryAsk(token, workspace, question)).answer,
-    search: async (query, limit) => (await backoffice.memorySearch(token, workspace, query, limit)).items,
+    ask: async (question) => (await backoffice.memoryAsk(token, workspace, question, profile)).answer,
+    search: async (query, limit) => (await backoffice.memorySearch(token, workspace, query, limit, profile)).items,
   };
   try {
     const batch = Array.isArray(message) ? message.slice(0, 20) : [message];

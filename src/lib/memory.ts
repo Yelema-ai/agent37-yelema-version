@@ -88,3 +88,26 @@ export function orderUnits(units: OrgUnit[]): { unit: OrgUnit; depth: number }[]
   for (const unit of units) if (!seen.has(unit.id)) out.push({ unit, depth: 0 });
   return out;
 }
+
+export interface MemoryGroup {
+  /** null: the whole company's compartment. */
+  unit: string | null;
+  name: string;
+  items: MemoryItem[];
+}
+
+/** The deposits by compartment: the whole company first, then the units in the order given; empty ones left out. */
+export function groupByUnit(items: MemoryItem[], units: { id: string; name: string }[]): MemoryGroup[] {
+  const groups: MemoryGroup[] = [{ unit: null, name: "Toute l’entreprise", items: [] }, ...units.map((u) => ({ unit: u.id, name: u.name, items: [] as MemoryItem[] }))];
+  const byId = new Map(groups.map((g) => [g.unit, g]));
+  for (const item of items) {
+    let group = byId.get(item.unit);
+    if (!group) {
+      group = { unit: item.unit, name: "Unité", items: [] };
+      byId.set(item.unit, group);
+      groups.push(group);
+    }
+    group.items.push(item);
+  }
+  return groups.filter((g) => g.items.length > 0);
+}

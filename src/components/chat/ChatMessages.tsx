@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, ChevronRight, FileText, Image as ImageIcon, ListChecks, Loader2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Image as ImageIcon, Loader2, Repeat } from "lucide-react";
+import { isRoutineRun, isSilentRun, routineRunText, SILENT_RUN_LABEL } from "@/lib/routines";
 import { cn } from "@/lib/utils";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import type { Expert } from "@/lib/types";
 import { useChatContext } from "./ChatProvider";
 import { Markdown } from "./Markdown";
-import type { ChatMessage, MessageAttachment, ToolEvent } from "./types";
+import { LiveStep, StepsList } from "./ChatSteps";
+import type { ChatMessage, MessageAttachment } from "./types";
 
 // Files that rode along with a user turn, shown as compact chips above the message bubble.
 function MessageAttachments({ attachments }: { attachments: MessageAttachment[] }) {
@@ -53,45 +55,21 @@ function ThinkingBlock({ content, live }: { content: string; live: boolean }) {
   );
 }
 
-function prettyTool(tool: ToolEvent): string {
-  return tool.label || tool.tool.replace(/_/g, " ");
-}
-
-const steps = (n: number) => `${n} étape${n > 1 ? "s" : ""} faite${n > 1 ? "s" : ""}`;
-
-// The agent's tool calls, folded into one "N étapes faites" line (the mockup's step summary).
-function Steps({ tools, live }: { tools: ToolEvent[]; live: boolean }) {
+// A routine's run opens with its instructions, sent by the scheduler, not by the member.
+function RoutineBrief({ content }: { content: string }) {
   const [open, setOpen] = useState(false);
-  const working = live && tools.some((t) => t.status === "running");
-  const done = tools.filter((t) => t.status !== "running").length;
   return (
-    <div className="mb-3 rounded-xl border border-line bg-surface">
+    <div className="rounded-xl border border-line bg-surface">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] font-semibold text-ink"
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] font-semibold text-ink-2"
       >
-        {working ? <Loader2 className="h-4 w-4 animate-spin text-brand-ink" /> : <ListChecks className="h-4 w-4 text-ink-3" />}
-        {working ? `Au travail… ${steps(done)}` : steps(tools.length)}
+        <Repeat className="h-4 w-4 text-ink-3" /> Consigne de la routine
         <ChevronDown className={cn("ml-auto h-4 w-4 text-ink-3 transition-transform", open && "rotate-180")} />
       </button>
-      {open && (
-        <ul className="space-y-1 border-t border-line px-3 py-2">
-          {tools.map((t, k) => (
-            <li key={`${t.tool}-${k}`} className="flex items-center gap-2 text-xs text-ink-2">
-              {t.status === "running" ? (
-                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-              ) : t.status === "error" ? (
-                <X className="h-3.5 w-3.5 shrink-0 text-ko" />
-              ) : (
-                <Check className="h-3.5 w-3.5 shrink-0 text-ok" />
-              )}
-              <span className="truncate">{prettyTool(t)}</span>
-              {t.durationMs != null && <span className="ml-auto tabular-nums text-ink-3">{(t.durationMs / 1000).toFixed(1)} s</span>}
-            </li>
-          ))}
-        </ul>
-      )}
+      {open && <div className="whitespace-pre-wrap break-words border-t border-line px-3 py-2 text-[13px] text-ink-2">{routineRunText(content)}</div>}
     </div>
   );
 }
@@ -124,10 +102,15 @@ export function ChatMessages({
   // The instance whose drive the paths in a reply point into (they become download links).
   const { agentId } = useChatContext();
   // The reply being written: the last assistant bubble, even with queued messages below it.
+  // A routine's run: its [SILENT] answer reads as "nothing to report".
+  const routineThread = messages.some((m) => m.role === "user" && isRoutineRun(m.content));
   const liveIndex = isStreaming ? messages.findLastIndex((m) => m.role === "assistant") : -1;
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6 sm:px-6">
       {messages.map((m, i) => {
+        if (m.role === "user" && isRoutineRun(m.content)) {
+          return <RoutineBrief key={m.id} content={m.content} />;
+        }
         if (m.role === "user") {
           const attachments = m.attachments ?? [];
           return (
@@ -155,8 +138,14 @@ export function ChatMessages({
             {face && <ExpertAvatar expert={face} size="xs" className="mt-0.5" />}
             <div className="min-w-0 max-w-full flex-1 text-[15px] text-ink">
               {m.thinking && <ThinkingBlock content={m.thinking} live={live && !m.content} />}
-              {tools.length > 0 && <Steps tools={tools} live={live} />}
-              {m.content ? <Markdown content={m.content} agentId={agentId} /> : showDots ? <TypingDots /> : null}
+              {live ? <LiveStep tools={tools} /> : tools.length > 0 && <StepsList tools={tools} />}
+              {routineThread && !live && isSilentRun(m.content) ? (
+                <p className="text-sm italic text-ink-3">{SILENT_RUN_LABEL}</p>
+              ) : m.content ? (
+                <Markdown content={m.content} agentId={agentId} />
+              ) : showDots ? (
+                <TypingDots />
+              ) : null}
             </div>
           </div>
         );
