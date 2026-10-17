@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { batchQueued, FOLLOW_UP_HEADER, insertBefore, steerText, unreadSteerCount } from "./chat-queue.ts";
+import { batchQueued, FOLLOW_UP_HEADER, insertBefore, isSteer, steerText, unreadSteerCount } from "./chat-queue.ts";
 
 test("one message goes out as it is", () => {
   assert.deepEqual(batchQueued([{ text: " Bonjour ", files: ["/a"] }]), { text: "Bonjour", files: ["/a"] });
@@ -37,4 +37,9 @@ test("a message sent during a reply sits before that reply; with no reply on scr
   const list = [{ id: "u1" }, { id: "a1" }];
   assert.deepEqual(insertBefore(list, "a1", { id: "u2" }).map((m) => m.id), ["u1", "u2", "a1"]);
   assert.deepEqual(insertBefore(list, "zz", { id: "u2" }).map((m) => m.id), ["u1", "a1", "u2"]);
+});
+
+test("a stored steer is recognised by Hermes's marker, a plain message is not", () => {
+  assert.equal(isSteer("[OUT-OF-BAND USER MESSAGE — a direct message from the user]\nd'ailleurs vérifie pour tous\n[/OUT-OF-BAND USER MESSAGE]"), true);
+  assert.equal(isSteer("Peux-tu activer les routines ?"), false);
 });

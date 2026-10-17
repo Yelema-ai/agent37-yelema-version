@@ -29,6 +29,8 @@ export interface ChatMessage {
   attachments?: MessageAttachment[];
   /** Sent while the expert was still answering: waits its turn in the thread's queue. */
   queued?: boolean;
+  /** Added to the reply in progress (steer): part of that reply, not a new question. */
+  steered?: boolean;
 }
 
 export interface ModelOption {

@@ -28,6 +28,9 @@ export function unreadSteerCount(texts: string[], pending: string): number {
 const STEER_OPEN = "[OUT-OF-BAND USER MESSAGE";
 const STEER_CLOSE = "[/OUT-OF-BAND USER MESSAGE]";
 
+/** A message the user added to a reply in progress, as Hermes stores it. */
+export const isSteer = (content: string): boolean => content.trim().startsWith(STEER_OPEN);
+
 // A steer read mid-turn is stored by Hermes inside its marker: show only what the user wrote.
 export function steerText(content: string): string {
   const c = content.trim();

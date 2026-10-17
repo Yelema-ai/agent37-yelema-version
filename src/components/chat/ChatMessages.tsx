@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, FileText, Image as ImageIcon, Loader2, PhoneCall, Repeat } from "lucide-react";
+import { ChevronDown, ChevronRight, CornerDownLeft, FileText, Image as ImageIcon, Loader2, PhoneCall, Repeat } from "lucide-react";
 import { isRoutineRun, isSilentRun, routineRunText, SILENT_RUN_LABEL } from "@/lib/routines";
 import { isCallTranscript } from "@/lib/voice";
 import { cn } from "@/lib/utils";
@@ -126,11 +126,16 @@ export function ChatMessages({
               <div className="flex max-w-[85%] flex-col items-end gap-1.5">
                 {attachments.length > 0 && <MessageAttachments attachments={attachments} />}
                 {m.content && (
-                  <div className={cn("whitespace-pre-wrap break-words rounded-[18px] rounded-br-md bg-brand px-4 py-2.5 text-[15px] text-on-brand", m.queued && "opacity-60")}>
+                  <div className={cn("whitespace-pre-wrap break-words rounded-[18px] rounded-br-md bg-brand px-4 py-2.5 text-[15px] text-on-brand", m.queued && "opacity-60", m.steered && !m.queued && "bg-brand/80")}>
                     {m.content}
                   </div>
                 )}
                 {m.queued && <span className="text-xs text-ink-3">En attente</span>}
+                {m.steered && !m.queued && (
+                  <span className="flex items-center gap-1 text-xs text-ink-3">
+                    <CornerDownLeft className="h-3 w-3" /> Ajouté pendant la réponse, pris en compte dans celle-ci
+                  </span>
+                )}
               </div>
             </div>
           );

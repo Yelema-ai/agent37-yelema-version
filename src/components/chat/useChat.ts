@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, readApiError } from "@/lib/api";
-import { batchQueued, insertBefore, steerText, unreadSteerCount } from "@/lib/chat-queue";
+import { batchQueued, insertBefore, isSteer, steerText, unreadSteerCount } from "@/lib/chat-queue";
 import { profileQuery } from "@/lib/profile-id";
 import { toolPhrase } from "@/lib/tool-steps";
 import { useTurnReporter } from "@/components/activity/hooks";
@@ -141,6 +141,7 @@ function mapHistory(history: SessionDetail["history"]): ChatMessage[] {
     role: h.role,
     content: h.role === "user" ? steerText(h.content ?? "") : (h.content ?? ""),
     thinking: h.thinking,
+    ...(h.role === "user" && isSteer(h.content ?? "") ? { steered: true } : {}),
   }));
 }
 
@@ -529,7 +530,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
     async (sessionId: string | null, batch: Queued[]) => {
       const settings = batch[batch.length - 1].settings;
       const { text, files } = batchQueued(batch.map((q) => ({ text: q.user.content, files: q.settings.files ?? [] })));
-      const users = batch.map((q): ChatMessage => ({ ...q.user, queued: undefined }));
+      const users = batch.map((q): ChatMessage => ({ ...q.user, queued: undefined, steered: undefined }));
       const assistant: ChatMessage = { id: uid("a"), role: "assistant", content: "", tools: [] };
       const run: LiveRun = { sessionId, responseId: null, abort: new AbortController(), users, assistant, done: false, steered: [], steers: new Set(), queue: [] };
       turns.start(run);
@@ -601,7 +602,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
       run.steered.push(item);
       const toQueue = () => {
         run.steered = run.steered.filter((q) => q !== item);
-        const queued = { ...item.user, queued: true };
+        const queued = { ...item.user, queued: true, steered: false };
         run.queue.push({ ...item, user: queued });
         // Not part of this reply after all: it waits after it, as the next turn.
         if (isViewed(run)) setMessages((prev) => [...prev.filter((m) => m.id !== queued.id), queued]);
@@ -633,8 +634,9 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
       const live = activeSessionRef.current ? runsRef.current.get(activeSessionRef.current) : newChatRunRef.current;
       if (live && !live.done) {
         if (live.responseId && !(settings.files ?? []).length && !live.queue.length) {
-          setMessages((prev) => insertBefore(prev, live.assistant.id, user));
-          steer(live, { user, settings });
+          const added = { ...user, steered: true };
+          setMessages((prev) => insertBefore(prev, live.assistant.id, added));
+          steer(live, { user: added, settings });
           return;
         }
         const queued = { ...user, queued: true };
