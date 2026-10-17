@@ -8,8 +8,8 @@ import { ACCOUNT_REFUSALS, type LlmSetup } from "./llm-accounts.ts";
 
 /** `refused`: the provider no longer accepts the key; the experts do not answer until it is replaced or removed. */
 export type LlmState = "applied" | "pending" | "failed" | "refused";
-/** Whose account an instance's model runs on. `agent37` is the fallback when Yelema's own is down. */
-export type LlmSource = "member" | "client" | "yelema" | "agent37";
+/** Whose account an instance's model runs on: its own accounts, or Yelema's. `agent37` is the fallback when Yelema's own is down. */
+export type LlmSource = "member" | "yelema" | "agent37";
 
 export interface LlmProvider {
   id: string;
@@ -53,6 +53,8 @@ export interface LlmMember {
   id: string;
   name: string | null;
   email: string;
+  /** The caller's own row; absent from an older back office. */
+  self?: boolean;
   source: LlmSource;
   state: LlmState;
   own: LlmKey | null;
@@ -73,12 +75,9 @@ export interface LlmOverview {
   /** True when the back office accepts a private endpoint; absent from an older one. */
   customEndpoints?: boolean;
   /** Admins only. */
-  client?: LlmKey | null;
   members?: LlmMember[];
-  /** The caller's own accounts, grouped by provider; absent from an older back office. */
+  /** The accounts of the caller's own instance, grouped by provider; absent from an older back office. */
   setup?: LlmSetup;
-  /** Admins only: the company's accounts. */
-  clientSetup?: LlmSetup;
 }
 
 /** The models Yelema offers to all its clients (its default first), and what the caller picked. */
@@ -180,8 +179,7 @@ export function llmRefusalMessage(code: string, suggestions: readonly unknown[] 
 }
 
 export const LLM_SOURCE_LABELS: Record<LlmSource, string> = {
-  member: "Sa propre clé",
-  client: "Clé de l’entreprise",
+  member: "Comptes de l’instance",
   yelema: "Yelema (moteur inclus)",
   agent37: "Yelema (moteur de secours)",
 };
@@ -195,6 +193,6 @@ export const LLM_STATE_LABELS: Record<LlmState, string> = {
 
 /** True while the back office is still installing a key somewhere the caller can see. */
 export function llmPending(o: LlmOverview): boolean {
-  const setups = [o.setup, o.clientSetup, ...(o.members ?? []).map((m) => m.setup)];
-  return [o.mine?.state, o.own?.state, o.client?.state, ...(o.members ?? []).map((m) => m.state), ...setups.map((s) => s?.state)].includes("pending");
+  const setups = [o.setup, ...(o.members ?? []).map((m) => m.setup)];
+  return [o.mine?.state, o.own?.state, ...(o.members ?? []).map((m) => m.state), ...setups.map((s) => s?.state)].includes("pending");
 }

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { apiFetch } from "@/lib/api";
 import type { LlmModelChoice, LlmWritten, LlmYelema, SettingScope } from "@/lib/llm";
-import { layoutOf, layoutScope, type LlmGroup, type LlmSetup, type ModelChoice, type ProfileModels } from "@/lib/llm-accounts";
+import { layoutOf, scopeParam, type InstanceScope, type LlmGroup, type LlmSetup, type ModelChoice, type ProfileModels } from "@/lib/llm-accounts";
 import { anyExpertOverride, fallbackModelGroups, profilesWith, withAllExperts, type ModelGroup } from "@/lib/model-options";
 import { ModelPicker } from "./ModelPicker";
 
@@ -18,7 +18,7 @@ const SAME = "Comme tous les experts";
 // liste = leurs fournisseurs + le moteur Yelema, enregistrée dans l'ordre des comptes ; sans compte,
 // les modèles Yelema de l'instance du membre (`/api/llm/own/model`).
 export function ExpertModels({ scope, setup, yelema, models, groupName, onChanged }: {
-  scope: SettingScope;
+  scope: InstanceScope;
   setup: LlmSetup;
   yelema: LlmYelema | null | undefined;
   models: ModelGroup[] | null;
@@ -61,7 +61,7 @@ export function ExpertModels({ scope, setup, yelema, models, groupName, onChange
   }
 
   const putLayout = (next: LlmGroup[], map: ProfileModels | undefined) =>
-    apiFetch<LlmWritten>(`/api/llm/layout?scope=${encodeURIComponent(layoutScope(next, scope) ?? "own")}`, { method: "PUT", body: JSON.stringify(layoutOf(next, map)) });
+    apiFetch<LlmWritten>(`/api/llm/layout?scope=${encodeURIComponent(scopeParam(scope) ?? "own")}`, { method: "PUT", body: JSON.stringify(layoutOf(next, map)) });
   const putYelema = (choice: LlmModelChoice) => apiFetch<LlmWritten>("/api/llm/own/model", { method: "PUT", body: JSON.stringify(choice) });
 
   function pickAll(choice: ModelChoice | null) {

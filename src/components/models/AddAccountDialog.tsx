@@ -7,8 +7,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
-import { CUSTOM_PROVIDER, type LlmLogin, type LlmProvider, type SettingScope } from "@/lib/llm";
-import { scopeParam, type AccountDraft, type LlmAccount } from "@/lib/llm-accounts";
+import { CUSTOM_PROVIDER, type LlmLogin, type LlmProvider } from "@/lib/llm";
+import { scopeParam, type AccountDraft, type InstanceScope, type LlmAccount } from "@/lib/llm-accounts";
 import { LoginCode } from "./LoginCode";
 import { ModelPicker } from "./ModelPicker";
 import { ProviderLogo } from "./ProviderLogo";
@@ -20,17 +20,15 @@ type Choice = { kind: "key"; provider: LlmProvider } | { kind: "login"; provider
 
 // « Ajouter un compte » : toutes les possibilités (clé ou jeton collé, connexion par navigateur,
 // endpoint privé), autant de fois qu'on veut, y compris plusieurs fois le même fournisseur. Le compte
-// rejoint son fournisseur en dernier ; le modèle, laissé vide, reprend celui du fournisseur.
-// `canShare` : un admin peut poser le compte pour l'entreprise (membres sans compte) au lieu de l'instance.
-export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, customEndpoints, canShare, onAdded, onClose }: {
+// rejoint son fournisseur en dernier ; le modèle, laissé vide, reprend celui du fournisseur. Le compte
+// ne sert que l'instance visée : jamais celle d'un autre membre.
+export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, customEndpoints, onAdded, onClose }: {
   open: boolean;
-  scope: SettingScope;
+  scope: InstanceScope;
   scopeLabel: string;
   catalogue: LlmProvider[];
-  /** Vide pour l'entreprise : une connexion se fait pour une instance. */
   logins: LlmLogin[];
   customEndpoints: boolean;
-  canShare: boolean;
   onAdded: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -41,7 +39,6 @@ export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, c
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<LlmAccount | null>(null);
-  const [shared, setShared] = useState(false);
   const listed = choice && choice.kind !== "custom" ? choice.provider.id : undefined;
   const models = useModelGroups(listed ? (scopeParam(scope) ?? "own") : null, listed);
 
@@ -50,7 +47,6 @@ export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, c
     setChoice(null);
     setQuery("");
     setPending(null);
-    setShared(false);
   }, [open]);
   useEffect(() => {
     setForm({ secret: "", model: "", label: "", name: "", baseUrl: "" });
@@ -80,8 +76,7 @@ export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, c
     setBusy(true);
     setError(null);
     try {
-      const target = shared && choice.kind !== "login" ? "client" : (scopeParam(scope) ?? "own");
-      const out = await apiFetch<{ account: LlmAccount }>(`/api/llm/accounts?scope=${encodeURIComponent(target)}`, { method: "POST", body: JSON.stringify(draft) });
+      const out = await apiFetch<{ account: LlmAccount }>(`/api/llm/accounts?scope=${encodeURIComponent(scopeParam(scope) ?? "own")}`, { method: "POST", body: JSON.stringify(draft) });
       if (out.account.state === "pending" && out.account.login) setPending(out.account);
       else {
         await onAdded();
@@ -169,15 +164,6 @@ export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, c
               </div>
             )}
             <Field id="acc-label" label="Nom du compte (facultatif)" value={form.label} onChange={set("label")} placeholder="Compta, Abonnement de Selim…" />
-            {canShare && choice.kind !== "login" && (
-              <label className="flex items-start gap-2 rounded-xl border border-line bg-soft/40 p-3 text-xs text-ink-2">
-                <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} className="mt-0.5 h-4 w-4 accent-brand" />
-                <span>
-                  <span className="font-semibold text-ink">Utiliser aussi pour les membres sans compte</span>
-                  <span className="block text-ink-3">Le compte est partagé avec l’entreprise : il sert sur l’instance de chaque membre qui n’a pas branché le sien.</span>
-                </span>
-              </label>
-            )}
             <p className="text-[11px] leading-relaxed text-ink-3">{SAVE_WARNING}</p>
             {error && <p role="alert" className="rounded-xl bg-ko-pale px-3 py-2 text-xs text-ko">{error}</p>}
             <DialogFooter className="gap-2 sm:gap-0">

@@ -3,7 +3,7 @@ import { ApiError, readJson } from "@/lib/http";
 import { parseAccountDraft, parseScopeParam, scopeParam } from "@/lib/llm-accounts";
 import { noStore, settingsError, settingsToken } from "../_shared";
 
-// `POST /api/llm/accounts?scope=own|client|<member>` — one more model account: a key, a pasted
+// `POST /api/llm/accounts?scope=own|<member>` — one more model account: a key, a pasted
 // subscription token, a private endpoint or a sign-in. The back office checks and keeps it.
 export async function POST(request: Request) {
   try {

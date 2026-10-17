@@ -5,6 +5,9 @@
 
 import type { SettingScope } from "./llm.ts";
 
+/** Where model accounts live: an instance, never the whole company. */
+export type InstanceScope = Exclude<SettingScope, { kind: "client" }>;
+
 export type LlmAccountState = "active" | "pending" | "failed" | "refused";
 
 export interface LlmAccount {
@@ -20,8 +23,6 @@ export interface LlmAccount {
   login?: { verificationUrl: string; userCode: string; expiresAt: string };
   name?: string;
   baseUrl?: string;
-  /** Comes from the company's accounts, shown on an instance that has none of its own. */
-  shared?: boolean;
 }
 
 /** A model on a given provider: what an expert, or every expert, runs on. */
@@ -72,15 +73,14 @@ export const MAX_FALLBACKS = 5;
 
 export const isAccountId = (v: unknown): v is string => typeof v === "string" && ACCOUNT_ID.test(v);
 
-/** `?scope=` of the back office: `own`, `client`, or a member id. Null for anything else. */
-export function scopeParam(scope: SettingScope): string | null {
+/** `?scope=` of the back office: `own` or a member id. Null for anything else. */
+export function scopeParam(scope: InstanceScope): string | null {
   if (scope.kind === "member") return ACCOUNT_ID.test(scope.id) ? scope.id : null;
   return scope.kind;
 }
 
-export function parseScopeParam(value: string | null): SettingScope | null {
+export function parseScopeParam(value: string | null): InstanceScope | null {
   if (value === null || value === "own") return { kind: "own" };
-  if (value === "client") return { kind: "client" };
   return ACCOUNT_ID.test(value) ? { kind: "member", id: value } : null;
 }
 
@@ -153,12 +153,6 @@ export const layoutOf = (groups: readonly LlmGroup[], profiles?: ProfileModels):
   ...(profiles ? { profiles } : {}),
 });
 
-/** Where a layout is saved: an instance showing only the company's accounts reorders those. */
-export const layoutScope = (groups: readonly LlmGroup[], scope: SettingScope): string | null => {
-  const accounts = groups.flatMap((g) => g.accounts);
-  return accounts.length > 0 && accounts.every((a) => a.shared) ? "client" : scopeParam(scope);
-};
-
 /** `list` with the item at `from` moved to `to` (indices in the original list). */
 export function moveItem<T>(list: readonly T[], from: number, to: number): T[] {
   if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return [...list];
@@ -173,7 +167,7 @@ export const cleanModel = (v: string): string | null => (MODEL.test(v.trim()) ? 
 
 export const ACCOUNT_REFUSALS: Record<string, string> = {
   too_many_accounts: "Vous avez atteint le nombre maximum de comptes (20).",
-  login_needs_instance: "Une connexion se fait pour une instance : ajoutez-la à un membre plutôt qu’à toute l’entreprise.",
+  instance_only: "Un compte se branche sur une instance, jamais pour toute l’entreprise.",
   bad_layout: "Cet ordre n’a pas pu être enregistré. Rechargez la page et recommencez.",
 };
 

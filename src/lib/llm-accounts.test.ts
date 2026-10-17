@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { llmPending, llmRefusalMessage, type LlmOverview } from "./llm.ts";
-import { cleanModel, layoutOf, layoutScope, moveItem, parseAccountDraft, parseAccountPatch, parseLayout, parseScopeParam, scopeParam, type LlmGroup } from "./llm-accounts.ts";
+import { cleanModel, layoutOf, moveItem, parseAccountDraft, parseAccountPatch, parseLayout, parseScopeParam, scopeParam, type LlmGroup } from "./llm-accounts.ts";
 
 const group = (provider: string, ids: string[], model = "m-1"): LlmGroup => ({ provider, model, fallbacks: [], accounts: ids.map((id) => ({ id, provider: "anthropic-api", label: "", hint: "…abcd", verified: true, state: "active" })) });
 
@@ -25,9 +25,9 @@ describe("ordre après un glisser-déposer", () => {
 });
 
 describe("contrôles d’entrée de l’app (le back-office tient les vraies règles)", () => {
-  it("portée : own, client ou id de membre ; rien d’autre", () => {
+  it("portée : une instance (own ou id de membre) ; jamais l’entreprise, rien d’autre", () => {
     assert.deepEqual(parseScopeParam(null), { kind: "own" });
-    assert.deepEqual(parseScopeParam("client"), { kind: "client" });
+    assert.equal(parseScopeParam("client"), null, "plus de comptes d’entreprise");
     assert.deepEqual(parseScopeParam("12"), { kind: "member", id: "12" });
     for (const bad of ["x", "12 ", "../1", "1;2"]) assert.equal(parseScopeParam(bad), null);
     assert.equal(scopeParam({ kind: "member", id: "1/../2" }), null);
@@ -50,7 +50,7 @@ describe("contrôles d’entrée de l’app (le back-office tient les vraies rè
   });
 
   it("nouveaux refus : une phrase en français ; une pose de comptes en cours relance la lecture", () => {
-    for (const code of ["too_many_accounts", "login_needs_instance", "bad_layout"]) assert.match(llmRefusalMessage(code) ?? "", /\.$/);
+    for (const code of ["too_many_accounts", "instance_only", "bad_layout"]) assert.match(llmRefusalMessage(code) ?? "", /\.$/);
     const base = { catalogue: [], mine: null, own: null, membersMayBringKey: false } as unknown as LlmOverview;
     assert.equal(llmPending({ ...base, setup: { groups: [], state: "pending" } }), true);
     assert.equal(llmPending({ ...base, setup: { groups: [], state: "applied" } }), false);
@@ -66,12 +66,5 @@ describe("modèle par expert dans l’ordre envoyé", () => {
     for (const bad of [[], "x", { "Fatima!": null }, { fatima: { provider: "anthropic" } }, { fatima: { provider: "a b", model: "m-1" } }, { fatima: { provider: "anthropic", model: "x'; id" } }]) {
       assert.equal(parseLayout({ ...layoutOf(groups), profiles: bad }), null, JSON.stringify(bad));
     }
-  });
-
-  it("une instance qui ne montre que les comptes de l’entreprise range ceux-là", () => {
-    const shared = (g: LlmGroup): LlmGroup => ({ ...g, accounts: g.accounts.map((a) => ({ ...a, shared: true })) });
-    assert.equal(layoutScope([shared(group("anthropic", ["1"]))], { kind: "own" }), "client");
-    assert.equal(layoutScope([group("anthropic", ["1"])], { kind: "member", id: "7" }), "7");
-    assert.equal(layoutScope([], { kind: "own" }), "own");
   });
 });

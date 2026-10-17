@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { llmPending, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
-import { scopeParam, type LlmSetup } from "@/lib/llm-accounts";
+import { llmPending, type LlmMember, type LlmOverview, type LlmWritten } from "@/lib/llm";
+import { scopeParam, type InstanceScope, type LlmSetup } from "@/lib/llm-accounts";
 import { AccountsBoard, describe } from "./AccountsBoard";
 import { ExpertModels } from "./ExpertModels";
 import { MemberSources } from "./MemberSources";
@@ -18,12 +18,13 @@ const POLL_MS = 4_000;
 const POLL_TRIES = 45;
 const EMPTY: LlmSetup = { groups: [], state: "applied" };
 
-// Intégrations · Modèles : les comptes de l'instance, le modèle des experts, le moteur Yelema. L'écran
-// affiche ce que le back-office sert et lui demande d'écrire ; il ne garde aucun secret.
+// Intégrations · Modèles : les comptes de l'instance, le modèle des experts, le moteur Yelema. Un compte
+// ne sert qu'une instance : rien n'est partagé avec l'entreprise. L'écran affiche ce que le back-office
+// sert et lui demande d'écrire ; il ne garde aucun secret.
 export function ModelsView() {
   const [data, setData] = useState<LlmOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [scope, setScope] = useState<SettingScope>({ kind: "own" });
+  const [scope, setScope] = useState<InstanceScope>({ kind: "own" });
   const [tries, setTries] = useState(0);
 
   const load = useCallback(async () => {
@@ -50,13 +51,14 @@ export function ModelsView() {
   }, [data, tries, load]);
 
   const admin = data?.members !== undefined;
-  // Un administrateur sans instance à lui regarde d'emblée les comptes partagés de l'entreprise.
+  const others = useMemo(() => othersOf(data), [data]);
+  // Un administrateur sans instance à lui regarde d'emblée celle d'un autre membre.
   useEffect(() => {
-    if (data && admin && !data.mine) setScope((s) => (s.kind === "own" ? { kind: "client" } : s));
-  }, [data, admin]);
+    if (data && admin && !data.mine && others[0]) setScope((s) => (s.kind === "own" ? { kind: "member", id: others[0]!.id } : s));
+  }, [data, admin, others]);
 
   const member = scope.kind === "member" ? data?.members?.find((m) => m.id === scope.id) : undefined;
-  const setup = (scope.kind === "client" ? data?.clientSetup : scope.kind === "member" ? member?.setup : data?.setup) ?? EMPTY;
+  const setup = (scope.kind === "member" ? member?.setup : data?.setup) ?? EMPTY;
   const version = setup.groups.map((g) => `${g.provider}:${g.accounts.length}`).join(",");
   const models = useModelGroups(data ? scopeParam(scope) : null, undefined, version);
 
@@ -73,9 +75,9 @@ export function ModelsView() {
   if (!data) return <div className="h-40 animate-pulse rounded-[22px] border border-line bg-soft" />;
 
   const who = member?.name ?? member?.email ?? "ce membre";
-  const title = scope.kind === "client" ? "Comptes partagés avec l’entreprise" : scope.kind === "member" ? `Comptes de l’instance de ${who}` : "Comptes de l’instance";
-  const scopeLabel = scope.kind === "client" ? "les membres sans compte" : scope.kind === "member" ? `l’instance de ${who}` : "votre instance";
-  const refused = (scope.kind === "member" ? member?.state : scope.kind === "own" ? data.mine?.state : undefined) === "refused";
+  const title = scope.kind === "member" ? `Comptes de l’instance de ${who}` : "Comptes de l’instance";
+  const scopeLabel = scope.kind === "member" ? `l’instance de ${who}` : "votre instance";
+  const refused = (scope.kind === "member" ? member?.state : data.mine?.state) === "refused";
   const catalogues = { catalogue: data.catalogue, logins: data.logins ?? [] };
 
   return (
@@ -93,11 +95,10 @@ export function ModelsView() {
         setup={setup}
         scope={scope}
         title={title}
-        picker={admin && data.members ? <InstancePicker data={data} value={scope} onChange={setScope} /> : undefined}
+        picker={admin && others.length > 0 ? <InstancePicker mine={!!data.mine} others={others} value={scope} onChange={setScope} /> : undefined}
         scopeLabel={scopeLabel}
         {...catalogues}
         customEndpoints={data.customEndpoints === true}
-        canShare={admin && scope.kind !== "client"}
         models={models}
         onChanged={() => changed()}
       />
@@ -106,24 +107,25 @@ export function ModelsView() {
 
       {data.yelema && <YelemaEngine yelema={data.yelema} />}
 
-      {admin && data.members && <MemberSources members={data.members} onPick={(id) => setScope({ kind: "member", id })} />}
+      {admin && data.members && <MemberSources members={data.members} onPick={(id) => setScope(data.members?.find((m) => m.id === id)?.self ? { kind: "own" } : { kind: "member", id })} />}
     </div>
   );
 }
 
+/** Les autres membres, sans l'appelant : sa propre instance est « Mon instance ». */
+const othersOf = (data: LlmOverview | null): LlmMember[] => (data?.members ?? []).filter((m) => !m.self);
+
 // Le choix de l'instance regardée, compact, dans l'en-tête du bloc des comptes (admin seulement).
-function InstancePicker({ data, value, onChange }: { data: LlmOverview; value: SettingScope; onChange: (scope: SettingScope) => void }) {
-  const current = value.kind === "member" ? value.id : value.kind;
+function InstancePicker({ mine, others, value, onChange }: { mine: boolean; others: LlmMember[]; value: InstanceScope; onChange: (scope: InstanceScope) => void }) {
   return (
     <select
       aria-label="Instance réglée"
-      value={current}
-      onChange={(e) => onChange(e.target.value === "own" || e.target.value === "client" ? { kind: e.target.value } : { kind: "member", id: e.target.value })}
+      value={value.kind === "member" ? value.id : "own"}
+      onChange={(e) => onChange(e.target.value === "own" ? { kind: "own" } : { kind: "member", id: e.target.value })}
       className="h-7 max-w-[14rem] rounded-full border border-line bg-surface px-2.5 text-xs text-ink focus:outline-none focus:ring-2 focus:ring-brand/40"
     >
-      {data.mine && <option value="own">Mon instance</option>}
-      <option value="client">Comptes partagés (entreprise)</option>
-      {(data.members ?? []).map((m) => (
+      {mine && <option value="own">Mon instance</option>}
+      {others.map((m) => (
         <option key={m.id} value={m.id}>
           {m.name ?? m.email}
         </option>

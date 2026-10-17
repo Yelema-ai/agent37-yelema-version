@@ -35,7 +35,6 @@ export function AccountRow({ account, rank, kind, isLogin, onChanged }: { accoun
       <div className="min-w-0 flex-1">
         <p className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-ink">
           <span className="truncate">{name}</span>
-          {account.shared && <span className="shrink-0 rounded-full bg-soft px-2 py-0.5 text-[10px] font-medium text-ink-3">partagé avec l’entreprise</span>}
         </p>
         <p className="truncate font-mono text-[11px] text-ink-3">{account.name && account.baseUrl ? `${account.baseUrl}` : account.hint || (isLogin ? "Connexion par compte" : "")}</p>
       </div>
@@ -62,7 +61,7 @@ export function AccountRow({ account, rank, kind, isLogin, onChanged }: { accoun
         open={removing}
         onOpenChange={setRemoving}
         title={`Retirer « ${name} » ?`}
-        description={`${account.shared ? "Ce compte est partagé avec l’entreprise : il sera retiré de l’instance de chaque membre sans compte." : "Ce compte sera retiré des instances concernées."} Les experts passeront au compte suivant. La conversation en cours sera interrompue.`}
+        description="Ce compte sera retiré de cette instance. Les experts passeront au compte suivant. La conversation en cours sera interrompue."
         confirmText="Retirer"
         destructive
         onConfirm={async () => {

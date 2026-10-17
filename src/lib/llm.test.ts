@@ -45,9 +45,9 @@ describe("llmPending", () => {
   const base: LlmOverview = { catalogue: [], mine: null, own: null, membersMayBringKey: false };
   it("is true while any key the caller sees is still being installed", () => {
     assert.equal(llmPending(base), false);
-    assert.equal(llmPending({ ...base, mine: { source: "client", provider: "openai", model: "gpt-5", state: "pending", since: null } }), true);
-    assert.equal(llmPending({ ...base, members: [{ id: "1", name: null, email: "a@b.c", source: "client", state: "pending", own: null }] }), true);
-    assert.equal(llmPending({ ...base, client: { provider: "openai", model: "gpt-5", hint: "…abcd", verified: true, state: "failed", updatedAt: null } }), false);
+    assert.equal(llmPending({ ...base, mine: { source: "member", provider: "openai", model: "gpt-5", state: "pending", since: null } }), true);
+    assert.equal(llmPending({ ...base, members: [{ id: "1", name: null, email: "a@b.c", self: false, source: "member", state: "pending", own: null }] }), true);
+    assert.equal(llmPending({ ...base, own: { provider: "openai", model: "gpt-5", hint: "…abcd", verified: true, state: "failed", updatedAt: null } }), false);
   });
 });
 

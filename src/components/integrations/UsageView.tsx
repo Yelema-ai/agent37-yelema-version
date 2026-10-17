@@ -123,7 +123,7 @@ export function UsageView() {
   const [ownKey, setOwnKey] = useState(false);
   useEffect(() => {
     apiFetch<LlmOverview>("/api/llm")
-      .then((o) => setOwnKey(Boolean(o.client) || (o.members ?? []).some((m) => m.own)))
+      .then((o) => setOwnKey(Boolean(o.own) || (o.members ?? []).some((m) => m.own)))
       .catch(() => undefined);
   }, []);
 
