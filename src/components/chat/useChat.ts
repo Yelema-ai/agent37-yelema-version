@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, readApiError } from "@/lib/api";
+import { chatFailureMessage } from "@/lib/chat-errors";
 import { batchQueued, insertBefore, isSteer, steerText, unreadSteerCount } from "@/lib/chat-queue";
 import { profileQuery } from "@/lib/profile-id";
 import { toolPhrase } from "@/lib/tool-steps";
@@ -325,7 +326,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
                 const err = data.error as { message?: string } | undefined;
                 // The instance's own reason is technical and in English: it stays in the browser console.
                 if (err?.message) console.error("[chat] response.failed:", err.message);
-                streamError = "Votre expert n’a pas pu répondre. Réessayez dans un instant.";
+                streamError = chatFailureMessage(err?.message, "Votre expert n’a pas pu répondre. Réessayez dans un instant.");
                 break;
               }
             }
@@ -586,7 +587,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
         const current = run.sessionId ? runsRef.current.get(run.sessionId) : newChatRunRef.current;
         if (viewed && !(current && current !== run && !current.done)) {
           if (!next.length) setIsStreaming(false);
-          if (!aborted) setError((e as Error).message || "Une erreur est survenue. Réessayez dans un instant.");
+          if (!aborted) setError(chatFailureMessage((e as Error).message, (e as Error).message || "Une erreur est survenue. Réessayez dans un instant."));
         }
         if (next.length) void startTurnRef.current(run.sessionId, next);
       }
