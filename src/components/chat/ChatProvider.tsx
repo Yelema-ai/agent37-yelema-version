@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { useChatPresence } from "@/components/activity/hooks";
 import { apiFetch } from "@/lib/api";
 import { profileQuery } from "@/lib/profile-id";
 import type { MergedAgent } from "@/lib/types";
@@ -226,6 +227,12 @@ export function ChatProvider({
       return [{ ...prev[idx], last_active: now }, ...prev.slice(0, idx), ...prev.slice(idx + 1)];
     });
   }, []);
+
+  // A routine run announced by the tracker joins the rail if it is not there yet.
+  const addSession = useCallback((row: ChatSession) => {
+    setSessions((prev) => (prev.some((s) => s.session_id === row.session_id) ? prev : [row, ...prev]));
+  }, []);
+  useChatPresence(agentId, profile, onChatTab ? activeSessionId : null, selectSession, addSession, loadingSessions ? null : sessions);
 
   const value = useMemo<ChatContextValue>(
     () => ({

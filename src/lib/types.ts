@@ -304,6 +304,7 @@ export interface SessionSummary {
   preview?: string | null;
   last_active?: number | null;
   started_at?: number | null;
+  message_count?: number | null;
 }
 
 export interface SessionListResponse {

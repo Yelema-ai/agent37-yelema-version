@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useConversationStatus } from "@/components/activity/hooks";
 import { Loader2, Pencil, Plus, Repeat, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { cn } from "@/lib/utils";
@@ -27,11 +28,28 @@ function groupSessions(sessions: ChatSession[]): { label: string; items: ChatSes
   return groups.filter((g) => g.items.length > 0);
 }
 
+const BADGES = {
+  running: { text: "En cours…", className: "text-ink-3" },
+  unread: { text: "Nouvelle réponse", className: "text-brand-ink" },
+  failed: { text: "La réponse a échoué", className: "text-ko" },
+} as const;
+
+function ConversationBadge({ status }: { status: keyof typeof BADGES }) {
+  const { text, className } = BADGES[status];
+  return (
+    <span className={cn("flex items-center gap-1 text-[11.5px] font-semibold", className)}>
+      {status === "running" ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : <span className="size-1.5 rounded-full bg-current" aria-hidden />}
+      {text}
+    </span>
+  );
+}
+
 // The conversation rail of one expert, folded into the expert's left column. Selecting or starting a
 // thread updates the chat URL (?session=) so refresh/Back/share reopen it.
 export function ChatSidebar() {
-  const { sessions, activeSessionId, onChatTab, loadingSessions, selectSession, startNewChat, deleteSession, renameSession } =
+  const { agentId, profile, sessions, activeSessionId, onChatTab, loadingSessions, selectSession, startNewChat, deleteSession, renameSession } =
     useChatContext();
+  const statusOf = useConversationStatus(agentId, profile);
   // The open thread stays "active" even when you're on another tab (so its stream isn't cancelled),
   // but it should only look selected in the rail while the Chat tab is actually showing.
   const highlightedSessionId = onChatTab ? activeSessionId : null;
@@ -97,6 +115,7 @@ export function ChatSidebar() {
                 <nav className="flex flex-col gap-0.5">
                   {g.items.map((s) => {
                     const label = s.routine ? `Routine : ${s.routine}` : s.title || "Nouvelle conversation";
+                    const status = statusOf(s.session_id);
                     return (
                       <div key={s.session_id} className="group relative">
                         {editingId === s.session_id ? (
@@ -128,7 +147,10 @@ export function ChatSidebar() {
                               )}
                             >
                               {s.routine && <Repeat className="mr-1.5 h-3.5 w-3.5 shrink-0 text-ink-3" aria-hidden />}
-                              <span className="truncate">{label}</span>
+                              <span className="min-w-0">
+                                <span className={cn("block truncate", status === "unread" && "font-semibold text-ink")}>{label}</span>
+                                {status && <ConversationBadge status={status} />}
+                              </span>
                             </button>
                             <button
                               type="button"

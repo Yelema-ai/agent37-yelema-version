@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { ActivityProvider } from "@/components/activity/ActivityProvider";
 import { Sidebar } from "@/components/app/Sidebar";
 import { TopBar } from "@/components/app/TopBar";
 import { ComputerProvider } from "@/components/experts/ComputerProvider";
@@ -67,35 +68,37 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
 
   return (
     <ExpertsProvider initial={initialExperts}>
-      <div
-        className="min-h-screen md:grid"
-        style={{ gridTemplateColumns: `${collapsed ? 72 : 272}px minmax(0,1fr)` }}
-      >
-        {drawerOpen && (
-          <button
-            type="button"
-            aria-label="Fermer le menu"
-            onClick={() => setDrawerOpen(false)}
-            className="fixed inset-0 z-30 bg-ink/40 md:hidden"
-          />
-        )}
+      <ActivityProvider>
         <div
-          className={cn(
-            "fixed inset-y-0 left-0 z-40 w-[284px] shadow-xl transition-transform md:shadow-none md:static md:z-auto md:w-auto md:translate-x-0",
-            drawerOpen ? "translate-x-0" : "-translate-x-full"
-          )}
+          className="min-h-screen md:grid"
+          style={{ gridTemplateColumns: `${collapsed ? 72 : 272}px minmax(0,1fr)` }}
         >
-          <Sidebar collapsed={collapsed && !drawerOpen} onToggle={toggle} />
+          {drawerOpen && (
+            <button
+              type="button"
+              aria-label="Fermer le menu"
+              onClick={() => setDrawerOpen(false)}
+              className="fixed inset-0 z-30 bg-ink/40 md:hidden"
+            />
+          )}
+          <div
+            className={cn(
+              "fixed inset-y-0 left-0 z-40 w-[284px] shadow-xl transition-transform md:shadow-none md:static md:z-auto md:w-auto md:translate-x-0",
+              drawerOpen ? "translate-x-0" : "-translate-x-full"
+            )}
+          >
+            <Sidebar collapsed={collapsed && !drawerOpen} onToggle={toggle} />
+          </div>
+          {/* Le <main> est la zone qui défile : la hauteur est bornée à l'écran pour que le chat et les
+              fichiers gardent leur barre de saisie en bas, les pages longues défilant à l'intérieur. */}
+          <main className="flex h-screen min-w-0 flex-col overflow-y-auto">
+            <TopBar onMenu={() => setDrawerOpen(true)} />
+            <ComputerProvider key={computerAgentId ?? "none"} agentId={computerAgentId}>
+              {children}
+            </ComputerProvider>
+          </main>
         </div>
-        {/* Le <main> est la zone qui défile : la hauteur est bornée à l'écran pour que le chat et les
-            fichiers gardent leur barre de saisie en bas, les pages longues défilant à l'intérieur. */}
-        <main className="flex h-screen min-w-0 flex-col overflow-y-auto">
-          <TopBar onMenu={() => setDrawerOpen(true)} />
-          <ComputerProvider key={computerAgentId ?? "none"} agentId={computerAgentId}>
-            {children}
-          </ComputerProvider>
-        </main>
-      </div>
+      </ActivityProvider>
     </ExpertsProvider>
   );
 }

@@ -81,7 +81,7 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
   });
   const dictating = dictation.state !== "idle";
 
-  // Sending stays open while the expert answers: the message is queued behind the running turn.
+  // Sending stays open while the expert answers: the message joins the running turn, or waits behind it.
   const canSend = (text.trim().length > 0 || att.hasFiles) && !att.blocksSend && !dictating;
 
   const submit = () => {

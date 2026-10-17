@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { MoreHorizontal, LogOut, Settings2, UserRound } from "lucide-react";
+import { toast } from "sonner";
+import { Bell, MoreHorizontal, LogOut, Settings2, UserRound } from "lucide-react";
+import { askNotificationPermission, notificationSupport, type NotificationSupport } from "@/components/activity/system-notify";
 import { signOutEverywhere, useSupabase } from "@/lib/supabase/client";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { usePublicConfig } from "@/components/PublicConfigProvider";
@@ -25,6 +27,16 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
   // The profile is the back office's: only there can the user change their own name.
   const editable = usePublicConfig().authVia === "backoffice";
   const [profileOpen, setProfileOpen] = useState(false);
+  // Offered while the browser has not been asked yet; read after mount (no window on the server).
+  const [notif, setNotif] = useState<NotificationSupport>("unsupported");
+  useEffect(() => setNotif(notificationSupport()), []);
+
+  async function enableNotifications() {
+    const next = await askNotificationPermission();
+    setNotif(next);
+    if (next === "granted") toast.success("Notifications activées : vous serez prévenu quand un expert répond.");
+    else if (next === "denied") toast.info("Notifications refusées. Vous pouvez les autoriser dans les réglages du navigateur.");
+  }
 
   const shown = userName ?? userEmail;
   const initial = (shown.trim()[0] ?? "?").toUpperCase();
@@ -82,6 +94,13 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
             Administration
           </Link>
         </DropdownMenuItem>
+
+        {notif === "default" && (
+          <DropdownMenuItem onSelect={enableNotifications} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
+            <Bell className="size-4" />
+            Activer les notifications
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuSeparator className="mx-1 my-1.5" />
 

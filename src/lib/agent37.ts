@@ -218,6 +218,13 @@ export const agent37 = {
       `/v1/responses/${encodeURIComponent(responseId)}/cancel`,
       { method: "POST" }
     ),
+  // Add a message to a running turn (yelema-hermes ≥ v1.7.0; older images answer 404).
+  steerResponse: (id: string, responseId: string, text: string) =>
+    instanceCall<{ id: string; accepted: boolean }>(
+      id,
+      `/v1/responses/${encodeURIComponent(responseId)}/steer`,
+      { method: "POST", body: JSON.stringify({ text }) }
+    ),
 
   // ---- Per-instance file browser (Agents API /v1/files) — JSON surfaces only. The byte surfaces
   // (GET/PUT /v1/files/content, GET /v1/files/archive) stream and so go through instanceFetch. ----

@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, readApiError } from "@/lib/api";
-import { batchQueued } from "@/lib/chat-queue";
+import { batchQueued, steerText, unreadSteerCount } from "@/lib/chat-queue";
 import { profileQuery } from "@/lib/profile-id";
 import { toolPhrase } from "@/lib/tool-steps";
+import { useTurnReporter } from "@/components/activity/hooks";
 import { type SessionDetail } from "@/lib/types";
 import { uid, type ChatMessage, type ChatSettings, type MessageAttachment, type ToolEvent, type ToolStatus } from "./types";
 
@@ -113,7 +114,11 @@ interface LiveRun {
   /** Latest immutable snapshot of the assistant bubble — updated via patchRun. */
   assistant: ChatMessage;
   done: boolean;
-  /** Messages sent while this turn runs, sent together as the next turn on the same session. */
+  /** Messages steered into this turn (in flight or accepted), shown after the reply. */
+  steered: Queued[];
+  /** Steer requests still in flight: the turn's end waits for them before dispatching the queue. */
+  steers: Set<Promise<void>>;
+  /** Messages the turn could not take, sent together as the next turn on the same session. */
   queue: Queued[];
 }
 
@@ -132,7 +137,7 @@ function mapHistory(history: SessionDetail["history"]): ChatMessage[] {
   return (history ?? []).map((h) => ({
     id: h.id || uid("h"),
     role: h.role,
-    content: h.content ?? "",
+    content: h.role === "user" ? steerText(h.content ?? "") : (h.content ?? ""),
     thinking: h.thinking,
   }));
 }
@@ -142,7 +147,15 @@ function mapHistory(history: SessionDetail["history"]): ChatMessage[] {
 // bubbles; once it's done, the transcript holds the whole turn and wins.
 function mergeLiveRun(history: ChatMessage[], run: LiveRun): ChatMessage[] {
   if (run.done) return history;
-  return [...history, ...run.users, run.assistant, ...run.queue.map((q) => q.user)];
+  return [...history, ...run.users, run.assistant, ...run.steered.map((q) => q.user), ...run.queue.map((q) => q.user)];
+}
+
+// The steers Hermes left unread: their own bubbles when they match, else one bubble with its text.
+function takeUnread(run: LiveRun, pending: string): Queued[] {
+  const n = unreadSteerCount(run.steered.map((q) => q.user.content), pending);
+  if (n) return run.steered.splice(-n);
+  const settings = run.steered[run.steered.length - 1]?.settings ?? {};
+  return [{ user: { id: uid("u"), role: "user", content: pending.trim() }, settings }];
 }
 
 export function useChat({ agentId, profile, sessionId, onSessionCreated, onActivity }: UseChatArgs) {
@@ -151,6 +164,8 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
   const [isStreaming, setIsStreaming] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Tells the app-wide tracker when a turn starts and ends, for the notifications.
+  const turns = useTurnReporter(agentId, profile);
 
   // Turns in flight (or recently finished), keyed by session id. The registry outlives thread
   // switches, so a started response always runs to completion and is re-merged on return.
@@ -237,6 +252,7 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
     async (run: LiveRun, body: ReadableStream<Uint8Array>) => {
       let streamError: string | null = null;
       let sawTerminal = false;
+      let pendingSteer = "";
       try {
         await readSSE(
           body,
@@ -258,6 +274,7 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
                   }
                   onSessionCreatedRef.current(sid, run.users[0]?.content.slice(0, 80) ?? "New chat", { promote });
                 }
+                turns.bind(run);
                 break;
               }
               case "response.reasoning.delta": {
@@ -291,6 +308,7 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
                 sawTerminal = true;
                 const final = str(data.output_text);
                 if (final) patchRun(run, (m) => ({ ...m, content: final }));
+                pendingSteer = str(data.pending_steer) ?? "";
                 break;
               }
               case "response.failed": {
@@ -306,7 +324,12 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
           run.abort.signal
         );
       } finally {
+        // A steer answered "not accepted" joins the queue: wait for the answers before reading it.
+        while (run.steers.size) await Promise.allSettled([...run.steers]);
         run.done = true;
+        // No terminal event: the turn may still run upstream, the tracker follows it (no-op once stopped).
+        if (sawTerminal) turns.end(run, streamError ? "failed" : "completed");
+        else turns.detach(run);
         // Sweep any still-running tool spinners, and put a failure into the bubble itself so it
         // shows wherever the thread is next viewed — covers terminal events and a bare stream-end.
         patchRun(run, (m) => ({
@@ -317,7 +340,9 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
         // The queued messages go out together on the same session — unless the user stopped or
         // deleted the thread. A stream that died without a terminal event may leave the session
         // busy a while longer; startTurn waits out the 409.
-        const next = !run.abort.signal.aborted && run.sessionId ? run.queue.splice(0) : [];
+        // Steers Hermes did not read (pending_steer) lead the next turn, ahead of the queue.
+        const unread = pendingSteer ? takeUnread(run, pendingSteer) : [];
+        const next = !run.abort.signal.aborted && run.sessionId ? [...unread, ...run.queue.splice(0)] : [];
         if (!sawTerminal && !run.abort.signal.aborted) {
           // The stream died without a terminal event — the turn may still be running server-side.
           // Drop the in-memory run: the next visit to the thread reads the session's
@@ -337,7 +362,7 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
         if (next.length) startTurnRef.current(run.sessionId, next);
       }
     },
-    [patchRun, isViewed, forgetRun, refreshHistory]
+    [patchRun, isViewed, forgetRun, refreshHistory, turns]
   );
 
   // Reattach to a turn that outlived this component (page reload / workspace re-entry): register
@@ -352,8 +377,11 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
         users: [],
         assistant: { id: uid("a"), role: "assistant", content: "", tools: [] },
         done: false,
+        steered: [],
+        steers: new Set(),
         queue: [],
       };
+      turns.start(run);
       runsRef.current.set(sid, run);
       void (async () => {
         let attached = false;
@@ -365,6 +393,7 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
             // Gone (expired or a gateway restart) or transient — either way the transcript is
             // the best available view; a turn that is still running is rediscovered from
             // active_response_id on the next visit.
+            turns.detach(run);
             run.done = true;
             forgetRun(run);
             void refreshHistory(sid);
@@ -373,6 +402,7 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
           attached = true;
           await consume(run, res.body);
         } catch (e) {
+          turns.detach(run);
           run.done = true;
           forgetRun(run);
           if ((e as Error).name === "AbortError") return;
@@ -383,7 +413,7 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
       })();
       return run;
     },
-    [agentId, consume, refreshHistory, forgetRun]
+    [agentId, consume, refreshHistory, forgetRun, turns]
   );
 
   // Stop any turn on a thread, locally and upstream — used when the thread itself is deleted.
@@ -397,13 +427,14 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
         run.abort.abort();
         cancelUpstream(run.responseId);
         runsRef.current.delete(sid);
+        turns.cancel(run);
       } else if (!run) {
         apiFetch<SessionDetail>(`/api/agents/${agentId}/chat/sessions/${sid}${q}`)
           .then((res) => cancelUpstream(res.active_response_id ?? null))
           .catch(() => {});
       }
     },
-    [agentId, q, cancelUpstream]
+    [agentId, q, cancelUpstream, turns]
   );
 
   // Load history when the selected thread changes; reset for a fresh chat. Switching threads no
@@ -456,7 +487,7 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
             // keep the run's bubbles (or refetch when a reattached run has no user bubble).
             if (res.active_response_id === run.responseId) {
               if (run.users.length) {
-                setMessages([...history, ...run.users, run.assistant]);
+                setMessages([...history, ...run.users, run.assistant, ...run.steered.map((q) => q.user)]);
               } else {
                 setMessages(history);
                 void refreshHistory(sessionId);
@@ -492,7 +523,8 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
       const { text, files } = batchQueued(batch.map((q) => ({ text: q.user.content, files: q.settings.files ?? [] })));
       const users = batch.map((q): ChatMessage => ({ ...q.user, queued: undefined }));
       const assistant: ChatMessage = { id: uid("a"), role: "assistant", content: "", tools: [] };
-      const run: LiveRun = { sessionId, responseId: null, abort: new AbortController(), users, assistant, done: false, queue: [] };
+      const run: LiveRun = { sessionId, responseId: null, abort: new AbortController(), users, assistant, done: false, steered: [], steers: new Set(), queue: [] };
+      turns.start(run);
       if (sessionId) {
         runsRef.current.set(sessionId, run);
         // Bubble an existing thread to the top of the rail as soon as it gets a new turn.
@@ -539,6 +571,7 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
         // thread rediscovers it from the session's active_response_id and reattaches.
         forgetRun(run);
         const aborted = (e as Error).name === "AbortError";
+        if (!aborted) turns.end(run, "failed");
         const next = !aborted && run.sessionId ? run.queue.splice(0) : [];
         // consume() may already have handed the queue to a newer turn: leave its state alone.
         const current = run.sessionId ? runsRef.current.get(run.sessionId) : newChatRunRef.current;
@@ -549,11 +582,35 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
         if (next.length) void startTurnRef.current(run.sessionId, next);
       }
     },
-    [agentId, profile, consume, isViewed, forgetRun]
+    [agentId, profile, consume, isViewed, forgetRun, turns]
   );
   startTurnRef.current = startTurn;
 
-  // Like Telegram: messages sent while the expert answers show at once, then go out together as its next turn.
+  // Like Telegram: a message sent while the expert answers shows at once and joins its turn (steer).
+  // Files, an older image or a turn that just ended: it waits and goes out as the next turn instead.
+  const steer = useCallback(
+    (run: LiveRun, item: Queued) => {
+      run.steered.push(item);
+      const toQueue = () => {
+        run.steered = run.steered.filter((q) => q !== item);
+        const queued = { ...item.user, queued: true };
+        run.queue.push({ ...item, user: queued });
+        if (isViewed(run)) setMessages((prev) => prev.map((m) => (m.id === queued.id ? queued : m)));
+      };
+      const p = apiFetch<{ accepted?: boolean }>(`/api/agents/${agentId}/chat/responses/${run.responseId}/steer`, {
+        method: "POST",
+        body: JSON.stringify({ text: item.user.content }),
+      })
+        .then((r) => r.accepted === true, () => false)
+        .then((accepted) => {
+          if (!accepted) toQueue();
+        })
+        .finally(() => run.steers.delete(p));
+      run.steers.add(p);
+    },
+    [agentId, isViewed]
+  );
+
   const send = useCallback(
     (text: string, settings: SendSettings = {}) => {
       const trimmed = text.trim();
@@ -566,6 +623,11 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
       };
       const live = activeSessionRef.current ? runsRef.current.get(activeSessionRef.current) : newChatRunRef.current;
       if (live && !live.done) {
+        if (live.responseId && !(settings.files ?? []).length && !live.queue.length) {
+          setMessages((prev) => [...prev, user]);
+          steer(live, { user, settings });
+          return;
+        }
         const queued = { ...user, queued: true };
         live.queue.push({ user: queued, settings });
         setMessages((prev) => [...prev, queued]);
@@ -574,7 +636,7 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
       setError(null);
       void startTurn(activeSessionRef.current, [{ user, settings }]);
     },
-    [startTurn]
+    [startTurn, steer]
   );
 
   // Stop the current turn: abort the local stream and cancel it upstream so the agent stops work.
@@ -587,19 +649,26 @@ export function useChat({ agentId, profile, sessionId, onSessionCreated, onActiv
       run.abort.abort();
       cancelUpstream(run.responseId);
       forgetRun(run);
+      turns.cancel(run);
     }
     setMessages((prev) => (prev.some((m) => m.queued) ? prev.filter((m) => !m.queued) : prev));
     setIsStreaming(false);
-  }, [cancelUpstream, forgetRun]);
+  }, [cancelUpstream, forgetRun, turns]);
 
   // On unmount, close the local streams only — the turns keep running server-side, and the next
   // mount (reload, workspace re-entry) reattaches via the session's active_response_id.
   useEffect(() => {
     const runs = runsRef.current;
     return () => {
-      for (const run of runs.values()) run.abort.abort();
+      // The tracker keeps following the turns that are still running.
+      for (const run of runs.values()) {
+        if (!run.done) turns.detach(run);
+        run.abort.abort();
+      }
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      newChatRunRef.current?.abort.abort();
+      const fresh = newChatRunRef.current;
+      if (fresh) turns.detach(fresh);
+      fresh?.abort.abort();
     };
   }, []);
 
