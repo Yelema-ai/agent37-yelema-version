@@ -106,9 +106,10 @@ function ExpertCard({ expert }: { expert: Entry }) {
         <h2 className="font-display text-2xl font-bold tracking-[-0.01em]">{expert.name}</h2>
         {expert.role && <p className="text-[13.5px] font-semibold text-[#D9CCFF]">{expert.role}</p>}
         {expert.tagline && <p className="mt-1.5 text-sm leading-snug text-white/90">{expert.tagline}</p>}
-        <div className="pointer-events-auto mt-3 flex flex-wrap gap-2">
+        {/* Two buttons of one size, stacked: the chat first for an expert of the team, else the sheet. */}
+        <div className="pointer-events-auto mt-3 flex flex-col gap-2">
           {mine && (
-            <Button asChild size="sm" className="h-9 rounded-full bg-white px-3.5 text-[#301667] hover:bg-white/90">
+            <Button asChild className="h-10 w-full rounded-full bg-white px-4 text-[#301667] hover:bg-white/90">
               <Link href={agentTabPath(mine.agentId, "chat", mine.profileId)}>
                 <MessageCircle />
                 Écrire à {expert.name}
@@ -117,11 +118,14 @@ function ExpertCard({ expert }: { expert: Entry }) {
           )}
           <Button
             asChild
-            size="sm"
             variant="outline"
-            className="h-9 rounded-full border-white/40 bg-white/10 px-3.5 text-white hover:bg-white/20 hover:text-white"
+            className={
+              mine
+                ? "h-10 w-full rounded-full border-white/50 bg-white/10 px-4 text-white hover:bg-white/20 hover:text-white"
+                : "h-10 w-full rounded-full border-transparent bg-white px-4 text-[#301667] hover:bg-white/90 hover:text-[#301667]"
+            }
           >
-            <Link href={fiche}>Voir la fiche</Link>
+            <Link href={fiche}>Voir sa fiche</Link>
           </Button>
         </div>
       </div>

@@ -3,38 +3,40 @@
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Check, FileText, Loader2, MapPin, MessageCircle, Pencil, Play, Sparkles, UserPlus, type LucideIcon } from "lucide-react";
+import { Check, FileText, Loader2, MapPin, MessageCircle, Play, Sparkles, UserPlus, type LucideIcon } from "lucide-react";
 import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch } from "@/lib/api";
-import { ExpertEditModal } from "@/components/experts/ExpertEditModal";
 import { ExpertImage } from "@/components/experts/ExpertImage";
 import { useCatalogue, useCatalogueExpert } from "@/components/experts/useCatalogue";
 import { Button } from "@/components/ui/button";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { cn } from "@/lib/utils";
 
-// Colors of the numbered skill badges, cycling brand / coral / blue like the mockup.
-const NUMBER_COLORS = ["bg-soft-2 text-brand-ink", "bg-coral-pale text-coral-ink", "bg-tint text-brand-ink"];
+// Where any expert answers: the web app, and the channels its member connects (Canaux), in
+// Yelema's order. The same for every expert: nothing here is the catalogue's.
+const CHANNELS = ["Telegram", "Web", "Slack", "Teams", "WhatsApp"];
 
-function SectionTitle({ title, sub }: { title: string; sub?: string }) {
+function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className="mt-3.5">
-      <h2 className="font-display text-lg font-semibold text-ink">{title}</h2>
-      {sub && <p className="text-[13.5px] text-ink-3">{sub}</p>}
-    </div>
+    <section className={cn("rounded-card border border-line bg-surface p-5 @xl:p-6", className)}>
+      <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">{title}</h2>
+      <div className="mt-3.5">{children}</div>
+    </section>
   );
 }
 
-function Box({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: React.ReactNode }) {
+function Note({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-tile border border-line bg-surface p-4">
-      <h3 className="mb-2.5 flex items-center gap-2 text-base font-semibold text-ink">
-        <Icon className="h-[18px] w-[18px] shrink-0 text-brand-ink" />
-        {title}
-      </h3>
-      {children}
-    </section>
+    <div className="flex gap-3">
+      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-tint text-brand-ink">
+        <Icon className="size-[18px]" />
+      </span>
+      <div className="min-w-0">
+        <h3 className="text-[15px] font-semibold text-ink">{title}</h3>
+        <p className="mt-1 text-sm leading-relaxed text-ink-2">{children}</p>
+      </div>
+    </div>
   );
 }
 
@@ -47,7 +49,6 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
   const canRequest = usePublicConfig().authVia === "backoffice";
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
   const expert = useCatalogueExpert(expertKey);
 
   async function request() {
@@ -80,35 +81,24 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
   const mine = catalogue.experts.find((e) => e.key === expert.key)?.installed[0] ?? null;
   const pitch = expert.salesDescription ?? expert.description;
   const skills = expert.skills.length > 0 ? expert.skills : expert.competencies.map((name) => ({ name, summary: null }));
-  const image = expert.avatarUrl ?? expert.portraitUrl;
-  const counts = [
-    { n: skills.length, one: "compétence", many: "compétences" },
-    { n: expert.deliverables.length, one: "livrable", many: "livrables" },
-  ].filter((c) => c.n > 0);
+  // The full-length portrait, as on the site; the head-and-shoulders one when there is none.
+  const image = expert.portraitUrl ?? expert.avatarUrl;
+  const does = expert.pronoun === "elle" ? "Ce qu’elle fait" : expert.pronoun === "il" ? "Ce qu’il fait" : `Ce que fait ${expert.name}`;
 
   return (
-    <div className="@container flex w-full max-w-[1100px] flex-col gap-3.5">
-      <header className="flex items-center gap-6 rounded-card border border-line bg-surface p-6 @xl:p-7">
-        <div className="min-w-0 flex-1">
-          <p className="text-[12.5px] font-semibold text-brand-ink">Fiche de poste</p>
-          <h1 className="mt-1.5 font-display text-2xl font-semibold tracking-[-0.02em] text-ink @xl:text-[28px]">
-            {expert.name}
-            {expert.role ? `, ${expert.role}` : ""}
-          </h1>
-          {pitch && <p className="mt-2.5 max-w-[760px] text-[17px] leading-[1.55] text-ink">{pitch}</p>}
-          {expert.tagline && <p className="mt-2 text-sm text-ink-3">{expert.tagline}</p>}
-          {counts.length > 0 && (
-            <div className="mt-3.5 flex flex-wrap gap-2">
-              {counts.map((c) => (
-                <span key={c.one} className="rounded-full bg-soft-2 px-3 py-1.5 text-[13px] text-ink-2">
-                  <b className="tabular-nums text-brand-ink">{c.n}</b> {c.n > 1 ? c.many : c.one}
-                </span>
-              ))}
-            </div>
-          )}
+    <div className="@container flex w-full max-w-[1100px] flex-col gap-4">
+      <header className="flex flex-col overflow-hidden rounded-card border border-line bg-surface @2xl:grid @2xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="flex flex-col justify-center p-6 @xl:p-8">
+          <p className="text-[12.5px] font-semibold uppercase tracking-[0.06em] text-brand-ink">Fiche de poste</p>
+          <h1 className="mt-2 font-display text-[30px] font-bold leading-tight tracking-[-0.02em] text-ink @xl:text-[38px]">{expert.name}</h1>
+          {expert.role && <p className="mt-1 text-[17px] font-semibold text-brand-ink">{expert.role}</p>}
+          {expert.tagline && <p className="mt-4 max-w-[560px] font-display text-xl leading-snug text-ink @xl:text-[22px]">{expert.tagline}</p>}
+          {pitch && <p className="mt-3 max-w-[620px] text-[15px] leading-[1.6] text-ink-2">{pitch}</p>}
         </div>
         {image && (
-          <ExpertImage src={image} size={180} className="hidden h-[180px] w-[180px] shrink-0 rounded-tile bg-[#B79BD8] object-cover object-top @2xl:block" />
+          <div className="relative order-first aspect-[4/5] bg-[linear-gradient(160deg,#C5C4FF_0%,#8D68FA_100%)] @2xl:order-none @2xl:aspect-auto @2xl:min-h-[380px]">
+            <ExpertImage src={image} sizes="(min-width: 48rem) 300px, 100vw" priority className="object-cover object-top" />
+          </div>
         )}
       </header>
 
@@ -133,109 +123,99 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
       )}
 
       {skills.length > 0 && (
-        <>
-          <SectionTitle title="Ses compétences" sub="Des savoir-faire déjà construits dans l’atelier Yelema" />
-          <div className="grid gap-2.5 @xl:grid-cols-2 @3xl:grid-cols-3">
-            {skills.map((s, i) => (
-              <div key={s.name} className="flex gap-3 rounded-2xl border border-line bg-surface p-3.5">
-                <span
-                  className={cn(
-                    "grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] text-[13px] font-extrabold tabular-nums",
-                    NUMBER_COLORS[i % NUMBER_COLORS.length]
-                  )}
-                >
-                  {String(i + 1).padStart(2, "0")}
+        <Section title={does}>
+          <ul className="grid gap-x-8 gap-y-3.5 @2xl:grid-cols-2">
+            {skills.map((s) => (
+              <li key={s.name} className="flex gap-3">
+                <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-tint text-brand-ink">
+                  <Check className="size-3" strokeWidth={3} />
                 </span>
                 <div className="min-w-0">
-                  <b className="block text-[14.5px] text-ink">{s.name}</b>
-                  {s.summary && <span className="mt-0.5 block text-[13px] leading-[1.45] text-ink-3">{s.summary}</span>}
+                  <b className="block text-[15px] font-semibold leading-snug text-ink">{s.name}</b>
+                  {s.summary && <span className="mt-0.5 block text-[13.5px] leading-[1.5] text-ink-2">{s.summary}</span>}
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
-        </>
+          </ul>
+        </Section>
       )}
 
       {expert.deliverables.length > 0 && (
-        <>
-          <SectionTitle title="Ses livrables" sub="Prêts à relire, envoyés seulement après votre accord" />
-          <div className="grid gap-2.5 @2xl:grid-cols-2">
+        <Section title="Exemples de livrables">
+          <ul className="grid gap-2.5 @xl:grid-cols-2 @3xl:grid-cols-3">
             {expert.deliverables.map((d) => (
-              <div key={d.label} className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-3.5">
+              <li key={d.label} className="flex items-center gap-3 rounded-2xl bg-soft p-3">
                 {d.thumbnailUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={d.thumbnailUrl} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded-[10px] object-cover" />
+                  <img src={d.thumbnailUrl} alt="" loading="lazy" className="size-11 shrink-0 rounded-[10px] object-cover" />
                 ) : (
-                  <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-soft-2 text-ink-2">
-                    <FileText className="h-4 w-4" />
+                  <span className="grid size-11 shrink-0 place-items-center rounded-[10px] bg-surface text-brand-ink">
+                    <FileText className="size-[18px]" />
                   </span>
                 )}
-                <b className="min-w-0 text-[14.5px] text-ink">{d.label}</b>
-              </div>
+                <span className="min-w-0 text-[14px] font-medium leading-snug text-ink">{d.label}</span>
+              </li>
             ))}
-          </div>
-        </>
+          </ul>
+        </Section>
       )}
 
       {(expert.valueAdd || expert.whyRelevant) && (
-        <div className="mt-3.5 grid gap-3.5 @3xl:grid-cols-2">
-          {expert.valueAdd && (
-            <Box icon={Sparkles} title="Ce que vous y gagnez">
-              <p className="text-sm leading-relaxed text-ink">{expert.valueAdd}</p>
-            </Box>
-          )}
-          {expert.whyRelevant && (
-            <Box icon={MapPin} title="Sa maîtrise du terrain">
-              <p className="text-sm leading-relaxed text-ink">{expert.whyRelevant}</p>
-            </Box>
-          )}
-        </div>
+        <Section title="Ce que vous y gagnez">
+          <div className="grid gap-5 @3xl:grid-cols-2">
+            {expert.valueAdd && (
+              <Note icon={Sparkles} title="Pour votre équipe">
+                {expert.valueAdd}
+              </Note>
+            )}
+            {expert.whyRelevant && (
+              <Note icon={MapPin} title="Sa maîtrise du terrain">
+                {expert.whyRelevant}
+              </Note>
+            )}
+          </div>
+        </Section>
       )}
 
-      <div className="mt-3.5 flex flex-wrap items-center gap-3 rounded-card border-2 border-brand bg-surface p-[22px]">
-        {mine ? (
-          <>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-ink">{expert.name} est dans votre équipe</p>
-              <p className="text-[13px] text-ink-3">Posez-lui une question ou confiez-lui une tâche dans sa discussion.</p>
-            </div>
-            {/* Its name and picture are its member's to choose, where the back office keeps them. */}
-            {canRequest && (
-              <Button variant="outline" className="rounded-full" onClick={() => setEditOpen(true)}>
-                <Pencil />
-                Personnaliser
-              </Button>
-            )}
-            <Button asChild className="rounded-full">
-              <Link href={agentTabPath(mine.agentId, "chat", mine.profileId)}>
-                <MessageCircle />
-                Écrire à {expert.name}
-              </Link>
-            </Button>
-          </>
-        ) : canRequest ? (
-          <>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-ink">{expert.name} n’est pas encore dans votre équipe</p>
-              <p className="text-[13px] text-ink-3">
-                {requested
+      <Section title="Où lui parler">
+        <ul className="flex flex-wrap gap-2">
+          {CHANNELS.map((c) => (
+            <li key={c} className="rounded-full border border-line bg-soft px-3.5 py-1.5 text-[13.5px] font-medium text-ink-2">
+              {c}
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      <div className="flex flex-col items-stretch gap-4 rounded-card border-2 border-brand bg-surface p-5 @xl:flex-row @xl:items-center @xl:p-6">
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-ink">{mine ? `${expert.name} est dans votre équipe` : `${expert.name} n’est pas encore dans votre équipe`}</p>
+          <p className="mt-0.5 text-[13.5px] text-ink-3">
+            {mine
+              ? "Posez-lui une question ou confiez-lui une tâche."
+              : !canRequest
+                ? "Contactez Yelema ou l’administrateur de votre espace pour l’ajouter."
+                : requested
                   ? "Votre demande est transmise à Yelema, qui revient vers vous."
-                  : "Demandez-le : Yelema reçoit votre demande et revient vers vous. Rien n’est installé ni facturé sans votre accord."}
-              </p>
-            </div>
-            <Button className="rounded-full" onClick={request} disabled={requesting || requested}>
+                  : "Yelema reçoit votre demande et revient vers vous. Rien n’est installé ni facturé sans votre accord."}
+          </p>
+        </div>
+        {mine ? (
+          <Button asChild size="lg" className="h-11 rounded-full px-6">
+            <Link href={agentTabPath(mine.agentId, "chat", mine.profileId)}>
+              <MessageCircle />
+              Écrire à {expert.name}
+            </Link>
+          </Button>
+        ) : (
+          canRequest && (
+            <Button size="lg" className="h-11 rounded-full px-6" onClick={request} disabled={requesting || requested}>
               {requesting ? <Loader2 className="animate-spin" /> : requested ? <Check /> : <UserPlus />}
               {requested ? "Demande envoyée" : `Demander ${expert.name}`}
             </Button>
-          </>
-        ) : (
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold text-ink">{expert.name} n’est pas encore dans votre équipe</p>
-            <p className="text-[13px] text-ink-3">Contactez Yelema ou l’administrateur de votre espace pour l’ajouter.</p>
-          </div>
+          )
         )}
       </div>
-      {mine && canRequest && <ExpertEditModal expertKey={expertKey} open={editOpen} onOpenChange={setEditOpen} />}
     </div>
   );
 }
