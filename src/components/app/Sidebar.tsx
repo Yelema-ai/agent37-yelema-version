@@ -9,6 +9,7 @@ import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { AccountMenu } from "@/components/AccountMenu";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { ExpertItem } from "@/components/experts/ExpertItem";
+import { branding } from "@/config/branding";
 import { cn } from "@/lib/utils";
 
 // Pas de « Chat entreprise » : chaque membre a sa propre instance, il n'y a pas de discussion
@@ -39,9 +40,8 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt="" className="size-[38px] shrink-0 rounded-xl object-contain" />
           ) : (
-            <span className="grid size-[38px] shrink-0 place-items-center rounded-xl bg-brand font-display text-lg font-bold text-on-brand">
-              {(current?.name?.trim()[0] ?? "?").toUpperCase()}
-            </span>
+            // Sans logo d'entreprise : le Y de Yelema (fichier exact du site), jamais une initiale.
+            <Image src={branding.markUrl} alt="" width={38} height={38} priority className="size-[38px] shrink-0 rounded-xl" />
           )}
           {!collapsed && (
             <span className="min-w-0">
