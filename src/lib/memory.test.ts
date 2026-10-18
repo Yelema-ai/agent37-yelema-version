@@ -19,5 +19,5 @@ test("deposits grouped by compartment: the company first, then the units in orde
   const item = (id: string, unit: string | null) => ({ id, unit }) as MemoryItem;
   const units = [{ id: "rh", name: "RH" }, { id: "it", name: "IT" }, { id: "paie", name: "Paie" }];
   const groups = groupByUnit([item("1", "it"), item("2", null), item("3", "it"), item("4", "x")], units);
-  assert.deepEqual(groups.map((g) => [g.name, g.items.map((i) => i.id)]), [["Toute l’entreprise", ["2"]], ["IT", ["1", "3"]], ["Unité", ["4"]]]);
+  assert.deepEqual(groups.map((g) => [g.name, g.items.map((i) => i.id)]), [["Toute l’entreprise", ["2"]], ["IT", ["1", "3"]], ["Département", ["4"]]]);
 });

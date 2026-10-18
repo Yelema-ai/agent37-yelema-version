@@ -9,7 +9,7 @@ import { CARD, FIELD } from "./styles";
 
 const NONE = "";
 
-/** Exceptions, folded under « Avancé »: a unit opened to one person or to another unit, on top of the rule. */
+/** Access exceptions, folded: a department opened to one person or to another department, on top of the rule. */
 export function OrgGrants({ chart, editable, change }: { chart: OrgChart; editable: boolean; change: Change }) {
   const [grantee, setGrantee] = useState(NONE);
   const [grantUnit, setGrantUnit] = useState(NONE);
@@ -23,14 +23,15 @@ export function OrgGrants({ chart, editable, change }: { chart: OrgChart; editab
   return (
     <details className={cn(CARD, "mt-5 p-5 sm:p-6")}>
       <summary className="cursor-pointer select-none text-[15px] font-bold text-ink">
-        Avancé · exceptions ({chart.grants.length}) <span className="font-normal text-ink-3">· ouvrir une unité à une personne ou à une autre unité, en plus de la règle</span>
+        Exceptions d’accès ({chart.grants.length})
+        <span className="mt-0.5 block text-[13px] font-normal text-ink-3">Ouvrir la mémoire d’un département à une personne ou à un autre département.</span>
       </summary>
       {chart.grants.length === 0 && <p className="mt-3 text-sm text-ink-3">Aucune exception.</p>}
       <ul className="mt-3 divide-y divide-line">
         {chart.grants.map((g) => (
           <li key={g.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm text-ink">
             <span>
-              <strong>{g.user ? personName(g.user) : `Unité ${unitName(g.granteeUnit)}`}</strong> {g.right === "write" ? "lit et dépose dans" : "lit"} <strong>{unitName(g.unit)}</strong>
+              <strong>{g.user ? personName(g.user) : `Département ${unitName(g.granteeUnit)}`}</strong> {g.right === "write" ? "lit et dépose dans" : "lit"} <strong>{unitName(g.unit)}</strong>
             </span>
             {editable && (
               <Button variant="ghost" size="sm" className="text-ko" onClick={() => void change(`/api/org/grants/${g.id}`, "DELETE")}>
@@ -51,7 +52,7 @@ export function OrgGrants({ chart, editable, change }: { chart: OrgChart; editab
             ))}
             {chart.units.map((u) => (
               <option key={u.id} value={`unit:${u.id}`}>
-                Unité {u.name}
+                Département {u.name}
               </option>
             ))}
           </select>
@@ -59,8 +60,8 @@ export function OrgGrants({ chart, editable, change }: { chart: OrgChart; editab
             <option value="read">lit</option>
             <option value="write">lit et dépose dans</option>
           </select>
-          <select aria-label="Unité ouverte" className={FIELD} value={grantUnit} onChange={(e) => setGrantUnit(e.target.value)}>
-            <option value={NONE}>Quelle unité…</option>
+          <select aria-label="Département ouvert" className={FIELD} value={grantUnit} onChange={(e) => setGrantUnit(e.target.value)}>
+            <option value={NONE}>Quel département…</option>
             {chart.units.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name}

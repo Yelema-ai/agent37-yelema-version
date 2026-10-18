@@ -128,7 +128,7 @@ export function groupByUnit(items: MemoryItem[], units: { id: string; name: stri
   for (const item of items) {
     let group = byId.get(item.unit);
     if (!group) {
-      group = { unit: item.unit, name: "Unité", items: [] };
+      group = { unit: item.unit, name: "Département", items: [] };
       byId.set(item.unit, group);
       groups.push(group);
     }
