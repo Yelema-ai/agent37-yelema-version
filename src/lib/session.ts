@@ -135,7 +135,11 @@ function memo<T>(load: (token: string) => Promise<T>) {
   const put = (workspace: string, token: string, value: T): void => {
     store.set(`${workspace}:${fingerprint(token)}`, { at: Date.now(), value });
   };
-  return Object.assign(read, { put });
+  // An answer the caller knows is out of date (a change the back office answered with another shape).
+  const drop = (workspace: string, token: string): void => {
+    store.delete(`${workspace}:${fingerprint(token)}`);
+  };
+  return Object.assign(read, { put, drop });
 }
 
 function noop(): void {}
@@ -145,6 +149,11 @@ const meOf = memo((token) => backoffice.me(token));
 /** After the user changed their own profile: the next page shows it at once, not the kept answer. */
 export function rememberPrincipal(workspace: string, token: string, me: BoMe): void {
   meOf.put(workspace, token, me);
+}
+
+/** After a change to what `me` carries, answered without it (the company's logo): read it again next time. */
+export function forgetPrincipal(workspace: string, token: string): void {
+  meOf.drop(workspace, token);
 }
 const instanceOf = memo((token) => backoffice.instance(token));
 

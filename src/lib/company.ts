@@ -33,6 +33,5 @@ export function companyLogos(p: CompanyProfile): CompanyLogo[] {
   return p.logoUrl ? [{ id: "principal", url: p.logoUrl, name: null, primary: true }] : [];
 }
 
-export const LOGO_MAX_BYTES = 5 * 1024 * 1024;
 export const LOGO_ACCEPT = "image/png,image/jpeg,image/webp";
 export const PRESENTATION_TITLE = "Présentation de l’entreprise";

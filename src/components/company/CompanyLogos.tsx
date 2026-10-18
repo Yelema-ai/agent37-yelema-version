@@ -1,11 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ImagePlus, MoreHorizontal, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch, readApiError } from "@/lib/api";
-import { companyLogos, keepsSeveralLogos, LOGO_ACCEPT, LOGO_MAX_BYTES, type CompanyLogo, type CompanyProfile } from "@/lib/company";
+import { companyLogos, keepsSeveralLogos, LOGO_ACCEPT, type CompanyLogo, type CompanyProfile } from "@/lib/company";
+import { tooLarge, TOO_LARGE } from "@/lib/upload-limit";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -17,12 +17,11 @@ import { cn } from "@/lib/utils";
 
 function check(file: File): string | null {
   if (!LOGO_ACCEPT.split(",").includes(file.type)) return `${file.name} : choisissez une image PNG, JPEG ou WebP.`;
-  if (file.size > LOGO_MAX_BYTES) return `${file.name} : l’image ne doit pas dépasser 5 Mo.`;
+  if (tooLarge(file)) return `${file.name} : ${TOO_LARGE}`;
   return null;
 }
 
 export function CompanyLogos({ profile, onProfile }: { profile: CompanyProfile; onProfile: (p: CompanyProfile) => void }) {
-  const router = useRouter();
   const picker = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState<{ done: number; total: number } | null>(null);
   const [over, setOver] = useState(false);
@@ -30,11 +29,8 @@ export function CompanyLogos({ profile, onProfile }: { profile: CompanyProfile; 
   const several = keepsSeveralLogos(profile);
   const logos = companyLogos(profile);
 
-  // The bar's logo is rendered by the server: read it again after any change.
-  const changed = (p: CompanyProfile) => {
-    onProfile(p);
-    router.refresh();
-  };
+  // The menu follows the profile at once (CompanyProfileView hands its logo to the workspace).
+  const changed = (p: CompanyProfile) => onProfile(p);
 
   async function send(list: File[]) {
     const files = several ? list : list.slice(0, 1);
@@ -167,7 +163,7 @@ export function CompanyLogos({ profile, onProfile }: { profile: CompanyProfile; 
           removing?.primary
             ? several && logos.length > 1
               ? "Une autre image deviendra le logo principal."
-              : "Votre espace affichera le logo Yelema à la place."
+              : "L’entreprise n’aura plus de logo."
             : undefined
         }
         confirmText="Retirer"
