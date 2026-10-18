@@ -164,9 +164,11 @@ Browser ─▶ Next.js (this app) ─▶ control plane  https://api.agent37.com/
 - **Talking to an expert is the Agent37 API's `profile`**, not an image feature: `profile` on
   `POST /v1/responses` and `?profile=` on every session read, sent on EVERY turn. The profile is
   checked against what is installed on that instance (`src/lib/profiles.ts`), never a fixed list.
-- **Nothing about experts is written in this repo**, bar two stopgaps: the hover videos in
-  `public/experts/vid` (looked up by first name, never listed in code) and the three faces of the
-  sign-in pitch (`AuthShell`). Names, roles, photos, sheets come from the
+- **Nothing about experts is written in this repo**, bar three stopgaps: the hover videos in
+  `public/experts/vid` (looked up by first name, never listed in code), the three faces of the
+  sign-in pitch (`AuthShell`), and the gallery's seven themes (`src/config/expert-themes.ts`,
+  `src/lib/expert-themes.ts`), used until the back office's catalogue files every expert under a
+  `category`. Names, roles, photos, sheets come from the
   back office's public catalogue (`BACKOFFICE_URL`, `src/lib/catalogue.ts`), joined to installed
   profiles by the part of the profile name after `__`. Which experts a member HAS is what is
   installed (`agents.profiles`, written by the back office; the instance itself as a fallback).

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -19,22 +19,24 @@ import { useWorkspace } from "@/components/WorkspaceProvider";
 import { ExpertMedia } from "@/components/experts/ExpertMedia";
 import { useCatalogue } from "@/components/experts/useCatalogue";
 import { Button } from "@/components/ui/button";
+import { EXPERT_THEMES } from "@/config/expert-themes";
 import { agentTabPath } from "@/lib/expert-tabs";
+import { expertThemes } from "@/lib/expert-themes";
 import type { CatalogueResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Entry = CatalogueResponse["experts"][number];
 
-// An icon per trade, found by a word of its label: the categories are the back office's, so one
-// it adds later simply gets the default icon.
+// An icon per theme, found by a word of its label: a theme the back office adds later simply gets
+// the default icon.
 const CATEGORY_ICONS: [RegExp, LucideIcon][] = [
   [/direction/i, Crown],
   [/marketing|design|contenu/i, Megaphone],
   [/vente|client|commerc/i, Handshake],
   [/rh|ressources|recrut/i, Users],
   [/financ|compta|invest/i, Landmark],
-  [/donn|data/i, PieChart],
-  [/jurid|conform/i, Scale],
+  [/donn|data|opérat/i, PieChart],
+  [/jurid|conform|légal|legal/i, Scale],
 ];
 
 const categoryIcon = (label: string): LucideIcon => CATEGORY_ICONS.find(([word]) => word.test(label))?.[1] ?? Sparkles;
@@ -133,10 +135,9 @@ export function ExpertGallery() {
   const { catalogue, loading } = useCatalogue(current?.id);
   const [category, setCategory] = useState<string | null>(null);
 
-  const shown = category ? catalogue.experts.filter((e) => e.category?.key === category) : catalogue.experts;
-  const categories = catalogue.categories
-    .map((c) => ({ ...c, count: catalogue.experts.filter((e) => e.category?.key === c.key).length }))
-    .filter((c) => c.count > 0);
+  // The themes: the back office's when it files every expert, else the stopgap list.
+  const { themes: categories, themeOf } = useMemo(() => expertThemes(catalogue.categories, catalogue.experts, EXPERT_THEMES), [catalogue]);
+  const shown = category ? catalogue.experts.filter((e) => themeOf.get(e.key) === category) : catalogue.experts;
 
   return (
     <div>
@@ -156,7 +157,7 @@ export function ExpertGallery() {
           {categories.length > 1 && (
             <div
               role="group"
-              aria-label="Filtrer par métier"
+              aria-label="Filtrer par thème"
               className="mt-5 flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] md:flex-wrap md:overflow-visible"
             >
               <FilterChip
