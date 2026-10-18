@@ -1,27 +1,13 @@
 import { NextResponse } from "next/server";
 import { backoffice } from "@/lib/backoffice";
 import { ApiError, handleError, readJson } from "@/lib/http";
-import { authViaBackoffice } from "@/lib/runtime-config";
-import { currentPrincipal, readSession, rememberPrincipal } from "@/lib/session";
+import { currentPrincipal, rememberPrincipal } from "@/lib/session";
 import { pinnedWorkspaceId } from "@/lib/tenant";
+import { profile, token } from "./_shared";
 
-// `GET|PATCH /api/account` — the signed-in user's own profile (first name, last name, job title),
+// `GET|PATCH /api/account` — the signed-in user's own profile (first name, last name, job title, photo),
 // kept by the back office. Its full name is computed there from the first two.
 const noStore = (data: unknown) => NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
-
-const profile = (u: { firstName: string | null; lastName: string | null; jobTitle: string | null; email: string }) => ({
-  firstName: u.firstName ?? "",
-  lastName: u.lastName ?? "",
-  jobTitle: u.jobTitle ?? "",
-  email: u.email,
-});
-
-async function token(): Promise<string> {
-  if (!authViaBackoffice()) throw new ApiError(404, "not_found", "Ce réglage n’est pas disponible.");
-  const session = await readSession();
-  if (!session) throw new ApiError(401, "unauthorized", "Connectez-vous pour continuer.");
-  return session.accessToken;
-}
 
 export async function GET() {
   try {

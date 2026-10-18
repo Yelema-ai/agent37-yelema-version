@@ -60,7 +60,8 @@ export interface BoSession {
 export interface BoMe {
   /** `id` is the account's stable id: the user's connected apps (Composio) hang off it. */
   /** `name` is « Prénom Nom », computed by the back office from the two. */
-  user: { id: string; email: string; firstName: string | null; lastName: string | null; name: string | null; jobTitle: string | null; role: "admin" | "member" };
+  /** `avatarUrl`: the member's own photo, once the back office keeps one (`PUT /app/me/avatar`). */
+  user: { id: string; email: string; firstName: string | null; lastName: string | null; name: string | null; jobTitle: string | null; role: "admin" | "member"; avatarUrl?: string | null };
   workspace: { id: string; name: string; logoUrl: string | null };
   instance: { id: string } | null;
 }
@@ -308,6 +309,10 @@ export const backoffice = {
 
   me: (token: string) => call<BoMe>("/app/me", { token }),
   updateMe: (token: string, patch: { firstName?: string; lastName?: string; jobTitle?: string }) => call<BoMe>("/app/me", { method: "PATCH", token, body: patch }),
+  // The member's own photo (multipart, field `file`): the back office checks the type and the size,
+  // keeps it and answers the profile with its `avatarUrl`. `DELETE` goes back to the initial.
+  setMyAvatar: (token: string, form: FormData) => call<BoMe>("/app/me/avatar", { method: "PUT", token, form, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  removeMyAvatar: (token: string) => call<BoMe>("/app/me/avatar", { method: "DELETE", token }),
   instance: async (token: string): Promise<BoInstanceReading> => {
     const d = await call<{ instance: BoInstance | null; installation?: string; failedExperts?: unknown }>("/app/instance", { token });
     const known = d.installation === "running" || d.installation === "ready" || d.installation === "failed";

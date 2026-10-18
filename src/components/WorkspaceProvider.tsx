@@ -15,6 +15,9 @@ interface WorkspaceContextValue {
   /** The user's name as the back office knows it; null when it has none. */
   userName: string | null;
   userFirstName: string | null;
+  /** The user's own photo, null for the initial; changed at once from « Mon profil ». */
+  userAvatarUrl: string | null;
+  setUserAvatarUrl: (url: string | null) => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -24,14 +27,17 @@ export function WorkspaceProvider({
   userEmail,
   userName,
   userFirstName,
+  userAvatarUrl: initialAvatarUrl = null,
   children,
 }: {
   initialWorkspaces: WorkspaceWithRole[];
   userEmail: string;
   userName: string | null;
   userFirstName: string | null;
+  userAvatarUrl?: string | null;
   children: React.ReactNode;
 }) {
+  const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(initialAvatarUrl);
   const [workspaces, setWorkspaces] = useState<WorkspaceWithRole[]>(initialWorkspaces);
   const [currentId, setCurrentIdState] = useState<string | null>(initialWorkspaces[0]?.id ?? null);
 
@@ -61,7 +67,7 @@ export function WorkspaceProvider({
   );
 
   return (
-    <WorkspaceContext.Provider value={{ workspaces, current, setCurrentId, refresh, userEmail, userName, userFirstName }}>
+    <WorkspaceContext.Provider value={{ workspaces, current, setCurrentId, refresh, userEmail, userName, userFirstName, userAvatarUrl, setUserAvatarUrl }}>
       {children}
     </WorkspaceContext.Provider>
   );

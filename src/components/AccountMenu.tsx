@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 // espace appartient au back-office.
 export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
   const supabase = useSupabase();
-  const { current, userEmail, userName } = useWorkspace();
+  const { current, userEmail, userName, userAvatarUrl } = useWorkspace();
   // The profile is the back office's: only there can the user change their own name.
   const editable = usePublicConfig().authVia === "backoffice";
   const [profileOpen, setProfileOpen] = useState(false);
@@ -54,9 +54,7 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
           collapsed && "w-auto justify-center px-1"
         )}
       >
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand text-[13px] font-bold text-on-brand">
-          {initial}
-        </span>
+        <Face url={userAvatarUrl} initial={initial} />
         {!collapsed && (
           <>
             <span className="min-w-0 grow">
@@ -72,9 +70,7 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
 
       <DropdownMenuContent align="start" side="top" className="w-60 p-1.5">
         <div className="flex items-center gap-2.5 border-b border-line px-2.5 pt-2.5 pb-3">
-          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand text-[13px] font-bold text-on-brand">
-            {initial}
-          </span>
+          <Face url={userAvatarUrl} initial={initial} />
           <span className="min-w-0">
             <b className="block truncate text-sm">{shown}</b>
             {userName && <small className="block truncate text-xs text-ink-3">{userEmail}</small>}
@@ -114,5 +110,19 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
       </DropdownMenuContent>
       {editable && <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />}
     </DropdownMenu>
+  );
+}
+
+// The user's photo when they chose one, else their initial.
+function Face({ url, initial }: { url: string | null; initial: string }) {
+  return (
+    <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-brand text-[13px] font-bold text-on-brand">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="size-full object-cover" />
+      ) : (
+        initial
+      )}
+    </span>
   );
 }
