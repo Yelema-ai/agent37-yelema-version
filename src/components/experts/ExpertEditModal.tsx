@@ -33,7 +33,7 @@ function identityNote(look: ExpertLook): string | null {
  * sender keep the catalogue's name.
  */
 export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: string; open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { reload } = useExpertsContext();
+  const { reload, applyLook } = useExpertsContext();
   const [look, setLook] = useState<ExpertLook | null>(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState<"name" | "avatar" | null>(null);
@@ -59,6 +59,7 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
   // Every change lands at once: the team and the chat read the new look again.
   const changed = (l: ExpertLook) => {
     setLook(l);
+    applyLook(l);
     reload();
   };
 

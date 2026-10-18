@@ -12,7 +12,8 @@ const SIZES = {
 /**
  * Le visage d'un Expert, avec sa pastille d'état.
  *
- * La photo vient du catalogue du back-office (`photoUrl`) ; sans elle, on affiche l'initiale.
+ * La photo vient du catalogue du back-office (`photoUrl`) ; l'initiale s'affiche pendant qu'elle
+ * charge, et à sa place si elle manque.
  */
 export function ExpertAvatar({
   expert,
@@ -26,15 +27,13 @@ export function ExpertAvatar({
   const s = SIZES[size];
   return (
     <span className={cn("relative shrink-0", className)}>
-      {expert.photoUrl ? (
-        <ExpertImage src={expert.photoUrl} size={s.px} className={cn(s.box, "rounded-full object-cover object-[50%_20%]")} />
-      ) : (
-        <span
-          className={cn(s.box, "grid place-items-center rounded-full bg-tint font-bold text-brand-ink")}
-        >
-          {expert.displayName.trim()[0]?.toUpperCase() ?? "?"}
-        </span>
-      )}
+      {/* L'initiale attend sous la photo : elle reste si la photo ne se charge pas. */}
+      <span className={cn(s.box, "relative grid place-items-center overflow-hidden rounded-full bg-tint font-bold text-brand-ink")}>
+        {expert.displayName.trim()[0]?.toUpperCase() ?? "?"}
+        {expert.photoUrl && (
+          <ExpertImage src={expert.photoUrl} size={s.px} className="absolute inset-0 size-full rounded-full object-cover object-[50%_20%]" />
+        )}
+      </span>
       {/* La colonne « Gateway » de `hermes profile list` : le profil peut répondre, ou non. Inconnue
           quand la liste vient de la base (l'instance n'a pas été interrogée) : pas de pastille. */}
       {expert.gateway != null && (

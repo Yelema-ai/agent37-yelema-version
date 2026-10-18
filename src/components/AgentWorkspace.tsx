@@ -174,7 +174,7 @@ export function AgentWorkspace({
             <>
               {/* Fixed colors on purpose: a picture with white text over it, in both themes. */}
               <div className="relative isolate aspect-[1/1.02] shrink-0 overflow-hidden rounded-[22px] bg-[#8E6FB0] text-white">
-                {portrait && <ExpertImage src={portrait} sizes="238px" className="-z-20 object-cover object-[50%_15%]" />}
+                {portrait && <ExpertImage src={portrait} sizes="238px" priority className="-z-20 object-cover object-[50%_15%]" />}
                 <div className="absolute inset-0 -z-10 bg-gradient-to-b from-transparent from-45% to-[rgba(8,5,16,.82)]" />
                 {canEdit && (
                   <button

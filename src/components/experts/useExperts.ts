@@ -1,8 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import type { Expert } from "@/lib/types";
+
+/** The name and picture a member just gave an expert, by catalogue key, as the edit dialog got them back. */
+export interface LookChange {
+  key: string;
+  displayName: string | null;
+  defaultName: string;
+  avatarUrl: string | null;
+  defaultAvatarUrl: string | null;
+}
+
+// A picture that keeps its address after a change would come back from the browser's and the
+// optimizer's cache: a fresh address shows the new one at once. A signed address is left as it is.
+function fresh(url: string | null): string | null {
+  if (!url || url.includes("?")) return url;
+  return `${url}?v=${Date.now().toString(36)}`;
+}
 
 /** Les Experts lus par le serveur avec la page, pour l'organisation indiquée. */
 export interface InitialExperts {
@@ -53,6 +69,12 @@ export interface UseExperts {
   failedExperts: string[];
   loading: boolean;
   reload: () => void;
+  /**
+   * After the member renamed an expert or changed its picture: every screen shows it at once. The
+   * back office's reading of the team is kept for a while server-side, so the change wins over it
+   * for the rest of the page's life.
+   */
+  applyLook: (look: LookChange) => void;
 }
 
 /**
@@ -75,6 +97,28 @@ export function useExperts(workspaceId: string | undefined, initial: InitialExpe
   const quiet = useRef(false);
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
+  const [looks, setLooks] = useState<Map<string, { displayName: string; photoUrl: string | null }>>(new Map());
+  const applyLook = useCallback((look: LookChange) => {
+    setLooks((m) => {
+      const prev = m.get(look.key);
+      const photo = look.avatarUrl ?? look.defaultAvatarUrl;
+      const next = new Map(m);
+      // The same picture keeps its address (and stays cached); a new one gets a fresh one.
+      const same = prev && prev.photoUrl?.split("?v=")[0] === photo;
+      next.set(look.key, { displayName: look.displayName ?? look.defaultName, photoUrl: same ? prev.photoUrl : fresh(photo) });
+      return next;
+    });
+  }, []);
+  const shown = useMemo(
+    () =>
+      looks.size === 0
+        ? experts
+        : experts.map((e) => {
+            const look = e.catalogueKey ? looks.get(e.catalogueKey) : undefined;
+            return look ? { ...e, displayName: look.displayName, photoUrl: look.photoUrl ?? e.photoUrl } : e;
+          }),
+    [experts, looks]
+  );
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -136,5 +180,5 @@ export function useExperts(workspaceId: string | undefined, initial: InitialExpe
     }
   }, [experts]);
 
-  return { experts, unreadable, installing, stalled, failed: failure.failed, failedExperts: failure.experts, loading, reload };
+  return { experts: shown, unreadable, installing, stalled, failed: failure.failed, failedExperts: failure.experts, loading, reload, applyLook };
 }

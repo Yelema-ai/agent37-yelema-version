@@ -78,13 +78,11 @@ export function ExpertMedia({
 
   return (
     <>
-      {image ? (
-        <ExpertImage src={image} sizes={sizes} className="object-cover object-top" />
-      ) : (
-        <span className="absolute inset-0 grid place-items-center font-display text-7xl font-bold text-white/60">
-          {name.trim()[0]?.toUpperCase() ?? "?"}
-        </span>
-      )}
+      {/* The initial waits under the picture while it loads, and stays if it cannot be read. */}
+      <span className="absolute inset-0 grid place-items-center font-display text-7xl font-bold text-white/60">
+        {name.trim()[0]?.toUpperCase() ?? "?"}
+      </span>
+      {image && <ExpertImage src={image} sizes={sizes} className="object-cover object-top" />}
       {show && (
         <video
           ref={ref}
