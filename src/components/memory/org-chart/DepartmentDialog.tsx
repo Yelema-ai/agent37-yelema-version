@@ -19,6 +19,7 @@ export function DepartmentDialog({
   onOpenChange,
   units,
   unit,
+  parent: under = null,
   onSave,
 }: {
   open: boolean;
@@ -26,10 +27,12 @@ export function DepartmentDialog({
   units: OrgUnit[];
   /** Null: a new department. */
   unit: OrgUnit | null;
+  /** For a new department: the one it starts under (null: under the company). */
+  parent?: string | null;
   onSave: (draft: DepartmentDraft) => Promise<boolean>;
 }) {
   const [name, setName] = useState(unit?.name ?? "");
-  const [parent, setParent] = useState(unit?.parent ?? TOP);
+  const [parent, setParent] = useState(unit ? (unit.parent ?? TOP) : (under ?? TOP));
   const [saving, setSaving] = useState(false);
   // A department cannot go under itself or under one of its own.
   const parents = orderUnits(units).filter(({ unit: u }) => !unit || (u.id !== unit.id && canMoveUnit(units, unit.id, u.id)));

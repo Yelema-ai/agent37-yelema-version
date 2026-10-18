@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Plus } from "lucide-react";
+import { LayoutGrid, Loader2, Network, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { orderUnits, type OrgChart, type OrgUnit } from "@/lib/memory";
@@ -9,26 +9,31 @@ import { canDrop, countsByUnit, type DragItem } from "@/lib/org-chart";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/components/WorkspaceProvider";
+import { cn } from "@/lib/utils";
 import { DepartmentCard, UnplacedCard } from "./org-chart/DepartmentCard";
 import { DepartmentDialog, type DepartmentDraft } from "./org-chart/DepartmentDialog";
 import { OrgGrants } from "./org-chart/OrgGrants";
+import { OrgTree } from "./org-chart/OrgTree";
 import type { Change, Org } from "./org-chart/context";
 
 /**
- * The company's org chart, as departments: one card per department with its people in it, the
- * people without one apart, and the access exceptions folded at the bottom. It decides what each
+ * The company's org chart, as departments, in two views the admin switches between (remembered on
+ * this browser): one card per department with its people in it, or the tree from the company
+ * down. Below either, the people without one apart and the access exceptions folded. It decides what each
  * member's experts read in the company memory. The back office keeps it (its API still says
  * « unit ») and applies it; every change here is one call, then the chart is read again. Only the
  * workspace's admins change it.
  */
 export function OrgChartView() {
   const { current } = useWorkspace();
+  const company = current?.name ?? "Votre entreprise";
   const editable = current?.role === "admin";
   const [chart, setChart] = useState<OrgChart | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<OrgUnit | null>(null);
-  // `null` unit: a new department; otherwise the one being renamed or moved.
-  const [editing, setEditing] = useState<{ unit: OrgUnit | null } | null>(null);
+  // `null` unit: a new department (under `parent`); otherwise the one being renamed or moved.
+  const [editing, setEditing] = useState<{ unit: OrgUnit | null; parent?: string | null } | null>(null);
+  const [view, setView] = useView();
   const [target, setTarget] = useState<string | null>(null);
   const dragged = useRef<DragItem | null>(null);
 
@@ -60,7 +65,7 @@ export function OrgChartView() {
   if (!chart) {
     return (
       <div>
-        <Header editable={false} onAdd={() => undefined} />
+        <Header editable={false} onAdd={() => undefined} view={view} onView={setView} />
         {error ? <p className="mt-4 max-w-xl rounded-xl bg-ko-pale px-4 py-3 text-sm text-ko">{error}</p> : <Loader2 className="mt-6 h-5 w-5 animate-spin text-ink-3" aria-label="Chargement" />}
       </div>
     );
@@ -107,7 +112,7 @@ export function OrgChartView() {
 
   return (
     <div>
-      <Header editable={editable} onAdd={() => setEditing({ unit: null })} />
+      <Header editable={editable} onAdd={() => setEditing({ unit: null })} view={view} onView={setView} />
 
       {chart.units.length === 0 ? (
         <div className="mt-6 rounded-[22px] border border-dashed border-line bg-surface px-6 py-10 text-center">
@@ -118,6 +123,14 @@ export function OrgChartView() {
             </Button>
           )}
         </div>
+      ) : view === "arbre" ? (
+        <OrgTree
+          org={org}
+          company={company}
+          onAdd={(parent) => setEditing({ unit: null, parent })}
+          onEdit={(unit) => setEditing({ unit })}
+          onDelete={setRemoving}
+        />
       ) : (
         <div className="mt-6 grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {ordered.map(({ unit }) => (
@@ -144,6 +157,7 @@ export function OrgChartView() {
           onOpenChange={(open) => !open && setEditing(null)}
           units={chart.units}
           unit={editing.unit}
+          parent={editing.parent}
           onSave={saveDepartment}
         />
       )}
@@ -163,7 +177,36 @@ export function OrgChartView() {
   );
 }
 
-function Header({ editable, onAdd }: { editable: boolean; onAdd: () => void }) {
+type View = "cartes" | "arbre";
+const VIEW_KEY = "yelema.organigramme.vue";
+
+// The view last chosen on this browser, read after the first render (the server has no storage).
+function useView(): [View, (v: View) => void] {
+  const [view, setView] = useState<View>("cartes");
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(VIEW_KEY) === "arbre") setView("arbre");
+    } catch {
+      // No storage: the cards.
+    }
+  }, []);
+  const choose = (v: View) => {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      // Remembered for this visit only.
+    }
+  };
+  return [view, choose];
+}
+
+const VIEWS: { id: View; label: string; icon: typeof LayoutGrid }[] = [
+  { id: "cartes", label: "Cartes", icon: LayoutGrid },
+  { id: "arbre", label: "Arborescence", icon: Network },
+];
+
+function Header({ editable, onAdd, view, onView }: { editable: boolean; onAdd: () => void; view: View; onView: (v: View) => void }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
@@ -172,11 +215,30 @@ function Header({ editable, onAdd }: { editable: boolean; onAdd: () => void }) {
           Chaque département a sa mémoire. Ses membres et leurs experts la lisent ; un responsable lit aussi celle des départements qui dépendent du sien.
         </p>
       </div>
-      {editable && (
-        <Button onClick={onAdd} className="shrink-0 self-start">
-          <Plus /> Nouveau département
-        </Button>
-      )}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 self-start">
+        <div role="group" aria-label="Vue" className="inline-flex rounded-xl border border-line bg-surface p-1">
+          {VIEWS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={view === id}
+              onClick={() => onView(id)}
+              className={cn(
+                "inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold transition-colors",
+                view === id ? "bg-tint text-brand-ink" : "text-ink-2 hover:bg-soft hover:text-ink"
+              )}
+            >
+              <Icon className="size-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+        {editable && (
+          <Button onClick={onAdd}>
+            <Plus /> Nouveau département
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
