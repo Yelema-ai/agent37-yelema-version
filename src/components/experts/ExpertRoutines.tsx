@@ -141,33 +141,23 @@ export function ExpertRoutines({ agentId, expert }: { agentId: string; expert: R
           )}
         </div>
       ) : (
-        <>
-          <section className={panel}>
-            <h2 className="text-base font-semibold text-ink">Routines actives</h2>
-            {active.length === 0 ? (
-              <p className="mt-2 text-sm text-ink-3">
-                Aucune routine pour l’instant. Activez une proposition de {expert.name} ou créez la vôtre.
-              </p>
-            ) : (
-              <RoutinesTable routines={active} {...actions} />
-            )}
-          </section>
-
+        <section className={panel}>
           {suggested.length > 0 && (
-            <section className={panel}>
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <h2 className="text-base font-semibold text-ink">Proposées par {expert.name}</h2>
-                  <p className="mt-1 text-sm text-ink-3">Activez-les en un clic, vous les modifiez ensuite.</p>
-                </div>
-                <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => void bulk(suggested, true)}>
-                  {bulkBusy && <Loader2 className="animate-spin" />} Tout activer ({suggested.length})
-                </Button>
-              </div>
-              <RoutinesTable routines={suggested} suggested {...actions} />
-            </section>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-ink-3">
+                {suggested.length > 1 ? `${suggested.length} routines proposées par ${expert.name}` : `1 routine proposée par ${expert.name}`}
+              </p>
+              <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => void bulk(suggested, true)}>
+                {bulkBusy && <Loader2 className="animate-spin" />} Tout activer ({suggested.length})
+              </Button>
+            </div>
           )}
-        </>
+          {routines.length === 0 ? (
+            <p className="text-sm text-ink-3">Aucune routine pour l’instant. Créez la première.</p>
+          ) : (
+            <RoutinesTable routines={[...active, ...suggested]} {...actions} />
+          )}
+        </section>
       )}
 
       {editing && (

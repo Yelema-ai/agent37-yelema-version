@@ -3,10 +3,8 @@
 import { Fragment, useState } from "react";
 import { ChevronDown, History, Loader2, MoreHorizontal, Paperclip, Pencil, Play, Trash2 } from "lucide-react";
 import { absoluteFr, relativeFr } from "@/lib/fr-dates";
-import { paginate } from "@/lib/paginate";
 import { ROUTINE_TIMEZONE, isOneOff, scheduleLabel, type Routine } from "@/lib/routines";
 import { cn } from "@/lib/utils";
-import { Pager } from "@/components/Pager";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,7 +14,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const SIZES = [5, 10, 20];
+// Rows shown before « Voir plus ».
+const FIRST = 5;
 
 function Switch({ on, label, disabled, onChange }: { on: boolean; label: string; disabled?: boolean; onChange: () => void }) {
   return (
@@ -61,11 +60,11 @@ export interface RoutineActions {
   bulkBusy: boolean;
 }
 
-// One section's routines as a table, 5 rows a page by default. `suggested`: shipped with the expert
-// and never turned on, so a single "Activer" instead of the switch and the menu.
-export function RoutinesTable({ routines, suggested = false, ...act }: { routines: Routine[]; suggested?: boolean } & RoutineActions) {
-  const [size, setSize] = useState(SIZES[0]);
-  const [page, setPage] = useState(1);
+// All of an expert's routines in one table: its own first (active or paused, with a switch and a
+// menu), then the ones it proposes (shipped with it, never turned on: a « Proposée » label and a
+// single « Activer »). The first five rows, then « Voir plus » for the rest.
+export function RoutinesTable({ routines, ...act }: { routines: Routine[] } & RoutineActions) {
+  const [all, setAll] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Routines whose full instructions are open under their row.
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -75,8 +74,9 @@ export function RoutinesTable({ routines, suggested = false, ...act }: { routine
       if (!next.delete(id)) next.add(id);
       return next;
     });
-  const columns = suggested ? 4 : 7;
-  const shown = paginate(routines, page, size);
+  const columns = 7;
+  const shown = { items: all ? routines : routines.slice(0, FIRST) };
+  const more = routines.length - FIRST;
   const th = "px-3 py-2 text-left text-xs font-semibold text-ink-3";
   // Ids of routines that left this list (activated, deleted) are simply ignored.
   const chosen = routines.filter((r) => selected.has(r.id));
@@ -110,7 +110,7 @@ export function RoutinesTable({ routines, suggested = false, ...act }: { routine
             <Button size="sm" disabled={act.bulkBusy} onClick={() => void bulk(true)}>
               {act.bulkBusy && <Loader2 className="animate-spin" />} Activer
             </Button>
-            {!suggested && (
+            {chosen.some((r) => !r.suggested) && (
               <Button size="sm" variant="outline" disabled={act.bulkBusy} onClick={() => void bulk(false)}>
                 Mettre en pause
               </Button>
@@ -130,9 +130,9 @@ export function RoutinesTable({ routines, suggested = false, ...act }: { routine
               </th>
               <th className={th}>Nom</th>
               <th className={th}>Horaire</th>
-              {!suggested && <th className={th}>État</th>}
-              {!suggested && <th className={th}>Dernière exécution</th>}
-              {!suggested && <th className={th}>Prochaine exécution</th>}
+              <th className={th}>État</th>
+              <th className={th}>Dernière exécution</th>
+              <th className={th}>Prochaine exécution</th>
               <th className={cn(th, "w-12")}>
                 <span className="sr-only">Actions</span>
               </th>
@@ -141,6 +141,7 @@ export function RoutinesTable({ routines, suggested = false, ...act }: { routine
           <tbody className="[&>tr+tr:not(.border-t-0)]:border-t [&>tr]:border-line">
             {shown.items.map((r) => {
               const busy = act.busyId === r.id;
+              const suggested = r.suggested;
               return (
                 <Fragment key={r.id}>
                 <tr className={cn("align-top", open.has(r.id) && "[&>td]:pb-1")}>
@@ -164,24 +165,18 @@ export function RoutinesTable({ routines, suggested = false, ...act }: { routine
                     {scheduleLabel(r.schedule)}
                     <span className="block text-xs text-ink-3">{ROUTINE_TIMEZONE}</span>
                   </td>
-                  {!suggested && (
-                    <td className="px-3 py-3">
+                  <td className="px-3 py-3">
+                    {suggested ? (
+                      <span className="inline-flex rounded-full bg-tint px-2.5 py-1 text-xs font-semibold text-brand-ink">Proposée</span>
+                    ) : (
                       <span className="flex items-center gap-2">
                         <Switch on={r.enabled} label={`${r.enabled ? "Mettre en pause" : "Activer"} ${r.name}`} disabled={busy} onChange={() => act.onToggle(r, !r.enabled)} />
                         <span className={r.enabled ? "text-ink" : "text-ink-3"}>{r.enabled ? "Active" : "En pause"}</span>
                       </span>
-                    </td>
-                  )}
-                  {!suggested && (
-                    <td className="px-3 py-3">
-                      <When iso={r.lastRunAt} empty="Jamais" />
-                    </td>
-                  )}
-                  {!suggested && (
-                    <td className="px-3 py-3">
-                      <When iso={r.nextRunAt} empty="—" />
-                    </td>
-                  )}
+                    )}
+                  </td>
+                  <td className="px-3 py-3">{suggested ? <span className="text-ink-3">—</span> : <When iso={r.lastRunAt} empty="Jamais" />}</td>
+                  <td className="px-3 py-3">{suggested ? <span className="text-ink-3">—</span> : <When iso={r.nextRunAt} empty="—" />}</td>
                   <td className="px-3 py-2.5 text-right">
                     {suggested ? (
                       <Button size="sm" disabled={busy} onClick={() => act.onToggle(r, true)}>
@@ -223,7 +218,14 @@ export function RoutinesTable({ routines, suggested = false, ...act }: { routine
           </tbody>
         </table>
       </div>
-      <Pager page={shown} total={routines.length} onPage={setPage} size={size} sizes={SIZES} onSize={(n) => (setSize(n), setPage(1))} />
+      {more > 0 && (
+        <div className="mt-2 flex justify-center border-t border-line pt-3">
+          <Button variant="ghost" size="sm" aria-expanded={all} onClick={() => setAll((v) => !v)}>
+            <ChevronDown className={cn("transition-transform", all && "rotate-180")} />
+            {all ? "Voir moins" : `Voir plus (${more})`}
+          </Button>
+        </div>
+      )}
     </>
   );
 }
