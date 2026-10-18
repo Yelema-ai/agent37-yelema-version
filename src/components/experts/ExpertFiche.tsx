@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CalendarClock, Check, FileText, Loader2, MapPin, MessageCircle, Play, ShieldCheck, Sparkles, Target, UserPlus, type LucideIcon } from "lucide-react";
+import { CalendarClock, Check, FileText, Loader2, MessageCircle, Play, ShieldCheck, Target, UserPlus } from "lucide-react";
 import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch } from "@/lib/api";
@@ -14,30 +14,12 @@ import { agentTabPath } from "@/lib/expert-tabs";
 import { cn } from "@/lib/utils";
 import { EXPERT_SHEETS, type ExpertSheet } from "@/config/expert-sheets";
 
-// Where any expert answers: the web app, and the channels its member connects (Canaux), in
-// Yelema's order. The same for every expert: nothing here is the catalogue's.
-const CHANNELS = ["Telegram", "Web", "Slack", "Teams", "WhatsApp"];
-
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
     <section className={cn("rounded-card border border-line bg-surface p-5 @xl:p-6", className)}>
       <h2 className="font-display text-lg font-semibold tracking-[-0.01em] text-ink">{title}</h2>
       <div className="mt-3.5">{children}</div>
     </section>
-  );
-}
-
-function Note({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: React.ReactNode }) {
-  return (
-    <div className="flex gap-3">
-      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-tint text-brand-ink">
-        <Icon className="size-[18px]" />
-      </span>
-      <div className="min-w-0">
-        <h3 className="text-[15px] font-semibold text-ink">{title}</h3>
-        <p className="mt-1 text-sm leading-relaxed text-ink-2">{children}</p>
-      </div>
-    </div>
   );
 }
 
@@ -171,35 +153,8 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
         </Section>
       )}
 
-      {(expert.valueAdd || expert.whyRelevant) && (
-        <Section title="Ce que vous y gagnez">
-          <div className="grid gap-5 @3xl:grid-cols-2">
-            {expert.valueAdd && (
-              <Note icon={Sparkles} title="Pour votre équipe">
-                {expert.valueAdd}
-              </Note>
-            )}
-            {expert.whyRelevant && (
-              <Note icon={MapPin} title="Sa maîtrise du terrain">
-                {expert.whyRelevant}
-              </Note>
-            )}
-          </div>
-        </Section>
-      )}
-
         </>
       )}
-
-      <Section title="Où lui parler">
-        <ul className="flex flex-wrap gap-2">
-          {(site?.channels ?? CHANNELS).map((c) => (
-            <li key={c} className="rounded-full border border-line bg-soft px-3.5 py-1.5 text-[13.5px] font-medium text-ink-2">
-              {c}
-            </li>
-          ))}
-        </ul>
-      </Section>
 
       <div className="flex flex-col items-stretch gap-4 rounded-card border-2 border-brand bg-surface p-5 @xl:flex-row @xl:items-center @xl:p-6">
         <div className="min-w-0 flex-1">
@@ -343,33 +298,6 @@ function SiteSections({ sheet, pronoun, name }: { sheet: ExpertSheet; pronoun: "
         </Section>
       </div>
 
-      <Section title="Ses outils">
-        <div className="grid gap-4 @2xl:grid-cols-2">
-          {sheet.tools.map((g) => (
-            <div key={g.group}>
-              <p className="mb-2 text-[13px] font-semibold text-ink-2">{g.group}</p>
-              <Chips items={g.items} />
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      <Section title="Ce que vous y gagnez">
-        <div className="grid gap-5 @3xl:grid-cols-2">
-          <Note icon={Sparkles} title="Sa valeur ajoutée">
-            {sheet.valueAdd}
-          </Note>
-          <div>
-            <Note icon={MapPin} title="Sa maîtrise du terrain">
-              {sheet.terrain}
-            </Note>
-            <div className="mt-3 pl-12">
-              <Chips items={sheet.payments} />
-            </div>
-          </div>
-        </div>
-        <p className="mt-5 rounded-2xl bg-tint px-4 py-3 text-[14.5px] leading-relaxed text-ink">{sheet.why}</p>
-      </Section>
     </>
   );
 }

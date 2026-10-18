@@ -11,7 +11,6 @@ export interface ExpertSheet {
   intro: string;
   mission: string;
   inAction: string;
-  valueAdd: string;
   daily: string[];
   skills: { name: string; summary: string }[];
   deliverables: { label: string; summary: string }[];
@@ -19,12 +18,6 @@ export interface ExpertSheet {
   routines: { label: string; when: string }[];
   approval: string[];
   needs: string[];
-  terrain: string;
-  payments: string[];
-  tools: { group: string; items: string[] }[];
-  /** Where to reach the expert, as the site lists them. */
-  channels: string[];
-  why: string;
 }
 
 export const EXPERT_SHEETS: Record<string, ExpertSheet> = {
@@ -36,8 +29,6 @@ export const EXPERT_SHEETS: Record<string, ExpertSheet> = {
       "Le développement commercial de bout en bout : trouver les bons prospects, les relancer au bon moment, préparer les devis et garder le pipeline vivant, du premier message à la signature.",
     inAction:
       "Un devis envoyé il y a 5 jours reste sans réponse. Kouassi relance avec un message personnalisé, propose un appel, et prévient le commercial que le prospect a rouvert le devis deux fois. L’affaire repart.",
-    valueAdd:
-      "Un pipeline toujours à jour et des relances jamais oubliées : mécaniquement, plus d’affaires signées, et des commerciaux qui passent leur temps à vendre.",
     daily: [
       "Qualifie les demandes entrantes (WhatsApp, e-mail, DM) et pose les bonnes questions",
       "Relance les devis en attente avec le ton juste, sans harceler",
@@ -92,16 +83,5 @@ export const EXPERT_SHEETS: Record<string, ExpertSheet> = {
       "Conditions de remise autorisées",
       "Canaux par lesquels arrivent les demandes",
     ],
-    terrain:
-      "Il vend sur les canaux d’ici : la relation se noue sur WhatsApp, le devis se règle souvent en mobile money, et un grand compte impose son propre circuit de bon de commande. Il sait à quel moment un dossier se règle en espèces, combien de relances tient un acheteur avant de se fermer, et quels circuits d’achat exigent une commande signée.",
-    payments: ["Orange Money", "MTN MoMo", "Wave", "Moov Money", "GIM-UEMOA"],
-    tools: [
-      { group: "Bureautique", items: ["Gmail", "Outlook", "PowerPoint", "Excel", "Google Sheets"] },
-      { group: "CRM et prospection", items: ["HubSpot", "Salesforce", "Pipedrive", "Odoo", "LinkedIn", "Calendly"] },
-      { group: "Données et tableaux de bord", items: ["Power BI"] },
-      { group: "Outils d’ici", items: ["WhatsApp", "Wave", "Orange Money", "MTN MoMo", "Djamo"] },
-    ],
-    channels: ["Telegram", "Slack", "Teams", "E-mail", "Espace web"],
-    why: "Une affaire se gagne au bon suivi, au bon moment. Kouassi tient ce suivi, pour que votre équipe garde son temps pour la vente.",
   },
 };
