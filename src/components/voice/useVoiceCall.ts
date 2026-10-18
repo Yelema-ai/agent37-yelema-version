@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { VoiceCall, webPlatform, type AethexError, type WebRTCPlatform } from "@aethexai/react/core";
+import { VoiceCall, webPlatform, type AethexError } from "@aethexai/react/core";
 import type { VoiceLanguage } from "@/lib/voice";
-import { firstTurn, rms, stepTurn, type CallPhase, type TurnState } from "@/lib/call-turns";
+import { firstTurn, stepTurn, type CallPhase, type TurnState } from "@/lib/call-turns";
+import { micMeter, withMicTap, type MicMeter } from "@/lib/mic-tap";
 import { playHangupTone } from "./useRingback";
 
 // One call with an expert, from the browser. Signaling goes to this app's own /api/voice, which adds
@@ -46,26 +47,6 @@ export interface UseVoiceCall {
   toggleHold(): boolean;
 }
 
-// The member's microphone level, read from the stream the SDK opened (no second capture).
-function micMeter(stream: MediaStream): { level(): number; close(): void } | null {
-  try {
-    const ctx = new AudioContext();
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 512;
-    ctx.createMediaStreamSource(stream).connect(analyser);
-    const buf = new Float32Array(analyser.fftSize);
-    return {
-      level: () => {
-        analyser.getFloatTimeDomainData(buf);
-        return rms(buf);
-      },
-      close: () => void ctx.close().catch(() => {}),
-    };
-  } catch {
-    return null;
-  }
-}
-
 export function useVoiceCall(): UseVoiceCall {
   const [phase, setPhase] = useState<CallPhase>("idle");
   const [reason, setReason] = useState<string | null>(null);
@@ -74,7 +55,7 @@ export function useVoiceCall(): UseVoiceCall {
   const [longer, setLonger] = useState(false);
   const [holding, setHolding] = useState(false);
   const call = useRef<VoiceCall | null>(null);
-  const mic = useRef<ReturnType<typeof micMeter>>(null);
+  const mic = useRef<MicMeter | null>(null);
   const timers = useRef<ReturnType<typeof setInterval>[]>([]);
   const phaseRef = useRef<CallPhase>("idle");
   const switches = useRef({ muted: false, longer: false, holding: false });
@@ -139,16 +120,11 @@ export function useVoiceCall(): UseVoiceCall {
       setMutedState(false);
       setLonger(false);
       setHolding(false);
-      // The SDK's own browser adapter, with the microphone stream also measured.
-      const platform: WebRTCPlatform = {
-        ...webPlatform,
-        getUserMedia: async (constraints) => {
-          const stream = await webPlatform.getUserMedia(constraints);
-          mic.current?.close();
-          mic.current = micMeter(stream);
-          return stream;
-        },
-      };
+      // The SDK's own browser adapter, every field kept, with the microphone stream also measured.
+      const platform = withMicTap(webPlatform, (stream) => {
+        mic.current?.close();
+        mic.current = micMeter(stream);
+      });
       let refusal: string | null = null;
       // The back office's refusal ("Cet expert n'est pas encore disponible.") is in the body, which the SDK does not read.
       const fetchImpl: typeof fetch = async (input, init) => {
