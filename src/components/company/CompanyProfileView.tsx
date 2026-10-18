@@ -42,7 +42,12 @@ export function CompanyProfileView() {
   const [note, setNote] = useState("");
   // Remounted after a presentation is deposited, so the memory below lists it.
   const [memoryKey, setMemoryKey] = useState(0);
-  const admin = useWorkspace().current?.role === "admin";
+  const { current, setCurrentLogoUrl } = useWorkspace();
+  const admin = current?.role === "admin";
+  // The menu shows the main logo: follow it as soon as it changes here.
+  useEffect(() => {
+    if (profile) setCurrentLogoUrl(profile.logoUrl);
+  }, [profile, setCurrentLogoUrl]);
 
   const load = useCallback(
     () =>

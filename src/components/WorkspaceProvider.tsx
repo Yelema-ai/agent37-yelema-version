@@ -18,6 +18,8 @@ interface WorkspaceContextValue {
   /** The user's own photo, null for the initial; changed at once from « Mon profil ». */
   userAvatarUrl: string | null;
   setUserAvatarUrl: (url: string | null) => void;
+  /** Called by « Entreprise » when the main logo changes, so the menu follows at once. */
+  setCurrentLogoUrl: (url: string | null) => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -61,13 +63,19 @@ export function WorkspaceProvider({
     return ws;
   }, []);
 
+  const setCurrentLogoUrl = useCallback(
+    (url: string | null) =>
+      setWorkspaces((ws) => ws.map((w) => (w.id === currentId && w.logo_url !== url ? { ...w, logo_url: url } : w))),
+    [currentId]
+  );
+
   const current = useMemo(
     () => workspaces.find((w) => w.id === currentId) ?? null,
     [workspaces, currentId]
   );
 
   return (
-    <WorkspaceContext.Provider value={{ workspaces, current, setCurrentId, refresh, userEmail, userName, userFirstName, userAvatarUrl, setUserAvatarUrl }}>
+    <WorkspaceContext.Provider value={{ workspaces, current, setCurrentId, refresh, userEmail, userName, userFirstName, userAvatarUrl, setUserAvatarUrl, setCurrentLogoUrl }}>
       {children}
     </WorkspaceContext.Provider>
   );

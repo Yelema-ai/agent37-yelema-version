@@ -65,7 +65,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // session above.
   const me = authViaBackoffice() ? await currentPrincipal() : null;
   const workspaces: WorkspaceWithRole[] = me
-    ? [{ id: me.workspace.id, name: me.workspace.name, owner_id: "", created_at: "", role: me.user.role }]
+    ? [{ id: me.workspace.id, name: me.workspace.name, owner_id: "", created_at: "", role: me.user.role, logo_url: me.workspace.logoUrl }]
     : authViaBackoffice()
       ? []
       : await loadWorkspaces(createAdminClient(), user.id);

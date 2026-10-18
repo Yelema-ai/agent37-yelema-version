@@ -9,7 +9,6 @@ import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { AccountMenu } from "@/components/AccountMenu";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { ExpertItem } from "@/components/experts/ExpertItem";
-import { branding } from "@/config/branding";
 import { cn } from "@/lib/utils";
 
 // Pas de « Chat entreprise » : chaque membre a sa propre instance, il n'y a pas de discussion
@@ -23,7 +22,10 @@ const NAV = [
 export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const pathname = usePathname();
   const { current } = useWorkspace();
-  const { logoUrl } = usePublicConfig();
+  // The company's main logo first (« Entreprise »), then the deployment's, then the initial.
+  // Never the Yelema Y here: it is only the tab icon (favicon), Yelema stays in « Powered by ».
+  const deploymentLogo = usePublicConfig().logoUrl;
+  const logoUrl = current?.logo_url ?? deploymentLogo;
   const { experts, unreadable } = useExpertsContext();
 
   return (
@@ -40,8 +42,9 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt="" className="size-[38px] shrink-0 rounded-xl object-contain" />
           ) : (
-            // Sans logo d'entreprise : le Y de Yelema (fichier exact du site), jamais une initiale.
-            <Image src={branding.markUrl} alt="" width={38} height={38} priority className="size-[38px] shrink-0 rounded-xl" />
+            <span className="grid size-[38px] shrink-0 place-items-center rounded-xl bg-brand font-display text-lg font-bold text-on-brand">
+              {(current?.name?.trim()[0] ?? "?").toUpperCase()}
+            </span>
           )}
           {!collapsed && (
             <span className="min-w-0">
