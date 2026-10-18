@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { callDuration, callHeaders, chosenVoice, countryFlag, countryName, filterVoices, isCallTranscript, parseVoicePrefs, signalingStep, transcriptOf, voiceFacets, type VoiceOption } from "./voice.ts";
+import { callDuration, callHeaders, chosenVoice, countryFlag, countryName, filterVoices, isCallTranscript, parseVoicePrefs, signalingStep, transcriptOf, findInText, voiceFacets, type VoiceOption } from "./voice.ts";
 
 test("a relayed step is only one the SDK sends, with its own method", () => {
   assert.equal(signalingStep("conv_abc-1", "offer", "POST"), "offer");
@@ -90,4 +90,15 @@ test("transcriptOf keeps well-formed lines only", () => {
     { who: "user", text: "Bonjour" },
     { who: "expert", text: "Bonjour Aïcha" },
   ]);
+});
+
+test("findInText ignores case and accents and gives ranges of the original text", () => {
+  const t = "Réunion jeudi : la réunion de Bouaké.";
+  assert.deepEqual(findInText(t, "reunion"), [
+    [0, 7],
+    [19, 26],
+  ]);
+  assert.equal(t.slice(...findInText(t, "BOUAKE")[0]), "Bouaké");
+  assert.deepEqual(findInText(t, "  "), []);
+  assert.deepEqual(findInText(t, "Abidjan"), []);
 });

@@ -160,3 +160,30 @@ export function callDuration(seconds: number | null): string {
   const s = seconds % 60;
   return m ? `${m} min${s ? ` ${s} s` : ""}` : `${s} s`;
 }
+
+/**
+ * Where `query` appears in `text`, ignoring case and accents (« reunion » finds « Réunion »), as
+ * [start, end) ranges of `text`; empty for an empty query. Searches the « Transcription » of a call.
+ */
+export function findInText(text: string, query: string): [number, number][] {
+  const fold = (c: string) => c.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  const q = [...query.trim()].map(fold).join("");
+  if (!q) return [];
+  // Folded text, with where each folded character came from.
+  let folded = "";
+  const from: number[] = [];
+  let i = 0;
+  for (const ch of text) {
+    const f = fold(ch);
+    for (let k = 0; k < f.length; k++) from.push(i);
+    folded += f;
+    i += ch.length;
+  }
+  from.push(text.length);
+  const out: [number, number][] = [];
+  for (let at = folded.indexOf(q); at !== -1; at = folded.indexOf(q, at + q.length)) {
+    const end = from[at + q.length - 1];
+    out.push([from[at], end + [...text.slice(end)][0].length]);
+  }
+  return out;
+}

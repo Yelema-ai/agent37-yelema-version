@@ -8,7 +8,7 @@ import { useVoices } from "./useVoices";
 import { preloadFace } from "./face";
 
 /** "Appeler" for one expert; absent where voice calls are off (no voice offered). */
-export function CallButton({ expert, className }: { expert: { key: string; name: string; photoUrl: string | null }; className?: string }) {
+export function CallButton({ expert, className, label = "Appeler" }: { expert: { key: string; name: string; photoUrl: string | null }; className?: string; label?: string }) {
   const voices = useVoices();
   const [open, setOpen] = useState(false);
   const shown = voices.length > 0;
@@ -21,7 +21,7 @@ export function CallButton({ expert, className }: { expert: { key: string; name:
     <>
       <Button variant="secondary" size="sm" className={className} onClick={() => setOpen(true)} onPointerEnter={() => preloadFace(expert.photoUrl)} onFocus={() => preloadFace(expert.photoUrl)}>
         <Phone />
-        Appeler
+        {label}
       </Button>
       <CallDialog open={open} onOpenChange={setOpen} expert={expert} voices={voices} />
     </>
