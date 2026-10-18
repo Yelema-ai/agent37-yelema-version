@@ -77,6 +77,7 @@ export function OrgChartView() {
     change,
     target,
     assign: (unit, member, profile) => change("/api/org/assignments", "POST", { unit, member, profile }, profile ? "Expert ajouté au département." : "Membre ajouté au département."),
+    setRole: (id, role) => change(`/api/org/assignments/${id}`, "PATCH", { role }, "Rôle mis à jour."),
     dragStart: (e, item) => {
       dragged.current = item;
       e.dataTransfer.setData("text/plain", item.kind);
@@ -94,7 +95,9 @@ export function OrgChartView() {
       dragged.current = null;
       setTarget(null);
       if (!item || item.kind === "unit" || !canDrop(chart.units, item, unit)) return;
-      void org.assign(unit, item.member, item.kind === "expert" ? item.profile : null);
+      // Taken from a department: the same place moves. From the palette or « Sans département »: a new one.
+      if (item.from) void change(`/api/org/assignments/${item.from.id}`, "PATCH", { unit }, item.kind === "expert" ? "Expert déplacé." : "Membre déplacé.");
+      else void org.assign(unit, item.member, item.kind === "expert" ? item.profile : null);
     },
   };
 

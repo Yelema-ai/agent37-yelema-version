@@ -1,5 +1,5 @@
 import type { DragEvent } from "react";
-import type { OrgChart } from "@/lib/memory";
+import type { OrgChart, OrgRole } from "@/lib/memory";
 import type { DragItem } from "@/lib/org-chart";
 
 /** One change sent to the back office, then the chart read again; false when refused (already said). */
@@ -13,6 +13,8 @@ export interface Org {
   /** The department a person or an expert is being dragged over. */
   target: string | null;
   assign: (unit: string, member: string, profile: string | null) => Promise<boolean>;
+  /** A person's or an expert's place in a department: member or head. */
+  setRole: (assignment: string, role: OrgRole) => Promise<boolean>;
   dragStart: (e: DragEvent, item: DragItem) => void;
   dragOver: (e: DragEvent, unit: string) => void;
   dragLeave: (unit: string) => void;

@@ -3,8 +3,12 @@
 // (apps/control-plane/src/components/admin/tenant-workspace/org-chart/model.ts); `null` is the company.
 import type { OrgChart, OrgUnit } from "./memory.ts";
 
-/** What is dragged: a unit, a member (their whole instance) or one of their experts. */
-export type DragItem = { kind: "unit"; id: string } | { kind: "member"; member: string } | { kind: "expert"; member: string; profile: string };
+/**
+ * What is dragged: a unit, a member (their whole instance) or one of their experts. A person or an
+ * expert taken from a department carries that place: dropped elsewhere it moves, it is not copied.
+ */
+export type Place = { id: string; unit: string };
+export type DragItem = { kind: "unit"; id: string } | { kind: "member"; member: string; from?: Place } | { kind: "expert"; member: string; profile: string; from?: Place };
 
 export type UnitCounts = { members: number; experts: number; documents: number };
 
@@ -50,9 +54,9 @@ export function childrenByParent(units: readonly OrgUnit[]): Map<string | null, 
 /** May a unit go under `target` (`null`: the top) without ending up under itself? */
 export const canMoveUnit = (units: readonly OrgUnit[], id: string, target: string | null): boolean => target == null || !subtree(units, id).has(target);
 
-/** May this item be dropped on this box? A member or an expert goes into a unit, never onto the company. */
+/** May this item be dropped on this box? A member or an expert goes into a unit, never onto the company nor back onto its own. */
 export const canDrop = (units: readonly OrgUnit[], item: DragItem | null, target: string | null): boolean =>
-  item != null && (item.kind === "unit" ? item.id !== target && canMoveUnit(units, item.id, target) : target != null);
+  item != null && (item.kind === "unit" ? item.id !== target && canMoveUnit(units, item.id, target) : target != null && item.from?.unit !== target);
 
 export function countsByUnit(chart: Pick<OrgChart, "units" | "members" | "documents">): Map<string | null, UnitCounts> {
   const out = new Map<string | null, UnitCounts>();

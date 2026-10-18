@@ -7,7 +7,9 @@ import { canDrop, childrenByParent, countsByUnit, initialCollapsed, type UnitCou
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { Org } from "./context";
+import { PeoplePalette } from "./PeoplePalette";
 import { count } from "./styles";
+import { UnitPanel } from "./UnitPanel";
 
 const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25];
 const TOOL = "inline-flex h-9 items-center gap-1 rounded-[10px] border border-line bg-surface px-2.5 text-[13px] font-semibold text-ink hover:bg-soft disabled:opacity-40";
@@ -21,10 +23,10 @@ export interface TreeActions {
 }
 
 /**
- * The chart as a tree, from the company down: Sélim's board, kept to the boxes. A box says how
- * many people, experts and documents its department has; its actions sit in a « … » menu. A
- * department dragged onto another box moves under it; a person dragged from « Sans département »
- * joins the department dropped on.
+ * The chart as a tree, from the company down. A box says how many people, experts and documents
+ * its department has; its actions sit in a « … » menu, and a click on its name opens the side panel
+ * (who is in it, their role, every gesture without dragging). A department dragged onto another
+ * box moves under it; a person or one of their experts dragged from the palette joins the box.
  */
 export function OrgTree({ org, company, ...act }: { org: Org; company: string } & TreeActions) {
   const { chart } = org;
@@ -35,6 +37,8 @@ export function OrgTree({ org, company, ...act }: { org: Org; company: string } 
   // The department being moved, and the box it is over (`null`: the company's).
   const moving = useRef<string | null>(null);
   const [over, setOver] = useState<string | null | undefined>(undefined);
+  // The box whose panel is open (`null`: the company's); undefined: none.
+  const [selected, setSelected] = useState<string | null | undefined>(undefined);
 
   const folders = chart.units.filter((u) => (children.get(u.id)?.length ?? 0) > 0).map((u) => u.id);
   const allOpen = collapsed.size === 0;
@@ -82,6 +86,8 @@ export function OrgTree({ org, company, ...act }: { org: Org; company: string } 
     collapsed,
     over,
     drag,
+    selected,
+    select: (id) => setSelected((s) => (s === id ? undefined : id)),
     toggle: (id) =>
       setCollapsed((s) => {
         const n = new Set(s);
@@ -91,29 +97,33 @@ export function OrgTree({ org, company, ...act }: { org: Org; company: string } 
   };
 
   return (
-    <section aria-label="Organigramme en arborescence" className="mt-6 overflow-hidden rounded-[22px] border border-line bg-soft">
-      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-3 py-2">
-        <button type="button" className={TOOL} aria-label="Dézoomer" disabled={zoom === 0} onClick={() => setZoom((z) => Math.max(0, z - 1))}>
-          <Minus className="size-4" />
-        </button>
-        <span role="status" className="min-w-10 text-center text-xs tabular-nums text-ink-3">
-          {Math.round((ZOOMS[zoom] ?? 1) * 100)} %
-        </span>
-        <button type="button" className={TOOL} aria-label="Zoomer" disabled={zoom === ZOOMS.length - 1} onClick={() => setZoom((z) => Math.min(ZOOMS.length - 1, z + 1))}>
-          <Plus className="size-4" />
-        </button>
-        {folders.length > 0 && (
-          <button type="button" className={TOOL} onClick={() => setCollapsed(allOpen ? new Set(folders) : new Set())}>
-            {allOpen ? "Tout replier" : "Tout déplier"}
+    <div className="mt-6 flex flex-col items-start gap-4 lg:flex-row">
+      <PeoplePalette org={org} />
+      <section aria-label="Organigramme en arborescence" className="w-full min-w-0 flex-1 overflow-hidden rounded-[22px] border border-line bg-soft">
+        <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-3 py-2">
+          <button type="button" className={TOOL} aria-label="Dézoomer" disabled={zoom === 0} onClick={() => setZoom((z) => Math.max(0, z - 1))}>
+            <Minus className="size-4" />
           </button>
-        )}
-      </div>
-      <div className="max-h-[640px] overflow-auto p-6">
-        <div style={{ zoom: ZOOMS[zoom] ?? 1 }} className="w-max min-w-full">
-          <TreeNode unit={null} t={t} />
+          <span role="status" className="min-w-10 text-center text-xs tabular-nums text-ink-3">
+            {Math.round((ZOOMS[zoom] ?? 1) * 100)} %
+          </span>
+          <button type="button" className={TOOL} aria-label="Zoomer" disabled={zoom === ZOOMS.length - 1} onClick={() => setZoom((z) => Math.min(ZOOMS.length - 1, z + 1))}>
+            <Plus className="size-4" />
+          </button>
+          {folders.length > 0 && (
+            <button type="button" className={TOOL} onClick={() => setCollapsed(allOpen ? new Set(folders) : new Set())}>
+              {allOpen ? "Tout replier" : "Tout déplier"}
+            </button>
+          )}
         </div>
-      </div>
-    </section>
+        <div className="max-h-[640px] overflow-auto p-6">
+          <div style={{ zoom: ZOOMS[zoom] ?? 1 }} className="w-max min-w-full">
+            <TreeNode unit={null} t={t} />
+          </div>
+        </div>
+      </section>
+      {selected !== undefined && <UnitPanel key={selected ?? "root"} org={org} company={company} unitId={selected} counts={counts} onClose={() => setSelected(undefined)} />}
+    </div>
   );
 }
 
@@ -132,11 +142,13 @@ interface Tree {
     leave: (id: string | null) => void;
     drop: (e: DragEvent, id: string | null) => void;
   };
+  selected: string | null | undefined;
+  select: (id: string | null) => void;
   toggle: (id: string) => void;
 }
 
 function TreeNode({ unit, t }: { unit: OrgUnit | null; t: Tree }) {
-  const { org, company, act, children, counts, collapsed, over, drag, toggle } = t;
+  const { org, company, act, children, counts, collapsed, over, drag, selected, select, toggle } = t;
   const { chart } = org;
   const id = unit?.id ?? null;
   const kids = children.get(id) ?? [];
@@ -157,12 +169,19 @@ function TreeNode({ unit, t }: { unit: OrgUnit | null; t: Tree }) {
           "rounded-2xl border px-3.5 py-2.5 text-left shadow-sm transition-shadow",
           unit ? "w-[220px] bg-surface" : "w-[244px] bg-tint",
           org.editable && id != null && "cursor-grab",
-          lit ? "border-brand ring-2 ring-brand/30" : "border-line",
+          lit ? "border-brand ring-2 ring-brand/30" : selected === id ? "border-brand shadow-md" : "border-line",
         )}
       >
         <div className="flex items-start gap-1">
           <div className="min-w-0 grow">
-            <p className="text-[14px] font-bold leading-snug text-ink [overflow-wrap:anywhere]">{unit?.name ?? company}</p>
+            <button
+              type="button"
+              aria-pressed={selected === id}
+              onClick={() => select(id)}
+              className="block w-full text-left text-[14px] font-bold leading-snug text-ink [overflow-wrap:anywhere] hover:underline"
+            >
+              {unit?.name ?? company}
+            </button>
             <p className="mt-0.5 text-[12px] tabular-nums text-ink-3">
               {unit
                 ? [count(c.members, "membre"), c.experts ? count(c.experts, "expert") : null, c.documents ? count(c.documents, "document") : null].filter(Boolean).join(", ")

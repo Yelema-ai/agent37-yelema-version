@@ -86,7 +86,7 @@ export function DepartmentCard({
               <li
                 key={r.place.id}
                 draggable={editable}
-                onDragStart={(e) => org.dragStart(e, { kind: "member", member: r.member.id })}
+                onDragStart={(e) => org.dragStart(e, { kind: "member", member: r.member.id, from: { id: r.place.id, unit: unit.id } })}
                 className={cn("flex items-center gap-2.5 rounded-xl px-1.5 py-1.5", editable && "cursor-grab hover:bg-soft")}
               >
                 <span className="grid size-8 shrink-0 place-items-center rounded-full bg-tint text-[11px] font-bold text-brand-ink">{initials(name)}</span>
@@ -96,7 +96,7 @@ export function DepartmentCard({
                     aria-label={`Rôle de ${name}`}
                     className={cn(FIELD, "h-8 shrink-0", r.place.role === "head" && "font-semibold text-brand-ink")}
                     value={r.place.role}
-                    onChange={(e) => void org.change(`/api/org/assignments/${r.place.id}`, "PATCH", { role: e.target.value }, "Rôle mis à jour.")}
+                    onChange={(e) => void org.setRole(r.place.id, e.target.value as OrgRole)}
                   >
                     <option value="member">{ROLE_LABEL.member}</option>
                     <option value="head">{ROLE_LABEL.head}</option>
@@ -120,10 +120,28 @@ export function DepartmentCard({
           <p className="text-xs font-semibold text-ink-3">Experts ajoutés seuls</p>
           <ul className="mt-1.5 flex flex-wrap gap-1.5">
             {experts.map((r) => (
-              <li key={r.place.id} className="inline-flex items-center gap-1 rounded-full border border-line bg-surface py-1 pl-2.5 pr-1 text-[13px] text-ink">
+              <li
+                key={r.place.id}
+                draggable={editable}
+                onDragStart={(e) => org.dragStart(e, { kind: "expert", member: r.member.id, profile: r.place.profile ?? "", from: { id: r.place.id, unit: unit.id } })}
+                className={cn("inline-flex items-center gap-1 rounded-full border border-line bg-surface py-1 pl-2.5 pr-1 text-[13px] text-ink", editable && "cursor-grab")}
+              >
                 <span>
                   {expertLabel(r)} <span className="text-ink-3">de {memberName(r.member).split(" ")[0]}</span>
                 </span>
+                {editable ? (
+                  <select
+                    aria-label={`Rôle de ${expertLabel(r)}`}
+                    className={cn(FIELD, "h-7 rounded-full px-1.5 text-xs", r.place.role === "head" && "font-semibold text-brand-ink")}
+                    value={r.place.role}
+                    onChange={(e) => void org.setRole(r.place.id, e.target.value as OrgRole)}
+                  >
+                    <option value="member">{ROLE_LABEL.member}</option>
+                    <option value="head">{ROLE_LABEL.head}</option>
+                  </select>
+                ) : (
+                  r.place.role === "head" && <span className="rounded-full bg-tint px-2 py-0.5 text-xs font-semibold text-brand-ink">{ROLE_LABEL.head}</span>
+                )}
                 {editable && (
                   <button type="button" aria-label={`Retirer ${expertLabel(r)}`} onClick={() => remove(r)} className="grid size-6 place-items-center rounded-full text-ink-3 hover:bg-ko-pale hover:text-ko">
                     <X className="size-3.5" />

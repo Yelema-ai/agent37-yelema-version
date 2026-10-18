@@ -29,6 +29,9 @@ test("drops: a unit anywhere but its branch, a member or an expert into a unit o
   assert.equal(canDrop(units, { kind: "member", member: "m" }, null), false);
   assert.equal(canDrop(units, { kind: "expert", member: "m", profile: "koffi" }, "fin"), true);
   assert.equal(canDrop(units, null, "fin"), false);
+  // Taken from a department: anywhere else, not back onto it.
+  assert.equal(canDrop(units, { kind: "member", member: "m", from: { id: "a1", unit: "fin" } }, "fin"), false);
+  assert.equal(canDrop(units, { kind: "expert", member: "m", profile: "koffi", from: { id: "a2", unit: "fin" } }, "dg"), true);
 });
 
 test("counts: members (whole instance), experts, documents; null is the whole company", () => {
