@@ -2,31 +2,19 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { expertThemes } from "./expert-themes.ts";
 
-const fallback = [
-  { key: "direction", label: "Direction", experts: ["djeneba"] },
-  { key: "ventes", label: "Ventes & Relation client", experts: ["kouassi", "awa"] },
-  { key: "legal", label: "Légal", experts: ["ibrahim"] },
-];
 const e = (key: string, name: string, category: { key: string; label: string } | null = null) => ({ key, name, category });
 
-test("the stopgap list files the experts while the back office files only some", () => {
-  const r = expertThemes([], [e("djeneba", "Djénéba"), e("kouassi", "Kouassi"), e("x1", "Awa"), e("ibrahim", "Ibrahim", { key: "jur", label: "Juridique" })], fallback);
-  assert.deepEqual(r.themes, [
-    { key: "direction", label: "Direction", count: 1 },
-    { key: "ventes", label: "Ventes & Relation client", count: 2 },
-    { key: "legal", label: "Légal", count: 1 },
-  ]);
-  assert.equal(r.themeOf.get("x1"), "ventes");
-});
-
-test("an expert the list does not name keeps the back office's category; one with neither has none", () => {
-  const r = expertThemes([], [e("djeneba", "Djénéba"), e("zoe", "Zoé", { key: "data", label: "Données" }), e("nobody", "Personne")], fallback);
-  assert.deepEqual(r.themes.map((t) => t.key), ["direction", "data"]);
-  assert.equal(r.themeOf.has("nobody"), false);
-});
-
-test("the back office wins once it files every expert, in its own order", () => {
+test("themes follow the back office's categories, in its order", () => {
   const cats = [{ key: "b", label: "B" }, { key: "a", label: "A" }];
-  const r = expertThemes(cats, [e("djeneba", "Djénéba", { key: "a", label: "A" }), e("kouassi", "Kouassi", { key: "b", label: "B" })], fallback);
-  assert.deepEqual(r.themes.map((t) => t.key), ["b", "a"]);
+  const r = expertThemes(cats, [e("djeneba", "Djénéba", { key: "a", label: "A" }), e("kouassi", "Kouassi", { key: "b", label: "B" })]);
+  assert.deepEqual(r.themes, [
+    { key: "b", label: "B", count: 1 },
+    { key: "a", label: "A", count: 1 },
+  ]);
+});
+
+test("a category the ordered list lacks comes after it; an expert without one is under no theme; an empty theme is not shown", () => {
+  const r = expertThemes([{ key: "a", label: "A" }, { key: "vide", label: "Vide" }], [e("x", "X", { key: "z", label: "Z" }), e("y", "Y", { key: "a", label: "A" }), e("nobody", "Personne")]);
+  assert.deepEqual(r.themes.map((t) => t.key), ["a", "z"]);
+  assert.equal(r.themeOf.has("nobody"), false);
 });

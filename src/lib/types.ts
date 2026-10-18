@@ -83,6 +83,27 @@ export interface CatalogueExpert {
   suggestions: string[];
 }
 
+/**
+ * An expert's job sheet, as the site's Experts pages word it, served by the back office's catalogue
+ * (`sheet` on /api/v1/public/experts/{key}); null while the expert's pack has none.
+ */
+export interface ExpertSheet {
+  /** « Expert IA commercial », « Experte IA marketing ». */
+  label: string | null;
+  pronoun: "il" | "elle" | null;
+  tagline: string | null;
+  intro: string | null;
+  mission: string | null;
+  inAction: string | null;
+  daily: string[];
+  skills: { name: string; summary: string | null }[];
+  deliverables: { label: string; summary: string | null }[];
+  templates: string[];
+  routines: { label: string; when: string | null }[];
+  approval: string[];
+  needs: string[];
+}
+
 export interface CatalogueExpertDetail extends CatalogueExpert {
   useCase: string | null;
   valueAdd: string | null;
@@ -92,6 +113,7 @@ export interface CatalogueExpertDetail extends CatalogueExpert {
   competencies: string[];
   deliverables: { label: string; thumbnailUrl: string | null }[];
   video: { url: string | null; posterUrl: string | null };
+  sheet: ExpertSheet | null;
 }
 
 /** Où un expert du catalogue est installé pour l'utilisateur courant. */

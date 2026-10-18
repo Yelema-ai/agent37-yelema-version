@@ -1,6 +1,6 @@
 import "server-only";
 import { backofficeUrl } from "@/lib/runtime-config";
-import type { CatalogueExpert, CatalogueExpertDetail } from "@/lib/types";
+import type { CatalogueExpert, CatalogueExpertDetail, ExpertSheet } from "@/lib/types";
 
 // The expert catalogue, served by the Yelema back office (GET /api/v1/public/experts and
 // /experts/{key}): who each expert is, in words and media. Nothing about experts is written in
@@ -61,12 +61,41 @@ function toExpert(raw: Raw): CatalogueExpert | null {
   };
 }
 
+const rowsOf = (v: unknown): Raw[] => (Array.isArray(v) ? v.filter((r): r is Raw => !!r && typeof r === "object") : []);
+
+// The job sheet, when the expert's pack has one; a row without its main text is dropped.
+function toSheet(v: unknown): ExpertSheet | null {
+  if (!v || typeof v !== "object") return null;
+  const s = v as Raw;
+  const pronoun = str(s.pronoun);
+  return {
+    label: str(s.label),
+    pronoun: pronoun === "elle" || pronoun === "il" ? pronoun : null,
+    tagline: str(s.tagline),
+    intro: str(s.intro),
+    mission: str(s.mission),
+    inAction: str(s.inAction),
+    daily: strings(s.daily),
+    skills: rowsOf(s.skills)
+      .map((r) => ({ name: str(r.name) ?? "", summary: str(r.summary) }))
+      .filter((r) => r.name),
+    deliverables: rowsOf(s.deliverables)
+      .map((r) => ({ label: str(r.label) ?? "", summary: str(r.summary) }))
+      .filter((r) => r.label),
+    templates: strings(s.templates),
+    routines: rowsOf(s.routines)
+      .map((r) => ({ label: str(r.label) ?? "", when: str(r.when) }))
+      .filter((r) => r.label),
+    approval: strings(s.approval),
+    needs: strings(s.needs),
+  };
+}
+
 function toDetail(raw: Raw): CatalogueExpertDetail | null {
   const base = toExpert(raw);
   if (!base) return null;
   const showcase = (raw.showcase && typeof raw.showcase === "object" ? raw.showcase : {}) as Raw;
   const video = (raw.video && typeof raw.video === "object" ? raw.video : {}) as Raw;
-  const rows = (v: unknown): Raw[] => (Array.isArray(v) ? v.filter((r): r is Raw => !!r && typeof r === "object") : []);
   return {
     ...base,
     tagline: base.tagline ?? str(showcase.tagline),
@@ -74,14 +103,15 @@ function toDetail(raw: Raw): CatalogueExpertDetail | null {
     valueAdd: str(showcase.valueAdd),
     whyRelevant: str(showcase.whyRelevant),
     salesDescription: str(raw.salesDescription),
-    skills: rows(raw.skills)
+    skills: rowsOf(raw.skills)
       .map((s) => ({ name: str(s.name) ?? "", summary: str(s.summary) }))
       .filter((s) => s.name),
     competencies: strings(raw.competencies),
-    deliverables: rows(raw.deliverableExamples)
+    deliverables: rowsOf(raw.deliverableExamples)
       .map((d) => ({ label: str(d.label) ?? "", thumbnailUrl: str(d.thumbnailUrl) }))
       .filter((d) => d.label),
     video: { url: str(video.url), posterUrl: str(video.posterUrl) },
+    sheet: toSheet(raw.sheet),
   };
 }
 
@@ -132,10 +162,20 @@ async function fetchCatalogue(): Promise<Catalogue> {
   const listed = Array.isArray(envelope.categories)
     ? envelope.categories.map(category).filter((c): c is { key: string; label: string } => c !== null)
     : [];
-  // Without an ordered list, categories come in the order the experts introduce them.
+  // Without an ordered list, categories follow their own `order` (the back office's), then the
+  // order the experts introduce them.
   const seen = new Map<string, { key: string; label: string }>();
   for (const c of listed) seen.set(c.key, c);
-  for (const e of experts) if (e.category && !seen.has(e.category.key)) seen.set(e.category.key, e.category);
+  const introduced: { key: string; label: string }[] = [];
+  for (const e of experts) if (e.category && !seen.has(e.category.key) && !introduced.some((c) => c.key === e.category!.key)) introduced.push(e.category);
+  const orderOf = new Map<string, number>();
+  for (const r of rows) {
+    const c = ((r ?? {}) as Raw).category as Raw | null | undefined;
+    const key = c && typeof c === "object" ? (str(c.key) ?? str(c.id)) : null;
+    if (key && typeof c!.order === "number" && !orderOf.has(key)) orderOf.set(key, c!.order);
+  }
+  const rank = (c: { key: string }) => orderOf.get(c.key) ?? Number.POSITIVE_INFINITY;
+  for (const c of [...introduced].sort((a, b) => rank(a) - rank(b))) seen.set(c.key, c);
 
   const value: Catalogue = {
     available: true,

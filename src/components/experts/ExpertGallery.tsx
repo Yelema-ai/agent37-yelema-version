@@ -19,7 +19,6 @@ import { useWorkspace } from "@/components/WorkspaceProvider";
 import { ExpertMedia } from "@/components/experts/ExpertMedia";
 import { useCatalogue } from "@/components/experts/useCatalogue";
 import { Button } from "@/components/ui/button";
-import { EXPERT_THEMES } from "@/config/expert-themes";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { expertThemes } from "@/lib/expert-themes";
 import type { CatalogueResponse } from "@/lib/types";
@@ -140,7 +139,7 @@ export function ExpertGallery() {
   const [category, setCategory] = useState<string | null>(null);
 
   // The themes: the back office's when it files every expert, else the stopgap list.
-  const { themes: categories, themeOf } = useMemo(() => expertThemes(catalogue.categories, catalogue.experts, EXPERT_THEMES), [catalogue]);
+  const { themes: categories, themeOf } = useMemo(() => expertThemes(catalogue.categories, catalogue.experts), [catalogue]);
   const shown = category ? catalogue.experts.filter((e) => themeOf.get(e.key) === category) : catalogue.experts;
 
   return (

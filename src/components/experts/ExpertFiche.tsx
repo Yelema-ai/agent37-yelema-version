@@ -12,7 +12,7 @@ import { useCatalogue, useCatalogueExpert } from "@/components/experts/useCatalo
 import { Button } from "@/components/ui/button";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { cn } from "@/lib/utils";
-import { EXPERT_SHEETS, type ExpertSheet } from "@/config/expert-sheets";
+import type { ExpertSheet } from "@/lib/types";
 
 function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -66,8 +66,8 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
   const skills = expert.skills.length > 0 ? expert.skills : expert.competencies.map((name) => ({ name, summary: null }));
   // The full-length portrait, as on the site; the head-and-shoulders one when there is none.
   const image = expert.portraitUrl ?? expert.avatarUrl;
-  // The site's sheet, where one is copied here (Kouassi for now); else the catalogue's.
-  const site = EXPERT_SHEETS[expert.key] ?? null;
+  // The job sheet the catalogue serves (the site's words); without one, the catalogue's own fields.
+  const site = expert.sheet;
   const tagline = site?.tagline ?? expert.tagline;
   const lead = site?.mission ?? pitch;
   const useCase = site?.inAction ?? expert.useCase;
@@ -80,7 +80,7 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
           <p className="text-[12.5px] font-semibold uppercase tracking-[0.06em] text-brand-ink">{site?.label ?? "Fiche de poste"}</p>
           <h1 className="mt-2 font-display text-[30px] font-bold leading-tight tracking-[-0.02em] text-ink @xl:text-[38px]">{expert.name}</h1>
           {expert.role && <p className="mt-1 text-[17px] font-semibold text-brand-ink">{expert.role}</p>}
-          {site && <p className="mt-1 text-[13.5px] text-ink-3">{site.intro}</p>}
+          {site?.intro && <p className="mt-1 text-[13.5px] text-ink-3">{site.intro}</p>}
           {tagline && <p className="mt-4 max-w-[560px] font-display text-xl leading-snug text-ink @xl:text-[22px]">{tagline}</p>}
           {lead && <p className="mt-3 max-w-[620px] text-[15px] leading-[1.6] text-ink-2">{lead}</p>}
         </div>
@@ -112,7 +112,7 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
       )}
 
       {site ? (
-        <SiteSections sheet={site} pronoun={site.pronoun} name={expert.name} />
+        <SiteSections sheet={site} pronoun={site.pronoun ?? expert.pronoun} name={expert.name} />
       ) : (
         <>
       {skills.length > 0 && (
@@ -216,88 +216,99 @@ function Chips({ items }: { items: string[] }) {
   );
 }
 
-// The site's sheet, section by section, in its words (src/config/expert-sheets.ts).
+// The job sheet, section by section, in the site's words; a section the sheet leaves empty is not shown.
 function SiteSections({ sheet, pronoun, name }: { sheet: ExpertSheet; pronoun: "il" | "elle" | null; name: string }) {
   const p = pronoun;
   const does = (what: string) => (p ? `Ce qu’${p} fait ${what}` : `Ce que fait ${name} ${what}`);
   return (
     <>
       <div className="grid gap-4 @3xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-        <Section title={does("au quotidien")}>
-          <Bullets items={sheet.daily} />
+        {sheet.daily.length > 0 && (
+          <Section title={does("au quotidien")}>
+            <Bullets items={sheet.daily} />
+          </Section>
+        )}
+        {sheet.skills.length > 0 && (
+          <Section title="Ses compétences">
+            <ul className="grid gap-x-6 gap-y-3 @xl:grid-cols-2">
+              {sheet.skills.map((s) => (
+                <li key={s.name} className="min-w-0">
+                  <b className="block text-[14.5px] font-semibold leading-snug text-ink">{s.name}</b>
+                  {s.summary && <span className="mt-0.5 block text-[13px] leading-[1.5] text-ink-2">{s.summary}</span>}
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
+      </div>
+
+      {sheet.deliverables.length > 0 && (
+        <Section title="Ses livrables">
+          <p className="-mt-2 mb-3.5 text-[13.5px] text-ink-3">Prêts à relire, envoyés seulement après votre accord.</p>
+          <ul className="grid gap-2.5 @xl:grid-cols-2 @3xl:grid-cols-3">
+            {sheet.deliverables.map((d) => (
+              <li key={d.label} className="flex gap-3 rounded-2xl bg-soft p-3.5">
+                <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-surface text-brand-ink">
+                  <FileText className="size-4" />
+                </span>
+                <span className="min-w-0">
+                  <b className="block text-[14px] font-semibold leading-snug text-ink">{d.label}</b>
+                  {d.summary && <span className="mt-0.5 block text-[12.5px] leading-[1.45] text-ink-2">{d.summary}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {sheet.templates.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 text-[13px] font-semibold text-ink-2">Et ses modèles prêts, adaptés à votre maison</p>
+              <Chips items={sheet.templates} />
+            </div>
+          )}
         </Section>
-        <Section title="Ses compétences">
-          <ul className="grid gap-x-6 gap-y-3 @xl:grid-cols-2">
-            {sheet.skills.map((s) => (
-              <li key={s.name} className="min-w-0">
-                <b className="block text-[14.5px] font-semibold leading-snug text-ink">{s.name}</b>
-                <span className="mt-0.5 block text-[13px] leading-[1.5] text-ink-2">{s.summary}</span>
+      )}
+
+      {sheet.routines.length > 0 && (
+        <Section title={does("sans qu’on le demande")}>
+          <ul className="divide-y divide-line">
+            {sheet.routines.map((r) => (
+              <li key={r.label} className="flex flex-col gap-1 py-2.5 first:pt-0 last:pb-0 @xl:flex-row @xl:items-center @xl:justify-between @xl:gap-4">
+                <span className="flex items-center gap-2.5 text-[14.5px] text-ink">
+                  <CalendarClock className="size-4 shrink-0 text-brand-ink" />
+                  {r.label}
+                </span>
+                {r.when && <span className="shrink-0 pl-[26px] text-[12.5px] font-semibold text-ink-3 @xl:pl-0">{r.when}</span>}
               </li>
             ))}
           </ul>
         </Section>
-      </div>
-
-      <Section title="Ses livrables">
-        <p className="-mt-2 mb-3.5 text-[13.5px] text-ink-3">Prêts à relire, envoyés seulement après votre accord.</p>
-        <ul className="grid gap-2.5 @xl:grid-cols-2 @3xl:grid-cols-3">
-          {sheet.deliverables.map((d) => (
-            <li key={d.label} className="flex gap-3 rounded-2xl bg-soft p-3.5">
-              <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-surface text-brand-ink">
-                <FileText className="size-4" />
-              </span>
-              <span className="min-w-0">
-                <b className="block text-[14px] font-semibold leading-snug text-ink">{d.label}</b>
-                <span className="mt-0.5 block text-[12.5px] leading-[1.45] text-ink-2">{d.summary}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-        {sheet.templates.length > 0 && (
-          <div className="mt-4">
-            <p className="mb-2 text-[13px] font-semibold text-ink-2">Et ses modèles prêts, adaptés à votre maison</p>
-            <Chips items={sheet.templates} />
-          </div>
-        )}
-      </Section>
-
-      <Section title={does("sans qu’on le demande")}>
-        <ul className="divide-y divide-line">
-          {sheet.routines.map((r) => (
-            <li key={r.label} className="flex flex-col gap-1 py-2.5 first:pt-0 last:pb-0 @xl:flex-row @xl:items-center @xl:justify-between @xl:gap-4">
-              <span className="flex items-center gap-2.5 text-[14.5px] text-ink">
-                <CalendarClock className="size-4 shrink-0 text-brand-ink" />
-                {r.label}
-              </span>
-              <span className="shrink-0 pl-[26px] text-[12.5px] font-semibold text-ink-3 @xl:pl-0">{r.when}</span>
-            </li>
-          ))}
-        </ul>
-      </Section>
+      )}
 
       <div className="grid gap-4 @3xl:grid-cols-2">
-        <Section title="Soumis à votre accord">
-          <ul className="flex flex-col gap-2.5">
-            {sheet.approval.map((t) => (
-              <li key={t} className="flex gap-2.5 text-[14.5px] text-ink">
-                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-coral-ink" />
-                {t}
-              </li>
-            ))}
-          </ul>
-        </Section>
-        <Section title={p ? `Ce dont ${p} a besoin` : `Ce dont ${name} a besoin`}>
-          <ul className="flex flex-col gap-2.5">
-            {sheet.needs.map((t) => (
-              <li key={t} className="flex gap-2.5 text-[14.5px] text-ink">
-                <Target className="mt-0.5 size-4 shrink-0 text-brand-ink" />
-                {t}
-              </li>
-            ))}
-          </ul>
-        </Section>
+        {sheet.approval.length > 0 && (
+          <Section title="Soumis à votre accord">
+            <ul className="flex flex-col gap-2.5">
+              {sheet.approval.map((t) => (
+                <li key={t} className="flex gap-2.5 text-[14.5px] text-ink">
+                  <ShieldCheck className="mt-0.5 size-4 shrink-0 text-coral-ink" />
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
+        {sheet.needs.length > 0 && (
+          <Section title={p ? `Ce dont ${p} a besoin` : `Ce dont ${name} a besoin`}>
+            <ul className="flex flex-col gap-2.5">
+              {sheet.needs.map((t) => (
+                <li key={t} className="flex gap-2.5 text-[14.5px] text-ink">
+                  <Target className="mt-0.5 size-4 shrink-0 text-brand-ink" />
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
       </div>
-
     </>
   );
 }
