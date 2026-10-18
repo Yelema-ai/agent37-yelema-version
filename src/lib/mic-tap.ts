@@ -26,10 +26,24 @@ export function withMicTap<P extends { getUserMedia(constraints: MediaStreamCons
   };
 }
 
+/**
+ * A Web Audio context, also on older Safari (`webkitAudioContext`), asked to run: one made outside a
+ * click (after a network wait, or when the expert hangs up) may start suspended on Safari and iOS,
+ * and a suspended context neither measures nor plays. Throws where there is no Web Audio.
+ */
+export function newAudioContext(): AudioContext {
+  const g = globalThis as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
+  const Ctx = g.AudioContext ?? g.webkitAudioContext;
+  if (!Ctx) throw new Error("no Web Audio");
+  const ctx = new Ctx();
+  if (ctx.state === "suspended") void ctx.resume().catch(() => {});
+  return ctx;
+}
+
 /** A level meter on a stream; null when the browser cannot make one (no Web Audio, refused…). */
 export function micMeter(stream: MediaStream): MicMeter | null {
   try {
-    const ctx = new AudioContext();
+    const ctx = newAudioContext();
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 512;
     ctx.createMediaStreamSource(stream).connect(analyser);

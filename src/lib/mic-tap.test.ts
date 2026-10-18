@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { micMeter, withMicTap } from "./mic-tap.ts";
+import { micMeter, newAudioContext, withMicTap } from "./mic-tap.ts";
 
 const stream = { id: "micro" } as unknown as MediaStream;
 
@@ -65,5 +65,26 @@ test("micMeter is null where there is no Web Audio at all", () => {
     assert.equal(micMeter(stream), null);
   } finally {
     g.AudioContext = before;
+  }
+});
+
+test("newAudioContext falls back to webkitAudioContext and asks a suspended one to run", () => {
+  const g = globalThis as { AudioContext?: unknown; webkitAudioContext?: unknown };
+  const before = { a: g.AudioContext, w: g.webkitAudioContext };
+  let resumed = 0;
+  delete g.AudioContext;
+  g.webkitAudioContext = class {
+    state = "suspended";
+    resume() {
+      resumed += 1;
+      return Promise.resolve();
+    }
+  };
+  try {
+    newAudioContext();
+    assert.equal(resumed, 1);
+  } finally {
+    g.AudioContext = before.a;
+    g.webkitAudioContext = before.w;
   }
 });
