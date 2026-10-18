@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { History, Loader2, MoreHorizontal, Pencil, Play, Trash2 } from "lucide-react";
+import { Fragment, useState } from "react";
+import { ChevronDown, History, Loader2, MoreHorizontal, Paperclip, Pencil, Play, Trash2 } from "lucide-react";
 import { absoluteFr, relativeFr } from "@/lib/fr-dates";
 import { paginate } from "@/lib/paginate";
 import { ROUTINE_TIMEZONE, isOneOff, scheduleLabel, type Routine } from "@/lib/routines";
@@ -67,6 +67,15 @@ export function RoutinesTable({ routines, suggested = false, ...act }: { routine
   const [size, setSize] = useState(SIZES[0]);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Routines whose full instructions are open under their row.
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggleOpen = (id: string) =>
+    setOpen((s) => {
+      const next = new Set(s);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  const columns = suggested ? 4 : 7;
   const shown = paginate(routines, page, size);
   const th = "px-3 py-2 text-left text-xs font-semibold text-ink-3";
   // Ids of routines that left this list (activated, deleted) are simply ignored.
@@ -129,17 +138,27 @@ export function RoutinesTable({ routines, suggested = false, ...act }: { routine
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-line">
+          <tbody className="[&>tr+tr:not(.border-t-0)]:border-t [&>tr]:border-line">
             {shown.items.map((r) => {
               const busy = act.busyId === r.id;
               return (
-                <tr key={r.id} className="align-top">
+                <Fragment key={r.id}>
+                <tr className={cn("align-top", open.has(r.id) && "[&>td]:pb-1")}>
                   <td className="px-3 py-3.5">
                     <Check label={`Sélectionner ${r.name}`} on={selected.has(r.id)} onChange={() => setMany([r], !selected.has(r.id))} />
                   </td>
-                  <td className="max-w-[18rem] px-3 py-3">
+                  <td className="max-w-[24rem] px-3 py-3">
                     <p className="font-semibold text-ink">{r.name}</p>
-                    <p className="line-clamp-2 text-[13px] text-ink-3">{r.summary}</p>
+                    {!open.has(r.id) && <p className="line-clamp-2 text-[13px] text-ink-2">{r.task || r.summary}</p>}
+                    <button
+                      type="button"
+                      aria-expanded={open.has(r.id)}
+                      onClick={() => toggleOpen(r.id)}
+                      className="mt-1 inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand-ink hover:underline"
+                    >
+                      <ChevronDown className={cn("size-3.5 transition-transform", open.has(r.id) && "rotate-180")} />
+                      {open.has(r.id) ? "Masquer la consigne" : "Voir la consigne"}
+                    </button>
                   </td>
                   <td className="px-3 py-3 text-ink-2">
                     {scheduleLabel(r.schedule)}
@@ -173,6 +192,32 @@ export function RoutinesTable({ routines, suggested = false, ...act }: { routine
                     )}
                   </td>
                 </tr>
+                {open.has(r.id) && (
+                  <tr className="border-t-0">
+                    <td />
+                    <td colSpan={columns - 1} className="px-3 pb-4">
+                      <div className="rounded-xl bg-soft px-4 py-3 text-[13.5px] leading-relaxed text-ink">
+                        <p className="whitespace-pre-line">{r.task || r.summary}</p>
+                        {r.skills.length > 0 && (
+                          <p className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs font-semibold text-ink-3">Compétences</span>
+                            {r.skills.map((sk) => (
+                              <span key={sk} className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs text-ink-2">
+                                {sk}
+                              </span>
+                            ))}
+                          </p>
+                        )}
+                        {r.attachment && (
+                          <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-2">
+                            <Paperclip className="size-3.5" /> {r.attachment.split("/").pop()}
+                          </p>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
