@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { readiness, type JourZero } from "@/lib/jour-zero";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const TONE = {
   ready: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300",
@@ -13,18 +14,22 @@ const TONE = {
   absent: "bg-soft text-ink-3",
 };
 
-// Whether the expert has done its day-zero preparation: a chip, and its checks behind it.
+// Whether the expert is usable and has done its day-zero preparation: a chip that says it in words,
+// a one-line hint on hover, and its checks behind it (what is left to do first).
 export function ExpertReadiness({
   agentId,
   profileId,
   expertName,
   onOpenTools,
+  compact = false,
   className,
 }: {
   agentId: string;
   profileId: string;
   expertName: string;
   onOpenTools: () => void;
+  /** In a narrow strip: « Prêt » or « Utilisable » alone, the rest on hover and behind it. */
+  compact?: boolean;
   className?: string;
 }) {
   const [jz, setJz] = useState<JourZero | null>(null);
@@ -46,19 +51,26 @@ export function ExpertReadiness({
   const Icon = r.state === "ready" ? Check : CircleDashed;
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title="Voir sa préparation"
-        className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold", TONE[r.state], className)}
-      >
-        <Icon className="size-3.5" /> {r.label}
-      </button>
+      <TooltipProvider delayDuration={150}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className={cn("inline-flex max-w-full items-center gap-1 rounded-full px-2.5 py-1 text-left text-[12px] font-semibold", TONE[r.state], className)}
+            >
+              <Icon className="size-3.5 shrink-0" /> <span className="truncate">{compact ? (r.state === "ready" ? "Prêt" : "Utilisable") : r.label}</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{r.hint}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Préparation de {expertName}</DialogTitle>
             <DialogDescription>
+              {r.state === "ready" ? "" : `Vous pouvez déjà écrire à ${expertName}. `}
               {r.state === "absent"
                 ? `${expertName} n’a pas encore fait sa préparation du premier jour.`
                 : `Ce que ${expertName} a vérifié avant de se mettre au travail${jz.date ? `, le ${new Date(jz.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}` : ""}.`}
@@ -66,7 +78,7 @@ export function ExpertReadiness({
           </DialogHeader>
           {jz.checks.length > 0 && (
             <ul className="flex flex-col gap-3">
-              {jz.checks.map((c) => (
+              {[...jz.checks].sort((a, b) => Number(a.ok) - Number(b.ok)).map((c) => (
                 <li key={c.id} className="flex gap-2.5">
                   <span className={cn("mt-0.5 grid size-5 shrink-0 place-items-center rounded-full", c.ok ? TONE.ready : TONE.partial)}>
                     {c.ok ? <Check className="size-3" /> : <X className="size-3" />}
