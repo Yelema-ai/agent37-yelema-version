@@ -1,20 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { catalogToolkit } from "@/lib/integration-catalog";
-import type { LlmOverview } from "@/lib/llm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 // The shapes of GET /api/composio-usage and /calls, as the back office gives them (see
-// BoComposioUsage, BoComposioCall). Amounts are in thousandths of a CFA franc.
+// BoComposioUsage, BoComposioCall). The back office also sends what each call cost Yelema: never
+// shown here, the client sees volumes, not Yelema's own costs.
 interface Count {
   executions: number;
-  amountMilliXof: number;
 }
 
 interface Usage extends Count {
@@ -32,7 +31,6 @@ interface Call {
   tool: string;
   via: string;
   httpStatus: number;
-  priceMilliXof: number;
 }
 
 interface CallsPage {
@@ -58,17 +56,21 @@ function period(month: string): { from: string; to: string } {
   return { from: `${month}-01`, to: end > today ? today : end };
 }
 
-const francs = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "XOF", maximumFractionDigits: 0 });
 const count = new Intl.NumberFormat("fr-FR");
-
-// Rounded to the franc here and nowhere else: sums are the back office's, in thousandths.
-const money = (milli: number) => francs.format(Math.round(milli / 1000));
 
 const moment = (iso: string) =>
   new Date(iso).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 const toolkitName = (slug: string | null) => (slug ? (catalogToolkit(slug)?.name ?? slug) : "Autre");
 const memberName = (m: { email: string | null; name: string | null }) => m.name ?? m.email ?? "Sans membre";
+
+const ok = (c: Call) => c.httpStatus >= 200 && c.httpStatus < 300;
+
+// One CSV field, for a French spreadsheet (semicolons, quotes doubled).
+const cell = (v: string) => (/[";\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+// Every call of the period, read page by page (100 a page), as a CSV the member downloads.
+const CSV_MAX_PAGES = 100;
 
 function query(month: string, member: string, page?: number): string {
   const params = new URLSearchParams(period(month));
@@ -77,9 +79,9 @@ function query(month: string, member: string, page?: number): string {
   return params.toString();
 }
 
-// What the experts' tools cost the workspace over a month: the total, by member, by application,
-// and the calls one by one. Everything is read from the back office, which records and prices each
-// execution.
+// How many times the experts called a connected tool over a month (model tokens are not counted
+// here): the total, by member, by application, and the calls one by one, downloadable as CSV.
+// Everything is read from the back office, which records each execution.
 export function UsageView() {
   const [month, setMonth] = useState(currentMonth);
   const [member, setMember] = useState("");
@@ -119,13 +121,38 @@ export function UsageView() {
       });
   }, [month, member]);
 
-  // On a key of their own, the model itself is paid to the provider: Yelema measures none of it.
-  const [ownKey, setOwnKey] = useState(false);
-  useEffect(() => {
-    apiFetch<LlmOverview>("/api/llm")
-      .then((o) => setOwnKey(Boolean(o.own) || (o.members ?? []).some((m) => m.own)))
-      .catch(() => undefined);
-  }, []);
+  const [exporting, setExporting] = useState(false);
+  async function download() {
+    setExporting(true);
+    try {
+      const all: Call[] = [];
+      for (let page = 1; page <= CSV_MAX_PAGES; page += 1) {
+        const res = await apiFetch<CallsPage>(`/api/composio-usage/calls?${query(month, member, page)}`);
+        all.push(...res.items);
+        if (!res.hasMore) break;
+      }
+      const lines = [
+        ["Date", "Membre", "E-mail", "Application", "Outil", "Résultat"].join(";"),
+        ...all.map((c) =>
+          [new Date(c.occurredAt).toLocaleString("fr-FR"), c.name ?? "", c.email ?? "", c.via === "meta" ? "Recherche d’outils" : toolkitName(c.toolkit), c.tool, ok(c) ? "Abouti" : "Non abouti"]
+            .map(cell)
+            .join(";")
+        ),
+      ];
+      // The BOM lets Excel read the accents.
+      const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `appels-outils-${month}${member ? `-${member.split("@")[0]}` : ""}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function more() {
     if (!calls) return;
@@ -143,13 +170,8 @@ export function UsageView() {
 
   return (
     <div className="max-w-5xl">
-      <h1 className="font-display text-[28px] font-bold tracking-tight text-ink">Consommation</h1>
-      <p className="mt-1 text-sm text-ink-2">Ce que les outils connectés de vos experts ont coûté, appel par appel.</p>
-      {ownKey && (
-        <p className="mt-3 max-w-2xl rounded-xl border border-line bg-soft px-4 py-3 text-[13px] text-ink-2">
-          Des experts tournent sur votre propre clé de modèle : la dépense de modèle n’est pas mesurée par Yelema, elle se lit chez votre fournisseur.
-        </p>
-      )}
+      <h1 className="font-display text-[28px] font-bold tracking-tight text-ink">Consommation d’outils hors tokens</h1>
+      <p className="mt-1 text-sm text-ink-2">Les appels de vos experts aux outils connectés (Gmail, Sheets, HubSpot…).</p>
 
       <div className="mt-5 flex flex-wrap items-end gap-3">
         <label className="text-[13px] font-semibold text-ink-3">
@@ -188,15 +210,9 @@ export function UsageView() {
 
       {usage && calls && (
         <>
-          <section className="mt-5 grid gap-4 rounded-[22px] border border-line bg-surface p-5 sm:grid-cols-2 sm:p-6">
-            <div>
-              <p className="text-[13px] font-semibold text-ink-3">Dépense</p>
-              <p className="mt-1 font-display text-xl font-bold text-ink">{money(usage.amountMilliXof)}</p>
-            </div>
-            <div>
-              <p className="text-[13px] font-semibold text-ink-3">Appels d’outils</p>
-              <p className="mt-1 font-display text-xl font-bold text-ink">{count.format(usage.executions)}</p>
-            </div>
+          <section className="mt-5 rounded-[22px] border border-line bg-surface p-5 sm:p-6">
+            <p className="text-[13px] font-semibold text-ink-3">Nombre d’appels d’outils</p>
+            <p className="mt-1 font-display text-[32px] font-bold leading-tight text-ink">{count.format(usage.executions)}</p>
           </section>
 
           {usage.executions === 0 && calls.items.length === 0 ? (
@@ -204,15 +220,22 @@ export function UsageView() {
           ) : (
             <>
               <div className="mt-8 grid gap-6 lg:grid-cols-2">
-                <Breakdown title="Par membre" label="Membre" rows={usage.byMember.map((m) => ({ ...m, key: m.email ?? "", name: memberName(m) }))} />
+                <Breakdown title="Par membre" label="Membre" total={usage.executions} rows={usage.byMember.map((m) => ({ ...m, key: m.email ?? "", name: memberName(m) }))} />
                 <Breakdown
                   title="Par application"
                   label="Application"
+                  total={usage.executions}
                   rows={usage.byToolkit.map((t) => ({ ...t, key: t.toolkit ?? "", name: toolkitName(t.toolkit) }))}
                 />
               </div>
 
-              <h2 className="mt-8 font-display text-lg font-semibold text-ink">Appels</h2>
+              <div className="mt-8 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-display text-lg font-semibold text-ink">Détail des appels</h2>
+                <Button variant="outline" size="sm" onClick={download} disabled={exporting} className="gap-1.5">
+                  {exporting ? <Loader2 className="animate-spin" /> : <Download />}
+                  Télécharger en CSV
+                </Button>
+              </div>
               <div className="mt-3 overflow-x-auto rounded-lg border border-line bg-surface">
                 <table className="w-full min-w-[720px] text-sm">
                   <thead className="bg-soft text-left text-xs text-ink-3">
@@ -221,7 +244,7 @@ export function UsageView() {
                       <th className="px-4 py-2.5 font-medium">Membre</th>
                       <th className="px-4 py-2.5 font-medium">Application</th>
                       <th className="px-4 py-2.5 font-medium">Outil</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Prix</th>
+                      <th className="px-4 py-2.5 font-medium">Résultat</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -237,13 +260,10 @@ export function UsageView() {
                               Recherche d’outils
                             </Badge>
                           )}
-                          {(c.httpStatus < 200 || c.httpStatus >= 300) && (
-                            <Badge variant="warning" className="ml-2">
-                              Non abouti
-                            </Badge>
-                          )}
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-ink">{money(c.priceMilliXof)}</td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {ok(c) ? <span className="text-ink-2">Abouti</span> : <Badge variant="warning">Non abouti</Badge>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -263,7 +283,7 @@ export function UsageView() {
   );
 }
 
-function Breakdown({ title, label, rows }: { title: string; label: string; rows: ({ key: string; name: string } & Count)[] }) {
+function Breakdown({ title, label, total, rows }: { title: string; label: string; total: number; rows: ({ key: string; name: string } & Count)[] }) {
   return (
     <section>
       <h2 className="font-display text-lg font-semibold text-ink">{title}</h2>
@@ -273,15 +293,18 @@ function Breakdown({ title, label, rows }: { title: string; label: string; rows:
             <tr>
               <th className="px-4 py-2.5 font-medium">{label}</th>
               <th className="px-4 py-2.5 text-right font-medium">Appels</th>
-              <th className="px-4 py-2.5 text-right font-medium">Dépense</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.key} className="border-t border-line">
-                <td className="px-4 py-3 font-medium text-ink">{row.name}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-ink-2">{count.format(row.executions)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-ink">{money(row.amountMilliXof)}</td>
+                <td className="px-4 py-3">
+                  <span className="font-medium text-ink">{row.name}</span>
+                  <span aria-hidden className="mt-1.5 block h-1.5 rounded-full bg-soft">
+                    <span className="block h-full rounded-full bg-brand/70" style={{ width: `${total ? Math.max(2, Math.round((row.executions / total) * 100)) : 0}%` }} />
+                  </span>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-ink">{count.format(row.executions)}</td>
               </tr>
             ))}
           </tbody>

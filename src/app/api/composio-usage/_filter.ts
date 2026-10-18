@@ -1,4 +1,4 @@
-import type { BoUsageFilter } from "@/lib/backoffice";
+import type { BoComposioCall, BoComposioUsage, BoUsageFilter } from "@/lib/backoffice";
 import { ApiError } from "@/lib/http";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -19,3 +19,19 @@ export function usageFilter(url: URL): BoUsageFilter {
   }
   return filter;
 }
+
+// The client sees volumes, never what a call costs Yelema: the amounts the back office sends stay here.
+const count = ({ executions }: { executions: number }) => ({ executions });
+
+export function volumesOnly(u: BoComposioUsage) {
+  return {
+    from: u.from,
+    to: u.to,
+    executions: u.executions,
+    byDay: (u.byDay ?? []).map((d) => ({ day: d.day, ...count(d) })),
+    byToolkit: u.byToolkit.map((t) => ({ toolkit: t.toolkit, ...count(t) })),
+    byMember: u.byMember.map((m) => ({ email: m.email, name: m.name, ...count(m) })),
+  };
+}
+
+export const callWithoutPrice = ({ occurredAt, email, name, toolkit, tool, via, httpStatus }: BoComposioCall) => ({ occurredAt, email, name, toolkit, tool, via, httpStatus });
