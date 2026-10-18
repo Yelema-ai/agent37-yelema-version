@@ -32,20 +32,24 @@ export function CompanyProfileCard() {
 
   if (!profile || profile.done >= profile.total) return null;
   return (
-    <section className="mt-5 flex max-w-2xl items-start gap-3 rounded-[22px] border border-brand/25 bg-tint p-5">
+    // As wide as the composer and the team below; the button beside the text on a wide screen.
+    <section className="relative mt-5 flex flex-col gap-4 rounded-[22px] border border-brand/25 bg-tint p-5 pr-12 sm:flex-row sm:items-center sm:gap-6 sm:p-6 sm:pr-14">
       <div className="min-w-0 flex-1">
         <h2 className="font-display text-lg font-bold text-ink">
           Complétez votre entreprise ({profile.done}/{profile.total})
         </h2>
         <p className="mt-1 text-sm text-ink-2">Ajoutez votre logo, une présentation et vos documents : vos experts répondront avec le contexte de votre entreprise.</p>
-        <Link href="/administration/entreprise" className="mt-3 inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand hover:bg-brand/90">
-          Compléter
-        </Link>
       </div>
+      <Link
+        href="/administration/entreprise"
+        className="inline-flex h-11 shrink-0 items-center justify-center self-start rounded-xl bg-brand px-5 text-sm font-semibold text-on-brand hover:bg-brand/90 sm:self-center"
+      >
+        Compléter
+      </Link>
       <button
         type="button"
         aria-label="Masquer ce rappel"
-        className="rounded-lg p-1.5 text-ink-3 hover:bg-soft hover:text-ink"
+        className="absolute right-2.5 top-2.5 grid size-9 place-items-center rounded-lg text-ink-3 hover:bg-soft hover:text-ink"
         onClick={() => {
           sessionStorage.setItem(DISMISSED, "1");
           setProfile(null);
