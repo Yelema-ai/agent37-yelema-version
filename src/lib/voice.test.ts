@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { callDuration, callHeaders, chosenVoice, countryFlag, countryName, filterVoices, isCallTranscript, parseVoicePrefs, signalingStep, transcriptOf, findInText, voiceFacets, type VoiceOption } from "./voice.ts";
+import { callDuration, callHeaders, chosenVoice, countryFlag, countryName, filterVoices, isCallTranscript, parseVoicePrefs, signalingStep, transcriptOf, findInText, summarySections, frenchSpacing, voiceFacets, type VoiceOption } from "./voice.ts";
 
 test("a relayed step is only one the SDK sends, with its own method", () => {
   assert.equal(signalingStep("conv_abc-1", "offer", "POST"), "offer");
@@ -101,4 +101,31 @@ test("findInText ignores case and accents and gives ranges of the original text"
   assert.equal(t.slice(...findInText(t, "BOUAKE")[0]), "Bouaké");
   assert.deepEqual(findInText(t, "  "), []);
   assert.deepEqual(findInText(t, "Abidjan"), []);
+});
+
+test("summarySections: the three sections when served, else null", () => {
+  assert.equal(summarySections({}), null);
+  assert.equal(summarySections({ keyPoints: [" "], decisions: null }), null);
+  assert.deepEqual(summarySections({ keyPoints: ["A"], nextSteps: ["B", 3 as unknown as string] }), [
+    { title: "Points clés", items: ["A"] },
+    { title: "Prochaines étapes", items: ["B"] },
+  ]);
+});
+
+test("transcriptOf keeps a valid timestamp only", () => {
+  const t = [
+    { who: "user", text: "a", at: 12 },
+    { who: "expert", text: "b", at: -1 },
+  ] as unknown as Parameters<typeof transcriptOf>[0]["transcript"];
+  assert.deepEqual(transcriptOf({ transcript: t }), [
+    { who: "user", text: "a", at: 12 },
+    { who: "expert", text: "b" },
+  ]);
+});
+
+test("frenchSpacing keeps « 5 % » and « : » with the word before", () => {
+  assert.equal(frenchSpacing("une remise de 5 % ? Oui : « jeudi »"), "une remise de 5\u00a0%\u00a0? Oui\u00a0: «\u00a0jeudi\u00a0»");
+  assert.equal(frenchSpacing("https://x.y"), "https://x.y");
+  const t = frenchSpacing("remise de 5 % s’ils hésitent");
+  assert.equal(t.slice(...findInText(t, "5 %")[0]), "5\u00a0%");
 });

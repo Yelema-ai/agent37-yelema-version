@@ -135,17 +135,37 @@ export interface CallRecord {
    * session is full of recognition errors and is never dug out of the chat.
    */
   transcript?: TranscriptLine[] | null;
+  /** The summary in three sections, once the back office serves them (it does not yet). */
+  keyPoints?: string[] | null;
+  decisions?: string[] | null;
+  nextSteps?: string[] | null;
 }
 
 export interface TranscriptLine {
   who: "user" | "expert";
   text: string;
+  /** Seconds from the start of the call, when the back office gives it. */
+  at?: number;
+}
+
+const lines = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim() !== "") : []);
+
+/** The summary's sections when the back office serves them; null to show the summary as one block. */
+export function summarySections(r: Pick<CallRecord, "keyPoints" | "decisions" | "nextSteps">): { title: string; items: string[] }[] | null {
+  const out = [
+    { title: "Points clés", items: lines(r.keyPoints) },
+    { title: "Décisions", items: lines(r.decisions) },
+    { title: "Prochaines étapes", items: lines(r.nextSteps) },
+  ].filter((x) => x.items.length);
+  return out.length ? out : null;
 }
 
 /** The well-formed lines of a call's transcript; empty when the back office sent none. */
 export function transcriptOf(record: Pick<CallRecord, "transcript">): TranscriptLine[] {
   const lines = Array.isArray(record.transcript) ? record.transcript : [];
-  return lines.filter((l): l is TranscriptLine => !!l && (l.who === "user" || l.who === "expert") && typeof l.text === "string" && l.text.trim() !== "");
+  return lines
+    .filter((l): l is TranscriptLine => !!l && (l.who === "user" || l.who === "expert") && typeof l.text === "string" && l.text.trim() !== "")
+    .map((l) => ({ who: l.who, text: frenchSpacing(l.text), ...(typeof l.at === "number" && Number.isFinite(l.at) && l.at >= 0 ? { at: l.at } : {}) }));
 }
 
 // The back office hands the expert the call's exact transcript in the call's session. It is full of
@@ -166,7 +186,8 @@ export function callDuration(seconds: number | null): string {
  * [start, end) ranges of `text`; empty for an empty query. Searches the « Transcription » of a call.
  */
 export function findInText(text: string, query: string): [number, number][] {
-  const fold = (c: string) => c.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  // Non-breaking spaces (French typography) count as spaces: « 5 % » finds « 5\u00a0% ».
+  const fold = (c: string) => (c === "\u00a0" || c === "\u202f" ? " " : c.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase());
   const q = [...query.trim()].map(fold).join("");
   if (!q) return [];
   // Folded text, with where each folded character came from.
@@ -186,4 +207,12 @@ export function findInText(text: string, query: string): [number, number][] {
     out.push([from[at], end + [...text.slice(end)][0].length]);
   }
   return out;
+}
+
+/**
+ * French typography for text shown as is (a transcript, a summary): the space before % : ; ? ! »
+ * and after « becomes non-breaking, so « 5 % » never leaves « % » alone on the next line.
+ */
+export function frenchSpacing(text: string): string {
+  return text.replace(/ ([%:;?!»])/g, "\u00a0$1").replace(/« /g, "«\u00a0");
 }
