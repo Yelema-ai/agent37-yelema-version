@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ExpertImage } from "@/components/experts/ExpertImage";
 import { AvatarConfigModal } from "@/components/experts/AvatarConfigModal";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { apiFetch, readApiError } from "@/lib/api";
 import type { ExpertAvatarDraft, ExpertLook } from "@/lib/backoffice";
@@ -38,6 +39,7 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
   const [name, setName] = useState("");
   const [busy, setBusy] = useState<"name" | "avatar" | null>(null);
   const [studioOpen, setStudioOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const url = `/api/experts/${encodeURIComponent(expertKey)}`;
 
@@ -114,6 +116,25 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
   }
 
   const portrait = look?.avatarUrl ?? look?.defaultAvatarUrl ?? null;
+  const customized = Boolean(look && (look.displayName || look.avatarUrl));
+
+  // Back to the catalogue's name and face, in one gesture: the name first, then the picture.
+  async function resetAll() {
+    if (!look) return;
+    setBusy("name");
+    try {
+      let l = look;
+      if (l.displayName) l = await apiFetch<ExpertLook>(url, { method: "PATCH", body: JSON.stringify({ displayName: null }) });
+      if (l.avatarUrl) l = await apiFetch<ExpertLook>(`${url}/avatar`, { method: "DELETE" });
+      changed(l);
+      setName(l.displayName ?? l.defaultName);
+      toast.success(`${l.defaultName} a retrouvé son nom et son portrait d’origine.`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
   const note = look ? identityNote(look) : null;
 
   return (
@@ -139,16 +160,6 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
                   {cleaned || !name.trim() ? "Il se présentera et signera sous ce nom, dans la discussion, sur vos canaux et au téléphone." : EXPERT_NAME_RULE}
                 </p>
                 {note && <p className="text-xs font-medium text-ink-2">{note}</p>}
-                {look.displayName && (
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => void run("name", () => apiFetch<ExpertLook>(url, { method: "PATCH", body: JSON.stringify({ displayName: null }) }), `L’expert reprend le nom de ${look.defaultName}.`)}
-                    className="self-start text-xs font-semibold text-ink-3 underline-offset-4 hover:text-ink hover:underline"
-                  >
-                    Reprendre le nom {look.defaultName}
-                  </button>
-                )}
               </form>
 
               <div className="flex flex-col gap-3">
@@ -173,22 +184,27 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
                       <Upload className="size-4" />
                       Importer
                     </Button>
-                    {look.avatarUrl && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        disabled={busy !== null}
-                        onClick={() => void run("avatar", () => apiFetch<ExpertLook>(`${url}/avatar`, { method: "DELETE" }), "Portrait d’origine rétabli.")}
-                        className="gap-1.5"
-                      >
-                        <RotateCcw className="size-4" />
-                        Portrait d’origine
-                      </Button>
-                    )}
                   </div>
                 </div>
                 <p className="text-xs text-ink-3">Le studio garde son visage et change la pose, la tenue, l’accessoire et le fond. PNG, JPEG ou WebP de 4 Mo au plus pour une image importée.</p>
               </div>
+
+              {customized && (
+                <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-soft px-3 py-2.5">
+                  {/* Fixed color on purpose: behind a portrait, in both themes. */}
+                  <span className="relative size-10 shrink-0 overflow-hidden rounded-full bg-[#8E6FB0]">
+                    {look.defaultAvatarUrl && <ExpertImage src={look.defaultAvatarUrl} size={40} className="size-full object-cover object-[50%_15%]" />}
+                  </span>
+                  <span className="min-w-0 grow">
+                    <span className="block text-sm font-semibold text-ink">{look.defaultName}</span>
+                    <span className="block text-xs text-ink-3">Profil d’origine</span>
+                  </span>
+                  <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => setResetOpen(true)} className="gap-1.5">
+                    <RotateCcw className="size-4" />
+                    Revenir au profil d’origine
+                  </Button>
+                </div>
+              )}
 
               <div className="flex justify-end">
                 <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
@@ -203,6 +219,15 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
           )}
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={resetOpen}
+        onOpenChange={setResetOpen}
+        title="Revenir au profil d’origine ?"
+        description={look ? `Le nom ${look.defaultName} et le portrait d’origine reviennent. Le nom et la photo choisis sont effacés.` : ""}
+        confirmText="Revenir au profil d’origine"
+        onConfirm={resetAll}
+      />
 
       {look && studioOpen && (
         <AvatarConfigModal
