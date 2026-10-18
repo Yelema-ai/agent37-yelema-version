@@ -121,7 +121,7 @@ export function RoutinesTable({ routines, ...act }: { routines: Routine[] } & Ro
           </span>
         </div>
       )}
-      <div className="mt-3 overflow-x-auto">
+      <div className="relative mt-3 overflow-x-auto">
         <table className="w-full min-w-[720px] text-sm">
           <thead className="border-b border-line">
             <tr>
