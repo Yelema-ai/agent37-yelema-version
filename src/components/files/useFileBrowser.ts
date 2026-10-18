@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { apiFetch, readApiError } from "@/lib/api";
 import { runPool } from "@/lib/bulk";
 import { isDriveRoot } from "@/lib/drive-paths";
+import { sortDriveEntries } from "@/lib/drive-order";
 import { TOO_LARGE, tooLarge } from "@/lib/upload-limit";
 import { useDropZone } from "../useDropZone";
 import { joinPath, type FileEntry, type FileListResponse } from "./types";
@@ -222,7 +223,8 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
   const { dragOver, dragHandlers } = useDropZone(uploadFiles);
 
   const visibleEntries = useMemo(
-    () => (showHidden ? entries : entries.filter((e) => !e.hidden)),
+    // The memory folder first, then the newest change first (src/lib/drive-order.ts).
+    () => sortDriveEntries(showHidden ? entries : entries.filter((e) => !e.hidden)),
     [entries, showHidden]
   );
   const hiddenCount = useMemo(() => entries.reduce((n, e) => n + (e.hidden ? 1 : 0), 0), [entries]);
