@@ -110,7 +110,7 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
         `/api/agents/${agentId}/files/content?path=${encodeURIComponent(target)}&overwrite=true`,
         { method: "PUT", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file }
       );
-      if (!res.ok) throw new Error(await readApiError(res, "L’envoi a échoué"));
+      if (!res.ok) throw new Error(await readApiError(res, "L’import a échoué"));
     },
     [agentId, path]
   );
@@ -140,7 +140,7 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
         setUploading((n) => Math.max(0, n - items.length));
       }
       const ok = items.length - failures;
-      if (ok > 0) toast.success(ok === 1 ? "1 fichier envoyé" : `${ok} fichiers envoyés`);
+      if (ok > 0) toast.success(ok === 1 ? "1 fichier importé" : `${ok} fichiers importés`);
       // Refresh only if the user is still in the directory we uploaded into. A folder upload can run
       // for many seconds; reloading the captured `path` would otherwise undo a navigation made while
       // it was in flight.

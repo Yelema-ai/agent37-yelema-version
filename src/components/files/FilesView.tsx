@@ -158,7 +158,7 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
 
   return (
     <div className="relative flex h-full min-h-0 flex-col" {...fb.dragHandlers}>
-      {fb.dragOver && <DropOverlay label="Déposez vos fichiers ici pour les envoyer" />}
+      {fb.dragOver && <DropOverlay label="Déposez vos fichiers ici pour les importer" />}
 
       <header className="shrink-0 border-b bg-background px-4 py-3 md:px-6 lg:px-8">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
@@ -174,7 +174,7 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
               className="h-10 shrink-0"
             >
               <ArrowUp className="h-4 w-4" />
-              Remonter
+              Retour
             </Button>
             <div className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md border bg-card px-3 shadow-sm">
               <Folder className="h-4 w-4 shrink-0 text-primary" />
@@ -238,7 +238,7 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
               <DropdownMenuTrigger asChild>
                 <Button size="sm" disabled={!fb.path || fb.uploading} className="h-9">
                   {fb.uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                  Envoyer
+                  Importer
                   <ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -638,7 +638,7 @@ function EmptyFolder({
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
         <Button size="sm" onClick={onUpload} disabled={!canCreate || uploading}>
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          Envoyer des fichiers
+          Importer des fichiers
         </Button>
         <Button variant="outline" size="sm" onClick={onNewFolder} disabled={!canCreate}>
           <FolderPlus className="h-4 w-4" />
