@@ -29,10 +29,10 @@ export interface ExpertSheet {
 
 export const EXPERT_SHEETS: Record<string, ExpertSheet> = {
   djeneba: {
-    label: "Experte IA direction",
+    label: "Experte IA Chief of Staff & Direction",
     pronoun: "elle",
     tagline: "Elle orchestre vos Experts et tient l’agenda, les décisions et les engagements du dirigeant.",
-    intro: "Un agent IA formé au métier direction, opéré par notre équipe.",
+    intro: "Un agent IA formé au métier Chief of Staff & Direction, opéré par notre équipe.",
     mission: "Bras droit du dirigeant : elle prépare ses réunions, filtre ses sollicitations, tient le relevé des décisions et suit les engagements pris.",
     inAction:
       "Le dirigeant enchaîne cinq rendez-vous. Djénéba prépare un brief par réunion avec l’historique et l’objectif, écarte trois sollicitations qui pouvaient attendre, consigne les décisions prises et relance deux engagements de la semaine précédente restés sans suite.",
