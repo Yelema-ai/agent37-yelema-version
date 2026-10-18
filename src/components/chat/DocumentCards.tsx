@@ -20,8 +20,11 @@ const KINDS: Record<DocKind, { label: string; icon: LucideIcon; tone: string }> 
   other: { label: "", icon: File, tone: "bg-soft-2 text-ink-2" },
 };
 
-// Past this size a document is not fetched for its preview (3G): the format's thumbnail instead.
-const MAX_PREVIEW_BYTES = 8 * 1024 * 1024;
+// Past this size a document is not fetched for its preview: the format's thumbnail instead. A size
+// the listing does not know is checked on the response itself (readCapped).
+const MAX_PREVIEW_BYTES = 30 * 1024 * 1024;
+// A workbook part is not inflated past this: a small file may unzip to hundreds of megabytes.
+const MAX_XML_PART_BYTES = 20 * 1024 * 1024;
 
 const ext = (name: string) => (name.includes(".") ? name.split(".").pop()!.toLowerCase() : "");
 const kindLabel = (doc: TurnDoc) => KINDS[doc.kind].label || ext(doc.name).toUpperCase() || "Fichier";
@@ -109,6 +112,33 @@ function ImagePreview({ url, doc }: { url: string; doc: TurnDoc }) {
 
 type Render = (data: ArrayBuffer, doc: TurnDoc, width: number) => Promise<ReactNode>;
 
+// The body of a preview's response, given up past MAX_PREVIEW_BYTES: on its announced length first,
+// then while it streams in (a response without one).
+async function readCapped(res: Response, abort: AbortController): Promise<ArrayBuffer> {
+  if (Number(res.headers.get("content-length") ?? 0) > MAX_PREVIEW_BYTES) throw new Error("too large");
+  if (!res.body) return res.arrayBuffer();
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_PREVIEW_BYTES) {
+      abort.abort();
+      throw new Error("too large");
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.byteLength;
+  }
+  return out.buffer;
+}
+
 // Fetches the document once it is on screen, then hands it to its renderer; the thumbnail stays
 // while it loads and comes back if anything fails.
 function Lazy({ doc, url, render }: { doc: TurnDoc; url: string; render: Render }) {
@@ -123,11 +153,12 @@ function Lazy({ doc, url, render }: { doc: TurnDoc; url: string; render: Render 
     const el = box.current;
     if (!el) return;
     let alive = true;
+    const abort = new AbortController();
     const go = async () => {
       try {
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: abort.signal });
         if (!res.ok) throw new Error(String(res.status));
-        const out = await render(await res.arrayBuffer(), docRef.current, el.clientWidth || 600);
+        const out = await render(await readCapped(res, abort), docRef.current, el.clientWidth || 600);
         if (alive) setNode(out);
       } catch {
         if (alive) setFailed(true);
@@ -142,6 +173,7 @@ function Lazy({ doc, url, render }: { doc: TurnDoc; url: string; render: Render 
     seen.observe(el);
     return () => {
       alive = false;
+      abort.abort();
       seen.disconnect();
     };
   }, [url, name, render]);
@@ -163,18 +195,24 @@ const renderPdf: Render = async (data, _doc, width) => {
     pdfjs.GlobalWorkerOptions.workerPort = pdfWorker;
   }
   const task = pdfjs.getDocument({ data: new Uint8Array(data) });
-  const pdf = await task.promise;
-  const page = await pdf.getPage(1);
-  const base = page.getViewport({ scale: 1 });
-  const ratio = Math.min(window.devicePixelRatio || 1, 2);
-  const viewport = page.getViewport({ scale: (width * ratio) / base.width });
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.floor(viewport.width);
-  canvas.height = Math.floor(viewport.height);
-  await page.render({ canvas, viewport }).promise;
-  const src = canvas.toDataURL("image/png");
-  const pages = pdf.numPages;
-  void task.destroy();
+  let src: string;
+  let pages: number;
+  // The document leaves the shared worker whether its page is drawn or not.
+  try {
+    const pdf = await task.promise;
+    const page = await pdf.getPage(1);
+    const base = page.getViewport({ scale: 1 });
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const viewport = page.getViewport({ scale: (width * ratio) / base.width });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    await page.render({ canvas, viewport }).promise;
+    src = canvas.toDataURL("image/png");
+    pages = pdf.numPages;
+  } finally {
+    void task.destroy();
+  }
   return (
     <span className="relative block size-full bg-white">
       {/* eslint-disable-next-line @next/next/no-img-element -- a page drawn here, as a data URL */}
@@ -251,7 +289,10 @@ async function readXlsx(data: ArrayBuffer): Promise<{ sheet: string | null; rows
   const JSZip = (await import("jszip")).default;
   const zip = await JSZip.loadAsync(data);
   const xml = async (path: string) => {
-    const text = await zip.file(path)?.async("string");
+    const part = zip.file(path);
+    // jszip's private `_data` holds the part's inflated size, read from the zip before inflating it.
+    if (((part as unknown as { _data?: { uncompressedSize?: number } } | null)?._data?.uncompressedSize ?? 0) > MAX_XML_PART_BYTES) throw new Error("too large");
+    const text = await part?.async("string");
     return text ? new DOMParser().parseFromString(text, "application/xml") : null;
   };
   const book = await xml("xl/workbook.xml");
@@ -306,7 +347,8 @@ function cleanHtml(html: string): string {
 
 const renderDocx: Render = async (data) => {
   const mammoth = await import("mammoth");
-  const { value } = await mammoth.convertToHtml({ arrayBuffer: data });
+  // Pictures are dropped by cleanHtml anyway: not inlined as base64 in the first place.
+  const { value } = await mammoth.convertToHtml({ arrayBuffer: data }, { convertImage: mammoth.images.imgElement(async () => ({ src: "" })) });
   const html = cleanHtml(value);
   if (!html.trim()) throw new Error("empty");
   return (

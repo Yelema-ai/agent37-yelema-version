@@ -55,8 +55,6 @@ export function docKind(name: string): DocKind {
   return "other";
 }
 
-export const toMs = (t: number): number => (t < 1e12 ? t * 1000 : t);
-
 const SLACK_MS = 5_000;
 // Without a start of its own, a turn is not looked back further than this.
 const MAX_LOOKBACK_MS = 30 * 60_000;
@@ -101,13 +99,17 @@ export interface TurnDoc {
   kind: DocKind;
 }
 
+const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"));
+
 /**
  * The cards of one reply: the files its text names first, then the files of the drive written
  * during its turn, newest first; each file once. The memory folder and hidden files are not
- * deliverables.
+ * deliverables. A named file missing from a folder the listing covers does not exist (a path the
+ * expert made up): no card for it.
  */
 export function turnDocs(text: string, listing: readonly DriveFile[], window: { start: number; end: number }): TurnDoc[] {
   const byPath = new Map(listing.map((f) => [normDrivePath(f.path), f]));
+  const listed = new Set([...byPath.keys()].map(parentOf));
   const out: TurnDoc[] = [];
   const seen = new Set<string>();
   const add = (path: string, f?: DriveFile) => {
@@ -116,7 +118,7 @@ export function turnDocs(text: string, listing: readonly DriveFile[], window: { 
     const name = path.split("/").pop() ?? path;
     out.push({ name, path, size: f?.size ?? null, modified: f?.modified ?? null, kind: docKind(name) });
   };
-  for (const p of drivePathsIn(text)) add(p, byPath.get(p));
+  for (const p of drivePathsIn(text)) if (byPath.has(p) || !listed.has(parentOf(p))) add(p, byPath.get(p));
   const written = listing
     .filter((f) => f.type === "file" && !f.hidden && f.modified >= window.start && f.modified <= window.end)
     .filter((f) => !normDrivePath(f.path).split("/").slice(2, -1).some(isMemoryFolder))

@@ -51,3 +51,9 @@ test("cards: the named files, then the files written during the turn, never the 
   // Without a listing, the named files alone.
   assert.deepEqual(turnDocs("`~/Livrables/X/a.pdf`", [], { start: 0, end: 1 }).map((d) => d.path), ["~/Livrables/X/a.pdf"]);
 });
+
+test("cards: a named file missing from a listed folder is made up, elsewhere it is kept", () => {
+  const listing = [{ name: "Devis.pdf", path: "/home/node/Livrables/Kouassi/Devis.pdf", type: "file", size: 10, modified: 1 }];
+  const text = "`~/Livrables/Kouassi/Inventé.pdf` et `~/Livrables/Archives/2025/export.pdf`";
+  assert.deepEqual(turnDocs(text, listing, { start: 5, end: 6 }).map((d) => d.path), ["~/Livrables/Archives/2025/export.pdf"]);
+});
