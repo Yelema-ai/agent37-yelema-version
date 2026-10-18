@@ -453,6 +453,11 @@ export const backoffice = {
   companyProfile: (token: string) => call<CompanyProfile>("/app/workspace/profile", { token }),
   uploadLogo: (token: string, form: FormData) => call<CompanyProfile>("/app/workspace/logo", { method: "POST", token, form, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   removeLogo: (token: string) => call<CompanyProfile>("/app/workspace/logo", { method: "DELETE", token }),
+  // Several images of the logo, where the back office keeps them (`logos` in the profile): one more
+  // image, the main one (shown in the bar, `logoUrl`), one removed. Each answers the profile.
+  addLogo: (token: string, form: FormData) => call<CompanyProfile>("/app/workspace/logos", { method: "POST", token, form, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  setMainLogo: (token: string, id: string) => call<CompanyProfile>(ownPath("/app/workspace/logos", id), { method: "PATCH", token, body: { primary: true } }),
+  removeLogoImage: (token: string, id: string) => call<CompanyProfile>(ownPath("/app/workspace/logos", id), { method: "DELETE", token }),
   // What the member reads, and where they may deposit. Deposits are sent to the memory in the
   // background: `status` goes from pending to synced.
   memoryItems: (token: string) => call<MemoryList>("/app/memory/items", { token }),

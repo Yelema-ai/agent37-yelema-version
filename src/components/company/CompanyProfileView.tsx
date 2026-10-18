@@ -1,18 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { apiFetch, readApiError } from "@/lib/api";
-import { LOGO_ACCEPT, LOGO_MAX_BYTES, PRESENTATION_TITLE, type CompanyProfile } from "@/lib/company";
-import { HiddenFileInput } from "@/components/HiddenFileInput";
+import { apiFetch } from "@/lib/api";
+import { PRESENTATION_TITLE, type CompanyProfile } from "@/lib/company";
+import { CompanyLogos } from "./CompanyLogos";
 import { MemoryView } from "@/components/memory/MemoryView";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-// "Votre entreprise": for an admin, the logo and a presentation; for everyone, the company memory
+// "Votre entreprise": for an admin, the logo's images and a presentation; for everyone, the company memory
 // beneath (reference documents, notes, who reads them). The presentation is a deposit of that memory.
 
 const FIELD = "w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm font-normal text-ink focus-visible:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/15";
@@ -37,14 +36,12 @@ function Step({ index, title, done, hint, children }: { index: number; title: st
 }
 
 export function CompanyProfileView() {
-  const router = useRouter();
   const [profile, setProfile] = useState<CompanyProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"logo" | "note" | null>(null);
+  const [busy, setBusy] = useState<"note" | null>(null);
   const [note, setNote] = useState("");
   // Remounted after a presentation is deposited, so the memory below lists it.
   const [memoryKey, setMemoryKey] = useState(0);
-  const logoPicker = useRef<HTMLInputElement>(null);
   const admin = useWorkspace().current?.role === "admin";
 
   const load = useCallback(
@@ -69,25 +66,6 @@ export function CompanyProfileView() {
     }
   }
 
-  const sendLogo = (picked: File) =>
-    run("logo", async () => {
-      if (!LOGO_ACCEPT.split(",").includes(picked.type)) throw new Error("Choisissez une image PNG, JPEG ou WebP.");
-      if (picked.size > LOGO_MAX_BYTES) throw new Error("Le logo ne doit pas dépasser 5 Mo.");
-      const form = new FormData();
-      form.set("file", picked);
-      const res = await fetch("/api/workspace/logo", { method: "POST", body: form });
-      if (!res.ok) throw new Error(await readApiError(res, "Le logo n’a pas pu être enregistré."));
-      setProfile((await res.json()) as CompanyProfile);
-      // The sidebar's logo is rendered by the server: read it again.
-      router.refresh();
-    });
-
-  const removeLogo = () =>
-    run("logo", async () => {
-      setProfile(await apiFetch<CompanyProfile>("/api/workspace/logo", { method: "DELETE" }));
-      router.refresh();
-    });
-
   const savePresentation = () =>
     run("note", async () => {
       await apiFetch("/api/memory/items", { method: "POST", body: JSON.stringify({ title: PRESENTATION_TITLE, note, unit: null }) });
@@ -110,22 +88,13 @@ export function CompanyProfileView() {
 
       {admin && profile && (
         <>
-          <Step index={1} title="Votre logo" done={profile.logo} hint="Affiché dans votre espace et sur la page de connexion. PNG, JPEG ou WebP, 5 Mo au plus.">
-            <div className="flex flex-wrap items-center gap-4">
-              {profile.logoUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={profile.logoUrl} alt="Logo actuel" className="size-16 rounded-xl border border-line object-contain" />
-              )}
-              <Button type="button" variant={profile.logo ? "outline" : "default"} disabled={busy === "logo"} onClick={() => logoPicker.current?.click()}>
-                {busy === "logo" ? "Envoi en cours…" : profile.logo ? "Changer de logo" : "Choisir un logo"}
-              </Button>
-              {profile.logo && (
-                <Button type="button" variant="ghost" disabled={busy === "logo"} onClick={() => void removeLogo()}>
-                  Retirer
-                </Button>
-              )}
-            </div>
-            <HiddenFileInput inputRef={logoPicker} onFiles={(files) => files[0] && void sendLogo(files[0])} />
+          <Step
+            index={1}
+            title="Votre logo"
+            done={profile.logo}
+            hint="Toutes ses versions : claire, sombre, carrée, longue. Le logo principal s’affiche dans votre espace et sur la page de connexion. PNG, JPEG ou WebP, 5 Mo au plus."
+          >
+            <CompanyLogos profile={profile} onProfile={setProfile} />
           </Step>
 
           <Step index={2} title="Présentez votre activité" done={profile.note} hint="Quelques lignes : ce que fait l’entreprise, pour qui, ses produits, son vocabulaire. Vos experts s’en servent à chaque réponse.">
