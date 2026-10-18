@@ -118,19 +118,25 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
   const portrait = look?.avatarUrl ?? look?.defaultAvatarUrl ?? null;
   const customized = Boolean(look && (look.displayName || look.avatarUrl));
 
-  // Back to the catalogue's name and face, in one gesture: the name first, then the picture.
+  // Back to the catalogue's name and face, in one gesture: the name first, then the picture. Each
+  // step that went through is shown at once, so a picture refused after the name leaves the screen
+  // as the back office now has it.
   async function resetAll() {
     if (!look) return;
     setBusy("name");
-    try {
-      let l = look;
-      if (l.displayName) l = await apiFetch<ExpertLook>(url, { method: "PATCH", body: JSON.stringify({ displayName: null }) });
-      if (l.avatarUrl) l = await apiFetch<ExpertLook>(`${url}/avatar`, { method: "DELETE" });
+    let l = look;
+    const step = (next: ExpertLook) => {
+      l = next;
       changed(l);
       setName(l.displayName ?? l.defaultName);
+    };
+    try {
+      if (l.displayName) step(await apiFetch<ExpertLook>(url, { method: "PATCH", body: JSON.stringify({ displayName: null }) }));
+      if (l.avatarUrl) step(await apiFetch<ExpertLook>(`${url}/avatar`, { method: "DELETE" }));
       toast.success(`${l.defaultName} a retrouvé son nom et son portrait d’origine.`);
     } catch (e) {
-      toast.error((e as Error).message);
+      const nameBack = look.displayName && !l.displayName;
+      toast.error(nameBack ? `${l.defaultName} a retrouvé son nom, mais pas son portrait : ${(e as Error).message}` : (e as Error).message);
     } finally {
       setBusy(null);
     }
