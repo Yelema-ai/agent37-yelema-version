@@ -8,7 +8,7 @@ import { branding } from "@/config/branding";
 const FACES = [
   { key: "fatima", name: "Fatima", role: "Marketing et contenu" },
   { key: "ibrahim", name: "Ibrahim", role: "Juridique et conformité" },
-  { key: "djeneba", name: "Djénéba", role: "Chief of Staff" },
+  { key: "djeneba", name: "Djénéba", role: "Direction et pilotage" },
 ];
 
 /**
