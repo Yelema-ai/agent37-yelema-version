@@ -287,7 +287,7 @@ export function AgentWorkspace({
           {/* Chat owns its full height and stays MOUNTED (just hidden) across tab switches. */}
           {chatOpened && (
             <div className={cn("min-h-0 flex-1", !isChat && "hidden")}>
-              <ChatView initialMessage={initialMessage} />
+              <ChatView initialMessage={initialMessage} driveFolder={driveFolder ?? (profileId ? `${DRIVE_ROOT}/${expertName}` : DRIVE_ROOT)} />
             </div>
           )}
           {/* Files mirrors Chat: full-height, kept MOUNTED so the current directory survives. */}

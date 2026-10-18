@@ -23,7 +23,8 @@ import { useChatAttachments } from "./useChatAttachments";
 const SCREEN_TEMPLATE = "yelema-hermes";
 const SCREEN_MIN_REVISION = 5;
 
-export function ChatView({ initialMessage }: { initialMessage?: string | null }) {
+// `driveFolder`: the expert's folder in the drive, where the documents of its replies are looked for.
+export function ChatView({ initialMessage, driveFolder = null }: { initialMessage?: string | null; driveFolder?: string | null }) {
   const {
     agentId,
     profile,
@@ -158,7 +159,7 @@ export function ChatView({ initialMessage }: { initialMessage?: string | null })
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>
         ) : messages.length > 0 ? (
-          <ChatMessages messages={messages} isStreaming={isStreaming} face={face} />
+          <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} />
         ) : (
           <>
             {face && <ExpertAvatar expert={face} size="lg" className="mb-4" />}

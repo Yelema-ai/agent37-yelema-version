@@ -3,16 +3,7 @@
 import { memo } from "react";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
-
-const DRIVE_PATH = String.raw`(?:/home/node|~)/Livrables/[^\s)\]\x60]+\.[A-Za-z0-9]{1,6}`;
-// GPT models prefix the path with `sandbox:` (ChatGPT's own download links); it is dropped.
-// [label](file:///home/node/Livrables/…), [label](sandbox:/home/node/Livrables/…) or [label](~/Livrables/…)
-const LINKED = new RegExp(String.raw`\]\((?:file://|sandbox:)?(${DRIVE_PATH})\)`, "g");
-// [label](<file:///home/node/Livrables/…>): the angle-bracket form, where the path may hold spaces
-const ANGLED = new RegExp(String.raw`\]\(<(?:file://|sandbox:)?((?:/home/node|~)/Livrables/[^>\n]+\.[A-Za-z0-9]{1,6})>\)`, "g");
-// `~/Livrables/Fatima/post.docx` or a bare path in the text
-const CODE = new RegExp("`(?:sandbox:)?((?:/home/node|~)/Livrables/[^`\\n]+\\.[A-Za-z0-9]{1,6})`", "g");
-const BARE = new RegExp(String.raw`(^|[\s(«"])(?:sandbox:)?(${DRIVE_PATH})`, "gm");
+import { ANGLED, BARE, CODE, LINKED, safeDecode } from "@/lib/drive-links";
 
 // Experts give the drive path of what they saved (see lib/drive-paths.ts for the drive itself); turn those paths into download links (the
 // browser can't open file:// links or instance paths, and Streamdown blocks them).
@@ -25,14 +16,6 @@ function linkDriveFiles(content: string, agentId: string): string {
     .replace(LINKED, (_m, path: string) => `](${url(path)})`)
     .replace(CODE, (_m, path: string) => `[${name(path)}](${url(path)})`)
     .replace(BARE, (_m, lead: string, path: string) => `${lead}[${name(path)}](${url(path)})`);
-}
-
-function safeDecode(s: string): string {
-  try {
-    return decodeURI(s);
-  } catch {
-    return s;
-  }
 }
 
 // Our own links (drive downloads) open directly; external ones still ask first.

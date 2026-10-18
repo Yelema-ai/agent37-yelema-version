@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, CornerDownLeft, FileText, Image as ImageIcon, Loader2, PhoneCall, Repeat } from "lucide-react";
+import { turnDocs, turnWindow } from "@/lib/drive-links";
 import { isRoutineRun, isSilentRun, routineRunText, SILENT_RUN_LABEL } from "@/lib/routines";
 import { isCallTranscript } from "@/lib/voice";
 import { cn } from "@/lib/utils";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import type { Expert } from "@/lib/types";
 import { useChatContext } from "./ChatProvider";
+import { DocumentCards, useDriveListing } from "./DocumentCards";
 import { Markdown } from "./Markdown";
 import { LiveStep, StepsList } from "./ChatSteps";
 import type { ChatMessage, MessageAttachment } from "./types";
@@ -95,10 +97,13 @@ export function ChatMessages({
   messages,
   isStreaming,
   face = null,
+  driveFolder = null,
 }: {
   messages: ChatMessage[];
   isStreaming: boolean;
   face?: Pick<Expert, "displayName" | "photoUrl" | "gateway"> | null;
+  /** The expert's folder in the drive: the files written there during a turn get a card. */
+  driveFolder?: string | null;
 }) {
   // The instance whose drive the paths in a reply point into (they become download links).
   const { agentId } = useChatContext();
@@ -106,6 +111,15 @@ export function ChatMessages({
   // A routine's run: its [SILENT] answer reads as "nothing to report".
   const routineThread = messages.some((m) => m.role === "user" && isRoutineRun(m.content));
   const liveIndex = isStreaming ? messages.findLastIndex((m) => m.role === "assistant") : -1;
+  // Each finished reply's turn, and the oldest of them (to the minute): the drive is listed once
+  // for all of them, again after each turn.
+  const windows = useMemo(() => {
+    const now = Date.now();
+    return messages.map((m, i) => (m.role === "assistant" && i !== liveIndex ? turnWindow(messages, i, now) : null));
+  }, [messages, liveIndex]);
+  const oldest = windows.reduce<number | null>((min, w) => (w && (min == null || w.start < min) ? w.start : min), null);
+  const since = oldest == null ? null : Math.floor(oldest / 60_000) * 60_000;
+  const listing = useDriveListing(agentId, isStreaming ? null : driveFolder, since, String(messages.length));
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6 sm:px-6">
       {messages.map((m, i) => {
@@ -159,6 +173,7 @@ export function ChatMessages({
               ) : showDots ? (
                 <TypingDots />
               ) : null}
+              {!live && windows[i] && m.content && <DocumentCards agentId={agentId} docs={turnDocs(m.content, listing, windows[i]!)} />}
             </div>
           </div>
         );

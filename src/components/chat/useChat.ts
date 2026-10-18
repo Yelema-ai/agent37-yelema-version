@@ -142,6 +142,7 @@ function mapHistory(history: SessionDetail["history"]): ChatMessage[] {
     role: h.role,
     content: h.role === "user" ? steerText(h.content ?? "") : (h.content ?? ""),
     thinking: h.thinking,
+    ...(h.created_at ? { at: h.created_at < 1e12 ? h.created_at * 1000 : h.created_at } : {}),
     ...(h.role === "user" && isSteer(h.content ?? "") ? { steered: true } : {}),
   }));
 }
@@ -531,7 +532,8 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
     async (sessionId: string | null, batch: Queued[]) => {
       const settings = batch[batch.length - 1].settings;
       const { text, files } = batchQueued(batch.map((q) => ({ text: q.user.content, files: q.settings.files ?? [] })));
-      const users = batch.map((q): ChatMessage => ({ ...q.user, queued: undefined, steered: undefined }));
+      const startedAt = Date.now();
+      const users = batch.map((q): ChatMessage => ({ ...q.user, at: startedAt, queued: undefined, steered: undefined }));
       const assistant: ChatMessage = { id: uid("a"), role: "assistant", content: "", tools: [] };
       const run: LiveRun = { sessionId, responseId: null, abort: new AbortController(), users, assistant, done: false, steered: [], steers: new Set(), queue: [] };
       turns.start(run);

@@ -27,6 +27,8 @@ export interface ChatMessage {
   thinking?: string;
   tools?: ToolEvent[];
   attachments?: MessageAttachment[];
+  /** When it was written (ms): the transcript's time, or when a live turn started. */
+  at?: number;
   /** Sent while the expert was still answering: waits its turn in the thread's queue. */
   queued?: boolean;
   /** Added to the reply in progress (steer): part of that reply, not a new question. */
