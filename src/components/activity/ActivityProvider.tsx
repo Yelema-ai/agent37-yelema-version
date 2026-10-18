@@ -12,15 +12,19 @@ import {
   excerpt,
   expertKey,
   finishTurn,
+  markRead,
+  notifications,
   parseConvKey,
   pruneUnread,
   parsePersisted,
   persistedFor,
+  remember,
   routineFinished,
   startTurn,
   view,
   type ActivityState,
   type Notice,
+  type NotificationItem,
   type Outcome,
   type Turn,
 } from "@/lib/activity";
@@ -51,11 +55,21 @@ export interface ActivityActions {
   routineDone: (key: string, routine: string, sessionId: string, at: number, announce: boolean) => void;
 }
 
+/** The notification centre (the bell): what the provider already knows, newest first. */
+export interface ActivityNotifications {
+  items: NotificationItem[];
+  /** Opens the conversation (a routine run is one) and reads it. */
+  open: (item: NotificationItem) => void;
+  markAllRead: () => void;
+}
+
 const ActionsContext = createContext<ActivityActions | null>(null);
 const StateContext = createContext<ActivityState>(EMPTY_ACTIVITY);
+const NotificationsContext = createContext<ActivityNotifications>({ items: [], open: () => undefined, markAllRead: () => undefined });
 
 export const useActivityActions = () => useContext(ActionsContext);
 export const useActivityState = () => useContext(StateContext);
+export const useNotifications = () => useContext(NotificationsContext);
 
 const visible = () => typeof document === "undefined" || document.visibilityState === "visible";
 
@@ -108,7 +122,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       const saved = parsePersisted(readStorage(agentId), agentId, Date.now());
       routinesRef.current = { ...saved.routines, ...routinesRef.current };
       let s = stateRef.current;
-      s = { ...s, unread: { ...saved.unread, ...s.unread } };
+      s = { ...s, unread: { ...saved.unread, ...s.unread }, notes: { ...saved.notes, ...s.notes } };
       for (const t of saved.watching) if (!s.turns[t.id]) s = startTurn(s, t);
       commit(s);
     },
@@ -153,8 +167,9 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       },
       bind: (id, sessionId, responseId) => commit(bindTurn(stateRef.current, id, sessionId, responseId)),
       finish: (id, outcome, text, source = "local") => {
-        const r = finishTurn(stateRef.current, id, outcome, source, visible(), Date.now());
-        commit(r.state);
+        const now = Date.now();
+        const r = finishTurn(stateRef.current, id, outcome, source, visible(), now);
+        commit(r.notice ? remember(r.state, r.notice, text, null, now) : r.state);
         if (r.notice) announce(r.notice, text);
       },
       detach: (id) => commit(detachTurn(stateRef.current, id)),
@@ -175,12 +190,25 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       routineDone: (key, routine, sessionId, at, loud) => {
         const ref = parseConvKey(key);
         if (ref) presenceRef.current.get(expertKey(ref.agentId, ref.profile))?.addSession({ session_id: sessionId, title: routine, last_active: at, routine });
-        const r = routineFinished(stateRef.current, key, visible(), Date.now());
-        commit(r.state);
+        const now = Date.now();
+        const r = routineFinished(stateRef.current, key, visible(), now);
+        commit(r.notice ? remember(r.state, r.notice, "", routine, now) : r.state);
         if (r.notice && loud) announce(r.notice, "", routine);
       },
     }),
     [announce, commit, load]
+  );
+
+  const bell = useMemo<ActivityNotifications>(
+    () => ({
+      items: notifications(state),
+      open: (item) => {
+        commit(markRead(stateRef.current, [item.key]));
+        openConversation(item.agentId, item.profile, item.sessionId);
+      },
+      markAllRead: () => commit(markRead(stateRef.current, null)),
+    }),
+    [state, commit, openConversation]
   );
 
   useTurnWatch(state.turns, actions);
@@ -188,7 +216,9 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
 
   return (
     <ActionsContext.Provider value={actions}>
-      <StateContext.Provider value={state}>{children}</StateContext.Provider>
+      <StateContext.Provider value={state}>
+        <NotificationsContext.Provider value={bell}>{children}</NotificationsContext.Provider>
+      </StateContext.Provider>
     </ActionsContext.Provider>
   );
 }

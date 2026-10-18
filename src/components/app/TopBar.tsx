@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { ChevronRight, Menu } from "lucide-react";
+import { NotificationBell } from "@/components/app/NotificationBell";
 import { ThemeMenu } from "@/components/app/ThemeMenu";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { parseAgentRoute } from "@/lib/expert-tabs";
@@ -57,6 +58,7 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
         ))}
       </div>
       <ThemeMenu />
+      <NotificationBell />
     </header>
   );
 }

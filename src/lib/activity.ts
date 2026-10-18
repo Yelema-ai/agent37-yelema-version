@@ -20,14 +20,24 @@ export interface Unread {
   kind: "reply" | "failed" | "routine";
 }
 
+/** What the bell lists for a conversation: its last event, with the words the toast showed. */
+export interface Note extends Unread {
+  /** The answer's first line (`excerpt`), empty for a routine or a failure. */
+  text: string;
+  /** The routine's name, for a routine run. */
+  routine: string | null;
+}
+
 export interface ActivityState {
   turns: Record<string, Turn>;
   unread: Record<string, Unread>;
+  /** The last event of each conversation, by convKey, for the notification centre. */
+  notes: Record<string, Note>;
   /** The conversation on screen (convKey), or null. */
   viewing: string | null;
 }
 
-export const EMPTY_ACTIVITY: ActivityState = { turns: {}, unread: {}, viewing: null };
+export const EMPTY_ACTIVITY: ActivityState = { turns: {}, unread: {}, notes: {}, viewing: null };
 
 const normProfile = (p: string | null | undefined) => (!p || p === "default" ? "" : p);
 
@@ -132,6 +142,48 @@ export function pruneUnread(s: ActivityState, agentId: string, profile: string |
   return stale ? { ...s, unread: without(s.unread, (_, k) => k.startsWith(prefix) && !keep.has(k)) } : s;
 }
 
+// ---- Notification centre ----
+
+const MAX_NOTES = 30;
+
+/** Keeps what a notice said, for the bell: the newest event of each conversation, 30 at most. */
+export function remember(s: ActivityState, n: Pick<Notice, "key" | "kind">, text: string, routine: string | null, at: number): ActivityState {
+  const notes = { ...s.notes, [n.key]: { at, kind: n.kind, text: n.kind === "reply" ? excerpt(text) : "", routine } };
+  const kept = Object.entries(notes)
+    .sort((a, b) => b[1].at - a[1].at)
+    .slice(0, MAX_NOTES);
+  return { ...s, notes: Object.fromEntries(kept) };
+}
+
+/** Marks these conversations read (all of them with `null`). */
+export function markRead(s: ActivityState, keys: string[] | null): ActivityState {
+  if (keys === null) return Object.keys(s.unread).length ? { ...s, unread: {} } : s;
+  const drop = new Set(keys);
+  return Object.keys(s.unread).some((k) => drop.has(k)) ? { ...s, unread: without(s.unread, (_, k) => drop.has(k)) } : s;
+}
+
+export interface NotificationItem extends Note {
+  key: string;
+  agentId: string;
+  profile: string | null;
+  sessionId: string;
+  unread: boolean;
+}
+
+/** What the bell lists, newest first: every note, and every unread mark (one kept from before a reload has no words). */
+export function notifications(s: ActivityState): NotificationItem[] {
+  const keys = new Set([...Object.keys(s.notes), ...Object.keys(s.unread)]);
+  const out: NotificationItem[] = [];
+  for (const key of keys) {
+    const ref = parseConvKey(key);
+    if (!ref) continue;
+    const note: Note = s.notes[key] ?? { ...s.unread[key], text: "", routine: null };
+    const mark = s.unread[key];
+    out.push({ ...note, ...(mark && mark.at > note.at ? { at: mark.at, kind: mark.kind } : {}), key, ...ref, unread: Boolean(mark) });
+  }
+  return out.sort((a, b) => b.at - a.at).slice(0, MAX_NOTES);
+}
+
 export type ConversationStatus = "running" | "unread" | "failed" | null;
 
 export function conversationStatus(s: ActivityState, key: string): ConversationStatus {
@@ -177,6 +229,7 @@ export function detectRoutineRuns(since: number | undefined, sessions: RoutineSe
 
 export interface Persisted {
   unread: Record<string, Unread>;
+  notes: Record<string, Note>;
   /** Per expertKey: the last routine run already announced (ms). */
   routines: Record<string, number>;
   watching: Turn[];
@@ -190,7 +243,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 const isStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
 
 export function parsePersisted(raw: string | null, agentId: string, now: number): Persisted {
-  const out: Persisted = { unread: {}, routines: {}, watching: [] };
+  const out: Persisted = { unread: {}, notes: {}, routines: {}, watching: [] };
   let data: unknown;
   try {
     data = raw ? JSON.parse(raw) : null;
@@ -203,6 +256,18 @@ export function parsePersisted(raw: string | null, agentId: string, now: number)
     for (const [k, v] of Object.entries(data.unread)) {
       if (k.startsWith(prefix) && parseConvKey(k) && isObj(v) && typeof v.at === "number" && ["reply", "failed", "routine"].includes(v.kind as string)) {
         out.unread[k] = { at: v.at, kind: v.kind as Unread["kind"] };
+      }
+    }
+  }
+  if (isObj(data.notes)) {
+    for (const [k, v] of Object.entries(data.notes)) {
+      if (k.startsWith(prefix) && parseConvKey(k) && isObj(v) && typeof v.at === "number" && ["reply", "failed", "routine"].includes(v.kind as string)) {
+        out.notes[k] = {
+          at: v.at,
+          kind: v.kind as Unread["kind"],
+          text: typeof v.text === "string" ? v.text.slice(0, 200) : "",
+          routine: typeof v.routine === "string" ? v.routine.slice(0, 120) : null,
+        };
       }
     }
   }
@@ -229,6 +294,7 @@ export function persistedFor(s: ActivityState, routines: Record<string, number>,
     .slice(0, MAX_UNREAD);
   return {
     unread: Object.fromEntries(unread),
+    notes: Object.fromEntries(Object.entries(s.notes).filter(([k]) => k.startsWith(prefix))),
     routines: without(routines, (_, k) => !k.startsWith(prefix)),
     watching: Object.values(s.turns)
       .filter((t) => t.agentId === agentId && t.sessionId && t.responseId)

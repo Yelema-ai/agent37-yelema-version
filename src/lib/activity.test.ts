@@ -10,6 +10,9 @@ import {
   excerpt,
   expertActivity,
   finishTurn,
+  markRead,
+  notifications,
+  remember,
   parsePersisted,
   persistedFor,
   pruneUnread,
@@ -125,7 +128,7 @@ test("persistence round-trips one instance and rejects junk", () => {
   assert.deepEqual(back.routines, { "a1|acme__awa": 5 });
   assert.equal(back.watching[0].mode, "watch");
   assert.equal(parsePersisted(JSON.stringify(saved), "a1", 1000 + 3 * 60 * 60_000).watching.length, 0);
-  assert.deepEqual(parsePersisted("{oops", "a1", 0), { unread: {}, routines: {}, watching: [] });
+  assert.deepEqual(parsePersisted("{oops", "a1", 0), { unread: {}, notes: {}, routines: {}, watching: [] });
   assert.deepEqual(parsePersisted(JSON.stringify({ unread: { "a1|p|s": { at: "x", kind: "reply" } } }), "a1", 0).unread, {});
 });
 
@@ -139,4 +142,37 @@ test("splitSSE keeps an incomplete block for later", () => {
   const { events, rest } = splitSSE('event: response.completed\ndata: {"output_text":"ok"}\n\n: keepalive\n\nevent: x\ndata: {');
   assert.deepEqual(events, [{ event: "response.completed", data: { output_text: "ok" } }]);
   assert.equal(rest, "event: x\ndata: {");
+});
+
+test("the bell lists the newest event of each conversation, unread first in its own right", () => {
+  const k1 = convKey("a1", "acme__awa", "s1");
+  const k2 = convKey("a1", "acme__awa", "s2");
+  let s = routineFinished(EMPTY_ACTIVITY, k1, true, 10).state;
+  s = remember(s, { key: k1, kind: "routine" }, "", "Point du lundi", 10);
+  s = remember(s, { key: k2, kind: "reply" }, "**Voici** le devis", null, 20);
+  const items = notifications(s);
+  assert.deepEqual(items.map((i) => [i.key, i.unread, i.text, i.routine]), [
+    [k2, false, "Voici le devis", null],
+    [k1, true, "", "Point du lundi"],
+  ]);
+  // An unread mark kept from before a reload has no words, and is listed all the same.
+  const kept = { ...EMPTY_ACTIVITY, unread: { [k2]: { at: 5, kind: "reply" as const } } };
+  assert.deepEqual(notifications(kept).map((i) => [i.sessionId, i.unread, i.text]), [["s2", true, ""]]);
+});
+
+test("marking read: some conversations, or all", () => {
+  const k1 = convKey("a1", null, "s1");
+  const k2 = convKey("a1", null, "s2");
+  const s = { ...EMPTY_ACTIVITY, unread: { [k1]: { at: 1, kind: "reply" as const }, [k2]: { at: 2, kind: "failed" as const } } };
+  assert.deepEqual(Object.keys(markRead(s, [k1]).unread), [k2]);
+  assert.deepEqual(markRead(s, null).unread, {});
+  assert.equal(markRead(EMPTY_ACTIVITY, null), EMPTY_ACTIVITY);
+});
+
+test("notes survive a reload, per instance", () => {
+  const k = convKey("a1", null, "s1");
+  const s = remember(EMPTY_ACTIVITY, { key: k, kind: "reply" }, "Bonjour", null, 7);
+  const back = parsePersisted(JSON.stringify(persistedFor(s, {}, "a1")), "a1", 0);
+  assert.deepEqual(back.notes, { [k]: { at: 7, kind: "reply", text: "Bonjour", routine: null } });
+  assert.deepEqual(parsePersisted(JSON.stringify(persistedFor(s, {}, "a2")), "a2", 0).notes, {});
 });
