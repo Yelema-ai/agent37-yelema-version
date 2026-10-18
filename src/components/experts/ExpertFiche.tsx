@@ -112,7 +112,7 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
       )}
 
       {site ? (
-        <SiteSections sheet={site} pronoun={expert.pronoun} name={expert.name} />
+        <SiteSections sheet={site} pronoun={site.pronoun} name={expert.name} />
       ) : (
         <>
       {skills.length > 0 && (

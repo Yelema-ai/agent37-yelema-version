@@ -168,8 +168,9 @@ Browser ─▶ Next.js (this app) ─▶ control plane  https://api.agent37.com/
   `public/experts/vid` (looked up by first name, never listed in code), the three faces of the
   sign-in pitch (`AuthShell`), and the gallery's seven themes (`src/config/expert-themes.ts`,
   `src/lib/expert-themes.ts`), used until the back office's catalogue files every expert under a
-  `category`, and the site's job sheets copied in `src/config/expert-sheets.ts` (Kouassi only, for
-  approval), which win over the catalogue's sheet for their expert until the catalogue serves them. Names, roles, photos, sheets come from the
+  `category`, and the site's job sheets of the twelve experts copied in `src/config/expert-sheets.ts`, which win
+  over the catalogue's sheet until the catalogue serves the same fields (label, pronoun, intro, mission,
+  inAction, daily, skills, deliverables, templates, routines, approval, needs); the file then goes. Names, roles, photos, sheets come from the
   back office's public catalogue (`BACKOFFICE_URL`, `src/lib/catalogue.ts`), joined to installed
   profiles by the part of the profile name after `__`. Which experts a member HAS is what is
   installed (`agents.profiles`, written by the back office; the instance itself as a fallback).
