@@ -67,8 +67,12 @@ const memberName = (m: { email: string | null; name: string | null }) => m.name 
 
 const ok = (c: Call) => c.httpStatus >= 200 && c.httpStatus < 300;
 
-// One CSV field, for a French spreadsheet (semicolons, quotes doubled).
-const cell = (v: string) => (/[";\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+// One CSV field, for a French spreadsheet (semicolons, quotes doubled). A value a spreadsheet would
+// run as a formula (a member named « =HYPERLINK(…) ») is kept as text by a leading apostrophe.
+const cell = (raw: string) => {
+  const v = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  return /[";\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+};
 
 // Every call of the period, read page by page (100 a page), as a CSV the member downloads.
 const CSV_MAX_PAGES = 100;
@@ -127,10 +131,12 @@ export function UsageView() {
     setExporting(true);
     try {
       const all: Call[] = [];
+      let truncated = false;
       for (let page = 1; page <= CSV_MAX_PAGES; page += 1) {
         const res = await apiFetch<CallsPage>(`/api/composio-usage/calls?${query(month, member, page)}`);
         all.push(...res.items);
         if (!res.hasMore) break;
+        if (page === CSV_MAX_PAGES) truncated = true;
       }
       const lines = [
         ["Date", "Membre", "E-mail", "Application", "Outil", "Résultat"].join(";"),
@@ -146,8 +152,12 @@ export function UsageView() {
       const a = document.createElement("a");
       a.href = url;
       a.download = `appels-outils-${month}${member ? `-${member.split("@")[0]}` : ""}.csv`;
+      document.body.append(a);
       a.click();
-      URL.revokeObjectURL(url);
+      a.remove();
+      // Firefox may still be reading the file when click() returns.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      if (truncated) toast.warning(`Export limité à ${count.format(all.length)} appels. Choisissez un membre pour exporter le reste.`);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
