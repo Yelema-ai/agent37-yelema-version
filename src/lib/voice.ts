@@ -129,6 +129,23 @@ export interface CallRecord {
   summary: string[];
   /** Just ended: the expert is probably still writing its subject and summary. */
   subjectPending: boolean;
+  /**
+   * The call's lines, for the « Transcription » tab, once the back office serves them (it does not
+   * yet). Only a transcript the back office chose to serve: the raw one handed to the expert in its
+   * session is full of recognition errors and is never dug out of the chat.
+   */
+  transcript?: TranscriptLine[] | null;
+}
+
+export interface TranscriptLine {
+  who: "user" | "expert";
+  text: string;
+}
+
+/** The well-formed lines of a call's transcript; empty when the back office sent none. */
+export function transcriptOf(record: Pick<CallRecord, "transcript">): TranscriptLine[] {
+  const lines = Array.isArray(record.transcript) ? record.transcript : [];
+  return lines.filter((l): l is TranscriptLine => !!l && (l.who === "user" || l.who === "expert") && typeof l.text === "string" && l.text.trim() !== "");
 }
 
 // The back office hands the expert the call's exact transcript in the call's session. It is full of

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { callDuration, callHeaders, chosenVoice, countryFlag, countryName, filterVoices, isCallTranscript, parseVoicePrefs, signalingStep, voiceFacets, type VoiceOption } from "./voice.ts";
+import { callDuration, callHeaders, chosenVoice, countryFlag, countryName, filterVoices, isCallTranscript, parseVoicePrefs, signalingStep, transcriptOf, voiceFacets, type VoiceOption } from "./voice.ts";
 
 test("a relayed step is only one the SDK sends, with its own method", () => {
   assert.equal(signalingStep("conv_abc-1", "offer", "POST"), "offer");
@@ -74,4 +74,20 @@ test("a call transcript handed to the expert is recognised by its prefix, in bot
   assert.equal(isCallTranscript("Exact transcript of the voice call of 17/10/2026 at 14:05 UTC — part 1/2 (for the record…)"), true);
   assert.equal(isCallTranscript("Peux-tu me donner la transcription exacte de l'appel vocal ?"), false);
   assert.equal(isCallTranscript("Demande faite pendant un appel vocal : …"), false);
+});
+
+test("transcriptOf keeps well-formed lines only", () => {
+  assert.deepEqual(transcriptOf({}), []);
+  assert.deepEqual(transcriptOf({ transcript: null }), []);
+  const lines = [
+    { who: "user", text: "Bonjour" },
+    { who: "expert", text: " " },
+    { who: "robot", text: "x" },
+    null,
+    { who: "expert", text: "Bonjour Aïcha" },
+  ] as unknown as Parameters<typeof transcriptOf>[0]["transcript"];
+  assert.deepEqual(transcriptOf({ transcript: lines }), [
+    { who: "user", text: "Bonjour" },
+    { who: "expert", text: "Bonjour Aïcha" },
+  ]);
 });

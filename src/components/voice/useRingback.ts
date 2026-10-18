@@ -37,3 +37,36 @@ export function useRingback(active: boolean): void {
     };
   }, [active]);
 }
+
+// The end tone when a call the expert had answered ends: three short beeps at 425 Hz, like a line
+// that hangs up. Synthesised, nothing to load; played once and released.
+const BEEPS = 3;
+const BEEP_S = 0.16;
+const GAP_S = 0.12;
+
+export function playHangupTone(): void {
+  let ctx: AudioContext;
+  try {
+    ctx = new AudioContext();
+  } catch {
+    return;
+  }
+  const gain = ctx.createGain();
+  gain.gain.value = 0;
+  gain.connect(ctx.destination);
+  const tone = ctx.createOscillator();
+  tone.frequency.value = 425;
+  tone.connect(gain);
+  const t0 = ctx.currentTime + 0.02;
+  for (let i = 0; i < BEEPS; i++) {
+    const t = t0 + i * (BEEP_S + GAP_S);
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(VOLUME, t + 0.015);
+    gain.gain.setValueAtTime(VOLUME, t + BEEP_S - 0.015);
+    gain.gain.linearRampToValueAtTime(0, t + BEEP_S);
+  }
+  const end = t0 + BEEPS * (BEEP_S + GAP_S);
+  tone.start(t0);
+  tone.stop(end);
+  tone.onended = () => void ctx.close().catch(() => {});
+}

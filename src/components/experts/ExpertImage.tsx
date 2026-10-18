@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 // drawn (the parent's color or initial stays), never the browser's broken-image icon.
 //
 // Keep in sync with `images.remotePatterns` in next.config.ts.
-function optimizable(src: string): boolean {
+export function optimizable(src: string): boolean {
   try {
     const url = new URL(src);
     return url.protocol === "https:" && url.hostname.endsWith(".yelema.ai") && (url.pathname.startsWith("/api/public/experts/") || url.pathname.startsWith("/api/public/expert-avatars/"));
