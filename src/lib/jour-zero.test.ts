@@ -32,11 +32,10 @@ test("a bad check alone is dropped, and an id counts once", () => {
 });
 
 test("readiness: ready, partial or not prepared", () => {
-  assert.deepEqual(readiness(parseJourZero(file())!), { state: "ready", label: "Prêt", hint: "Tout est vérifié et en place." });
+  assert.deepEqual(readiness(parseJourZero(file())!), { state: "ready", label: "Prêt" });
   const partial = parseJourZero(file({ pret: false, checks: [check("outils", false), check("charte"), check("canaux"), check("entreprise"), check("competences", false)] }))!;
-  assert.equal(readiness(partial).state, "partial");
-  assert.equal(readiness(partial).label, "Utilisable, 2 points à régler");
+  assert.deepEqual(readiness(partial), { state: "partial", label: "Préparation 3/5" });
   assert.equal(readiness(parseJourZero(file({ pret: true, checks: [check("outils", false)] }))!).state, "partial");
-  assert.equal(readiness(JOUR_ZERO_ABSENT).label, "Utilisable, préparation à venir");
+  assert.deepEqual(readiness(JOUR_ZERO_ABSENT), { state: "absent", label: "Pas encore préparé" });
   assert.equal(readiness(parseJourZero(file({ pret: false, checks: [] }))!).state, "absent");
 });

@@ -264,7 +264,7 @@ export function AgentWorkspace({
                     <Pencil className="size-3" />
                   </button>
                 )}
-                {profileId && <ExpertReadiness agentId={agentId} profileId={profileId} expertName={expertName} onOpenTools={() => selectTab("tools")} compact className="mr-2 shrink-0" />}
+                {profileId && <ExpertReadiness agentId={agentId} profileId={profileId} expertName={expertName} onOpenTools={() => selectTab("tools")} className="mr-2 shrink-0" />}
                 {callee && <CallButton expert={callee} className="mr-1 shrink-0" />}
                 {callee && <VoiceButton expert={callee} compact className="mr-2 size-8 shrink-0" />}
               </>

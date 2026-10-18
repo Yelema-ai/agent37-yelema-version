@@ -56,19 +56,12 @@ export function parseJourZero(body: string): JourZero | null {
   return { date, pret: d.pret, checks };
 }
 
-/**
- * What the chip says. An expert is usable as soon as it is installed: the preparation only says
- * whether it works with everything it needs. `hint` is the one line under the chip.
- */
-export type Readiness = { state: "ready" | "partial" | "absent"; label: string; hint: string };
+export type Readiness = { state: "ready" | "partial" | "absent"; label: string };
 
-/** « Prêt », « Utilisable, 1 point à régler » or « Utilisable, préparation à venir ». */
+/** « Prêt », « Préparation 3/5 » or « Pas encore préparé ». */
 export function readiness(jz: JourZero): Readiness {
-  if (jz.absent || (!jz.pret && jz.checks.length === 0))
-    return { state: "absent", label: "Utilisable, préparation à venir", hint: "Vous pouvez déjà lui écrire. Sa préparation du premier jour n’est pas encore faite." };
-  const total = jz.checks.length || JOUR_ZERO_CHECK_IDS.length;
-  const left = total - jz.checks.filter((c) => c.ok).length;
-  if (jz.pret && left === 0) return { state: "ready", label: "Prêt", hint: "Tout est vérifié et en place." };
-  const points = `${left} point${left > 1 ? "s" : ""} à régler`;
-  return { state: "partial", label: `Utilisable, ${points}`, hint: `Vous pouvez déjà lui écrire. ${left > 1 ? "Ces points réglés" : "Ce point réglé"}, tout sera en place.` };
+  if (jz.absent || (!jz.pret && jz.checks.length === 0)) return { state: "absent", label: "Pas encore préparé" };
+  const ok = jz.checks.filter((c) => c.ok).length;
+  if (jz.pret && ok === jz.checks.length) return { state: "ready", label: "Prêt" };
+  return { state: "partial", label: `Préparation ${ok}/${jz.checks.length || JOUR_ZERO_CHECK_IDS.length}` };
 }
