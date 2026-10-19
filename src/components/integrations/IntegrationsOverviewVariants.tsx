@@ -109,7 +109,7 @@ export function OverviewCards({ summary, sections }: { summary: IntegrationsSumm
             <Link
               key={c.key}
               href={c.href}
-              className="flex min-h-[148px] flex-col rounded-[22px] border border-line bg-surface p-4 transition-colors hover:border-brand/40"
+              className="flex flex-col rounded-[22px] border border-line bg-surface p-4 transition-colors hover:border-brand/40"
             >
               <span className="flex items-center justify-between gap-2">
                 <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-3">{c.label}</span>
@@ -124,7 +124,7 @@ export function OverviewCards({ summary, sections }: { summary: IntegrationsSumm
                 <span className="font-display text-[28px] font-bold text-ink">{c.value}</span>
                 {c.note && <span className="text-xs text-ink-3">{c.note}</span>}
               </span>
-              <span className="mt-auto pt-3">{on.length ? <Stack items={on} /> : <span className="text-[13px] text-ink-3">Aucun</span>}</span>
+              <span className="mt-auto pt-3 sm:min-h-[52px]">{on.length ? <Stack items={on} /> : <span className="text-[13px] text-ink-3">Aucun</span>}</span>
             </Link>
           );
         })}
