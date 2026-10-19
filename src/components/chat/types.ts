@@ -98,13 +98,13 @@ export function prettyProvider(provider: string): string {
     .filter(Boolean)
     .map((w) => w[0].toUpperCase() + w.slice(1))
     .join(" ");
-  return titled || "Custom";
+  return titled || "Autre";
 }
 
-// The metered gateway labels its single model "default"; surface it as "Default". Real model
+// The metered gateway labels its single model "default"; surface it as "Par défaut". Real model
 // labels ("Claude Sonnet 4.5", "GPT-5.2") are already display-ready and pass through unchanged.
 export function prettyModelLabel(label: string): string {
-  return label.toLowerCase() === "default" ? "Default" : label;
+  return label.toLowerCase() === "default" ? "Par défaut" : label;
 }
 
 // Agent37's reasoning_effort enum (POST /v1/responses). null => use the agent's default.
@@ -112,12 +112,12 @@ export const REASONING_EFFORTS = ["none", "minimal", "low", "medium", "high", "x
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 export const REASONING_LABELS: Record<ReasoningEffort, string> = {
-  none: "None",
+  none: "Aucun",
   minimal: "Minimal",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "X-High",
+  low: "Faible",
+  medium: "Moyen",
+  high: "Élevé",
+  xhigh: "Très élevé",
 };
 
 // Composer selection. null fields mean "use the agent default" (param omitted on send).

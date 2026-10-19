@@ -23,6 +23,7 @@ export function EffortMenu({ value, disabled, onChange }: Props) {
         <button
           type="button"
           disabled={disabled}
+          title={`Effort de réflexion : ${value ? REASONING_LABELS[value] : "par défaut"}`}
           className="inline-flex h-8 items-center gap-1.5 rounded-full bg-secondary/70 px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
         >
           <Zap className="h-3.5 w-3.5 shrink-0" />
@@ -33,7 +34,7 @@ export function EffortMenu({ value, disabled, onChange }: Props) {
       <DropdownMenuContent align="start" className="w-40">
         <DropdownMenuItem onSelect={() => onChange(null)}>
           <Check className={cn("h-4 w-4", value ? "opacity-0" : "opacity-100")} />
-          <span className="flex-1">Default</span>
+          <span className="flex-1">Par défaut</span>
         </DropdownMenuItem>
         {REASONING_EFFORTS.map((e) => (
           <DropdownMenuItem key={e} onSelect={() => onChange(e)}>

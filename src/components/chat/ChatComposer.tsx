@@ -53,7 +53,7 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
   // `groups` is exactly "has models".
   const defaultLabel = useMemo(() => {
     const def = findModel(groups, defaultModel);
-    return def ? prettyModelLabel(def.label) : loading ? "Loading…" : "Default";
+    return def ? prettyModelLabel(def.label) : loading ? "Chargement…" : "Par défaut";
   }, [groups, defaultModel, loading]);
 
   const grow = (el: HTMLTextAreaElement) => {

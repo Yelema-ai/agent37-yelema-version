@@ -36,17 +36,20 @@ function MessageAttachments({ attachments }: { attachments: MessageAttachment[] 
   );
 }
 
+// The expert's reasoning, folded by default (it often comes in English, from the model itself):
+// the label says it is thinking, the text opens on demand.
 function ThinkingBlock({ content, live }: { content: string; live: boolean }) {
-  const [open, setOpen] = useState(live);
+  const [open, setOpen] = useState(false);
   if (!content) return null;
   return (
     <div className="mb-2">
       <button
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
         className="-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-1 text-xs text-ink-3 transition-colors hover:text-ink"
       >
         {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        <span>{live ? "Réflexion en cours…" : "Sa réflexion"}</span>
+        <span>{live ? "Réflexion en cours…" : "Réflexion"}</span>
         {live && <Loader2 className="h-3 w-3 animate-spin" />}
       </button>
       {open && (
