@@ -1,20 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, Globe, Key, Loader2, Plus } from "lucide-react";
+import { Globe, Key, Loader2, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { McpAuth, McpServerDraft } from "@/lib/mcp-servers";
 import { cn } from "@/lib/utils";
 
-// Deux méthodes seulement : un serveur ouvert, ou un jeton Bearer. OAuth 2.0 n'est pas proposé.
 const AUTH_OPTIONS: { value: McpAuth; label: string; description: string; icon: typeof Globe }[] = [
-  { value: "none", label: "Aucune", description: "Serveur public ou sans clé d’autorisation", icon: Globe },
-  { value: "bearer", label: "Jeton Bearer", description: "Clé secrète ou jeton d’accès, envoyé dans l’en-tête Authorization", icon: Key },
+  { value: "none", label: "Aucune", description: "Serveur public, sans clé", icon: Globe },
+  { value: "bearer", label: "Jeton Bearer", description: "Une clé ou un jeton d’accès", icon: Key },
+  { value: "oauth", label: "OAuth", description: "Connexion sur la page du fournisseur (Notion, Linear…)", icon: ShieldCheck },
 ];
 
 // Le dialogue d'ajout d'un serveur MCP. Il ne garde rien : le brouillon part au back-office, qui
@@ -35,8 +34,6 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave }: { op
     setToken("");
   }, [open]);
 
-  const current = AUTH_OPTIONS.find((o) => o.value === auth) ?? AUTH_OPTIONS[0];
-  const CurrentIcon = current.icon;
   const ready = Boolean(name.trim() && url.trim() && (auth === "none" || token.trim()));
 
   async function submit(e: React.FormEvent) {
@@ -54,7 +51,7 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave }: { op
 
   return (
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[580px]">
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
             <DialogTitle>Connecter un serveur MCP</DialogTitle>
@@ -78,47 +75,33 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave }: { op
               <p className="text-xs text-ink-3">En https, joignable depuis Internet : vos experts tournent dans le cloud, pas sur votre réseau.</p>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="mcp-auth">Authentification</Label>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    id="mcp-auth"
-                    type="button"
-                    disabled={busy}
-                    className="flex h-11 w-full items-center justify-between rounded-xl border border-line bg-surface px-3.5 py-2 text-[14px] text-ink transition-colors hover:border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <span className="flex min-w-0 items-center gap-2.5">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-soft-2 text-brand">
-                        <CurrentIcon className="h-3.5 w-3.5" />
+            <fieldset className="space-y-1.5" disabled={busy}>
+              <legend className="mb-1.5 text-sm font-medium text-ink">Authentification</legend>
+              <div role="radiogroup" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {AUTH_OPTIONS.map((opt) => {
+                  const selected = auth === opt.value;
+                  const Icon = opt.icon;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setAuth(opt.value)}
+                      className={cn("flex items-start gap-2.5 rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50", selected ? "border-brand bg-tint/60" : "border-line bg-surface hover:border-brand/40")}
+                    >
+                      <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", selected ? "bg-brand text-on-brand" : "bg-soft-2 text-ink-2")}>
+                        <Icon className="h-3.5 w-3.5" />
                       </span>
-                      <span className="truncate font-medium">{current.label}</span>
-                    </span>
-                    <ChevronDown className="h-4 w-4 shrink-0 text-ink-3" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)] rounded-2xl border border-line bg-surface p-1.5 shadow-[0_16px_40px_-12px_rgba(23,17,43,.25)]">
-                  {AUTH_OPTIONS.map((opt) => {
-                    const selected = auth === opt.value;
-                    const Icon = opt.icon;
-                    return (
-                      <DropdownMenuItem key={opt.value} onSelect={() => setAuth(opt.value)} className={cn("flex cursor-pointer items-center justify-between gap-3 rounded-xl px-3 py-2.5 transition-colors", selected ? "bg-tint/80 text-brand" : "text-ink hover:bg-soft")}>
-                        <span className="flex min-w-0 items-start gap-2.5">
-                          <span className={cn("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors", selected ? "bg-brand text-on-brand" : "bg-soft-2 text-ink-2")}>
-                            <Icon className="h-3.5 w-3.5" />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block text-sm font-semibold leading-tight">{opt.label}</span>
-                            <span className="mt-0.5 block text-xs leading-snug text-ink-3">{opt.description}</span>
-                          </span>
-                        </span>
-                        {selected && <Check className="h-4 w-4 shrink-0 stroke-[2.5] text-brand" />}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold leading-tight text-ink">{opt.label}</span>
+                        <span className="mt-0.5 block text-xs leading-snug text-ink-3">{opt.description}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
 
             {auth === "bearer" && (
               <div className="space-y-1.5 pt-1">
@@ -128,6 +111,12 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave }: { op
                 <Input id="mcp-token" type="password" placeholder="Jeton ou clé secrète" value={token} onChange={(e) => setToken(e.target.value)} disabled={busy} required autoComplete="off" spellCheck={false} />
                 <p className="text-xs text-ink-3">Chiffré et gardé par Yelema ; il ne sera plus affiché, seulement ses quatre derniers caractères.</p>
               </div>
+            )}
+
+            {auth === "oauth" && (
+              <p className="rounded-xl bg-tint/60 px-3 py-2.5 text-xs leading-relaxed text-ink-2">
+                Rien à saisir ici. Une fois le serveur installé, chacun clique « Autoriser » et se connecte avec son propre compte chez le fournisseur ; l’accès reste sur son instance.
+              </p>
             )}
 
             <p className="rounded-xl bg-soft px-3 py-2.5 text-xs leading-relaxed text-ink-2">

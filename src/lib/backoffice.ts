@@ -3,7 +3,7 @@ import type { ModelGroup } from "@/lib/model-options";
 import "server-only";
 import type { CompanyProfile } from "@/lib/company";
 import type { ComposioCall } from "@/lib/composio-usage";
-import { mcpScopePath, mcpServerPath, type McpOverview, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
+import { isServerId, mcpScopePath, mcpServerPath, type McpOauthQuery, type McpOauthServer, type McpOverview, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
 import { vaultPath, type VaultDraft, type VaultItem, type VaultList, type VaultOverview, type VaultScope } from "@/lib/vault";
 import { scopePath, type LlmModelChoice, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { mailPath, type MailDetail, type MailDraft, type MailInbox, type MailRights, type MailRightsPatch, type MailSummary } from "@/lib/mail";
@@ -27,6 +27,8 @@ const TIMEOUT_MS = process.env.NODE_ENV === "development" ? 60_000 : 15_000;
 const MAIL_SEND_TIMEOUT_MS = 90_000;
 // Saving a model key waits for the provider to say whether it accepts it.
 const SETTING_WRITE_TIMEOUT_MS = 30_000;
+// An OAuth start or return waits on Hermes inside the instance (up to 45 s, then 60 s and a gateway restart).
+const MCP_OAUTH_TIMEOUT_MS = 115_000;
 // A portrait is drawn by the image model, which takes up to a minute.
 const AVATAR_GENERATE_TIMEOUT_MS = 120_000;
 // A reasoned answer of the company memory runs a model on the provider's side.
@@ -461,6 +463,16 @@ export const backoffice = {
     if (!path) throw new BackofficeError(404, "not_found", "Ce serveur est introuvable.");
     return call<McpWritten>(path, { method: "DELETE", token });
   },
+  // OAuth of a tool server, always on the caller's own instance: the back office drives Hermes's
+  // login there and relays the provider's return; the tokens never leave the instance.
+  mcpOauth: (token: string) => call<{ servers: McpOauthServer[] }>("/app/mcp/oauth", { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  startMcpOauth: (token: string, serverId: string) => {
+    if (!isServerId(serverId)) throw new BackofficeError(404, "not_found", "Ce serveur est introuvable.");
+    return call<{ authorizationUrl: string }>(`/app/mcp/oauth/${serverId}`, { method: "POST", token, timeoutMs: MCP_OAUTH_TIMEOUT_MS });
+  },
+  finishMcpOauth: (token: string, query: McpOauthQuery) =>
+    call<{ name: string; connected: boolean }>("/app/mcp/oauth/callback", { method: "POST", token, body: query, timeoutMs: MCP_OAUTH_TIMEOUT_MS }),
+  cancelMcpOauth: (token: string) => call<{ ok: true }>("/app/mcp/oauth", { method: "DELETE", token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
 
   // The company memory. The two reads are made in an instance's name, like reportComposioCalls: the
   // back office maps the token to its member and answers only from the compartments the org chart

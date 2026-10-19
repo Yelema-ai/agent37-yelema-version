@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import type { Companion } from "@/lib/companion";
 import type { Expert } from "@/lib/types";
 
 /** The name and picture a member just gave an expert, by catalogue key, as the edit dialog got them back. */
@@ -24,6 +25,7 @@ function fresh(url: string | null): string | null {
 export interface InitialExperts {
   workspaceId: string;
   experts: Expert[];
+  companion: Companion | null;
   unreadable: unknown[];
   installing: boolean;
   failed: boolean;
@@ -58,6 +60,8 @@ function installOver(workspaceId: string): void {
 
 export interface UseExperts {
   experts: Expert[];
+  /** Yélé, where her profile is installed on the user's instance. */
+  companion: Companion | null;
   /** Instances dont les profils n'ont pas pu être lus — à montrer, jamais à taire. */
   unreadable: number;
   /** Vrai tant que le back-office installe encore des experts sur l'instance. */
@@ -86,6 +90,7 @@ export interface UseExperts {
  */
 export function useExperts(workspaceId: string | undefined, initial: InitialExperts | null = null): UseExperts {
   const [experts, setExperts] = useState<Expert[]>(initial?.experts ?? []);
+  const [companion, setCompanion] = useState<Companion | null>(initial?.companion ?? null);
   const [unreadable, setUnreadable] = useState(initial?.unreadable.length ?? 0);
   const [installing, setInstalling] = useState(initial?.installing ?? false);
   const [stalled, setStalled] = useState(false);
@@ -127,12 +132,13 @@ export function useExperts(workspaceId: string | undefined, initial: InitialExpe
     let alive = true;
     if (!quiet.current) setLoading(true);
     quiet.current = false;
-    apiFetch<{ experts: Expert[]; unreadable: unknown[]; installing?: boolean; failed?: boolean; failedExperts?: string[] }>(
+    apiFetch<{ experts: Expert[]; companion?: Companion | null; unreadable: unknown[]; installing?: boolean; failed?: boolean; failedExperts?: string[] }>(
       `/api/experts?workspace=${workspaceId}`
     )
       .then((d) => {
         if (!alive) return;
         setExperts(d.experts);
+        setCompanion(d.companion ?? null);
         setUnreadable(d.unreadable.length);
         setInstalling(d.installing === true);
         setFailure({ failed: d.failed === true, experts: d.failedExperts ?? [] });
@@ -180,5 +186,5 @@ export function useExperts(workspaceId: string | undefined, initial: InitialExpe
     }
   }, [experts]);
 
-  return { experts: shown, unreadable, installing, stalled, failed: failure.failed, failedExperts: failure.experts, loading, reload, applyLook };
+  return { experts: shown, companion, unreadable, installing, stalled, failed: failure.failed, failedExperts: failure.experts, loading, reload, applyLook };
 }

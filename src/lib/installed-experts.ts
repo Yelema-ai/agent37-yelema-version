@@ -4,6 +4,7 @@ import { loadCatalogue, matchCatalogue } from "@/lib/catalogue";
 import { expertDisplayName } from "@/lib/experts";
 import { orderExperts } from "@/lib/expert-order";
 import { authViaBackoffice } from "@/lib/runtime-config";
+import { isCompanionProfile, type Companion } from "@/lib/companion";
 import { currentInstallation, currentInstance } from "@/lib/session";
 import { listInstanceProfiles } from "@/lib/hermes-profiles";
 import { ApiError, dbError } from "@/lib/http";
@@ -72,6 +73,8 @@ export function profilesMirrored(agents: AgentRow[]): boolean {
 
 export interface UserExperts {
   experts: Expert[];
+  /** Yélé where her profile is installed; she is not among `experts`. */
+  companion: Companion | null;
   unreadable: { agentId: string; agentName: string | null }[];
   /** True while the back office is still creating the instance or installing experts on it. */
   installing: boolean;
@@ -109,7 +112,8 @@ export async function userExperts(agents: AgentRow[]): Promise<UserExperts> {
   const readable = installing ? agents.filter((a) => Array.isArray(a.profiles) && a.profiles.length > 0) : agents;
   const [{ profiles, unreadable }, catalogue, looks] = await Promise.all([installedProfiles(readable), loadCatalogue(), memberLooks()]);
 
-  const experts: Expert[] = profiles.map((p) => {
+  const yele = profiles.find((p) => isCompanionProfile(p.profileId));
+  const experts: Expert[] = profiles.filter((p) => !isCompanionProfile(p.profileId)).map((p) => {
     const entry = matchCatalogue(catalogue.experts, p.profileId);
     const look = looks.get(p.profileId);
     return {
@@ -130,6 +134,7 @@ export async function userExperts(agents: AgentRow[]): Promise<UserExperts> {
 
   return {
     experts: orderExperts(experts, catalogue.defaultExpertKey),
+    companion: yele ? { agentId: yele.agent.agent37_id, profileId: yele.profileId } : null,
     unreadable: unreadable.map((a) => ({ agentId: a.agent37_id, agentName: a.name })),
     installing,
     failed: state.installation === "failed",

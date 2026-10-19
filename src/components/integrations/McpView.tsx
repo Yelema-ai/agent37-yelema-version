@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Layers, Loader2, MoreHorizontal, Plus, Server, ShieldCheck, Trash2 } from "lucide-react";
+import { CheckCircle2, Layers, Loader2, MoreHorizontal, Plus, RefreshCw, Server, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StateBadge } from "@/components/models/MemberSources";
@@ -10,16 +10,36 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { apiFetch } from "@/lib/api";
 import type { SettingScope } from "@/lib/llm";
-import { mcpPending, type McpOverview, type McpServer, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
+import { mcpPending, type McpOauthServer, type McpOverview, type McpServer, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
 import { McpServerDialog } from "./McpServerDialog";
 
 // Une pose prend d'ordinaire moins d'une minute par instance ; au-delà, on cesse de relire seul.
 const POLL_MS = 4_000;
 const POLL_TRIES = 45;
+// Une autorisation attend le fournisseur au plus 10 minutes sur l'instance.
+const OAUTH_POLL_MS = 3_000;
+const OAUTH_POLL_TRIES = 200;
 
 const scopeUrl = (scope: SettingScope) => (scope.kind === "member" ? `/api/mcp/members/${encodeURIComponent(scope.id)}` : `/api/mcp/${scope.kind}`);
 
-function ServerCard({ server, note, onRemove }: { server: McpServer; note?: string; onRemove?: () => void }) {
+type Access = { connected: boolean; busy: boolean; onAuthorize: () => void };
+
+/** OAuth : l'accès du membre connecté, sur sa propre instance. */
+function OauthAccess({ server, access }: { server: McpServer; access: Access }) {
+  if (access.connected)
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-ok-pale px-2 py-0.5 text-[11px] font-semibold text-ok">
+        <CheckCircle2 className="h-3 w-3" /> Autorisé
+      </span>
+    );
+  return (
+    <Button size="sm" variant="outline" onClick={access.onAuthorize} disabled={access.busy || server.state !== "applied"} title={server.state !== "applied" ? "Disponible une fois le serveur installé" : undefined}>
+      {access.busy ? <Loader2 className="animate-spin" /> : <ShieldCheck />} Autoriser
+    </Button>
+  );
+}
+
+function ServerCard({ server, note, access, onRemove }: { server: McpServer; note?: string; access?: Access; onRemove?: () => void }) {
   return (
     <div className="flex min-h-[76px] items-center gap-3 rounded-[22px] border border-line bg-surface py-3 pl-4 pr-3">
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-tint text-brand">
@@ -33,11 +53,11 @@ function ServerCard({ server, note, onRemove }: { server: McpServer; note?: stri
         <p className="truncate font-mono text-[12px] text-ink-3" title={server.url}>
           {server.url}
         </p>
-        <p className="text-[11px] text-ink-3">{server.hint ? `Jeton ${server.hint}` : "Sans jeton"}</p>
+        <p className="text-[11px] text-ink-3">{server.auth === "oauth" ? "OAuth · chacun autorise son compte" : server.hint ? `Jeton ${server.hint}` : "Sans jeton"}</p>
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <StateBadge state={server.state} />
-        {onRemove && (
+        {access && server.state === "applied" ? <OauthAccess server={server} access={access} /> : <StateBadge state={server.state} />}
+        {(onRemove || (access?.connected && !access.busy)) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button type="button" aria-label={`Options pour ${server.name}`} className="grid h-8 w-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink">
@@ -45,9 +65,16 @@ function ServerCard({ server, note, onRemove }: { server: McpServer; note?: stri
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem variant="destructive" onSelect={onRemove}>
-                <Trash2 /> Supprimer
-              </DropdownMenuItem>
+              {access?.connected && (
+                <DropdownMenuItem onSelect={access.onAuthorize}>
+                  <RefreshCw /> Réautoriser
+                </DropdownMenuItem>
+              )}
+              {onRemove && (
+                <DropdownMenuItem variant="destructive" onSelect={onRemove}>
+                  <Trash2 /> Supprimer
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -66,6 +93,9 @@ export function McpView() {
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<McpServer | null>(null);
   const [tries, setTries] = useState(0);
+  const [oauth, setOauth] = useState<Record<string, McpOauthServer>>({});
+  const [authorizing, setAuthorizing] = useState<string | null>(null);
+  const [oauthTries, setOauthTries] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -80,6 +110,56 @@ export function McpView() {
     void load();
   }, [load]);
 
+  // L'accès OAuth se lit sur l'instance de l'appelant : seulement s'il porte un serveur OAuth.
+  const hasOauth = Boolean(data && [...data.own, ...(data.client ?? [])].some((s) => s.auth === "oauth"));
+  const loadOauth = useCallback(async () => {
+    try {
+      const { servers } = await apiFetch<{ servers: McpOauthServer[] }>("/api/mcp/oauth");
+      setOauth(Object.fromEntries(servers.map((s) => [s.id, s])));
+      return servers;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (hasOauth) void loadOauth();
+  }, [hasOauth, loadOauth]);
+
+  // Tant que la fenêtre du fournisseur est ouverte, l'accès est relu jusqu'à ce que l'instance l'ait.
+  useEffect(() => {
+    if (!authorizing || oauthTries >= OAUTH_POLL_TRIES) return;
+    const timer = setTimeout(async () => {
+      const servers = await loadOauth();
+      const done = servers?.find((s) => s.id === authorizing);
+      if (done?.connected) {
+        toast.success(`Serveur ${done.name} autorisé`, { description: "Vos experts peuvent utiliser ses outils." });
+        setAuthorizing(null);
+      } else if (done && !done.pending && oauthTries > 3) setAuthorizing(null);
+      else setOauthTries((n) => n + 1);
+    }, OAUTH_POLL_MS);
+    return () => clearTimeout(timer);
+  }, [authorizing, oauthTries, loadOauth]);
+
+  async function authorize(server: McpServer) {
+    // La fenêtre s'ouvre au clic (sinon bloquée), puis reçoit l'adresse du fournisseur, sans lien vers cette page.
+    const popup = window.open("about:blank", "mcp-oauth", "popup,width=600,height=750");
+    setAuthorizing(server.id);
+    setOauthTries(0);
+    try {
+      const { authorizationUrl } = await apiFetch<{ authorizationUrl: string }>(`/api/mcp/oauth/${encodeURIComponent(server.id)}`, { method: "POST" });
+      if (!authorizationUrl.startsWith("https://")) throw new Error("Adresse d’autorisation refusée.");
+      if (popup) {
+        popup.opener = null;
+        popup.location.href = authorizationUrl;
+      } else window.location.assign(authorizationUrl);
+    } catch (e) {
+      popup?.close();
+      setAuthorizing(null);
+      toast.error((e as Error).message);
+    }
+  }
+
   // Tant qu'une pose est en cours, l'état est relu : l'écran passe seul à « En service » ou à l'échec.
   useEffect(() => {
     if (!data || !mcpPending(data) || tries >= POLL_TRIES) return;
@@ -91,6 +171,8 @@ export function McpView() {
   }, [data, tries, load]);
 
   const admin = data?.members !== undefined;
+  const accessOf = (s: McpServer): Access | undefined =>
+    s.auth === "oauth" && scope.kind !== "member" ? { connected: oauth[s.id]?.connected === true, busy: authorizing === s.id, onAuthorize: () => void authorize(s) } : undefined;
   // Un administrateur règle l'entreprise ou un membre ; un membre, seulement lui-même.
   useEffect(() => {
     if (data) setScope((s) => (admin ? (s.kind === "own" ? { kind: "client" } : s) : { kind: "own" }));
@@ -158,7 +240,7 @@ export function McpView() {
         ) : servers.length + inherited.length > 0 ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {servers.map((s) => (
-              <ServerCard key={s.id} server={s} onRemove={() => setRemoving(s)} />
+              <ServerCard key={s.id} server={s} access={accessOf(s)} onRemove={() => setRemoving(s)} />
             ))}
             {inherited.map((s) => (
               <ServerCard key={s.id} server={s} note="De l’entreprise" />

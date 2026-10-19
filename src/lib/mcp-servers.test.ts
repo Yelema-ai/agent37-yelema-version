@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { isServerId, mcpPending, mcpRefusalMessage, mcpScopePath, mcpServerPath, parseServerDraft, type McpOverview, type McpServer } from "./mcp-servers.ts";
+import { isServerId, mcpPending, mcpRefusalMessage, mcpScopePath, mcpServerPath, parseOauthQuery, parseServerDraft, type McpOverview, type McpServer } from "./mcp-servers.ts";
 
 describe("mcpRefusalMessage", () => {
   it("each refusal code of the contract has its own French sentence", () => {
-    const codes = ["bad_name", "reserved_name", "duplicate_name", "bad_url", "bad_token", "too_many_servers", "forbidden", "not_found", "too_many_attempts", "unavailable", "bad_request"];
+    const codes = ["bad_name", "reserved_name", "duplicate_name", "bad_url", "bad_token", "too_many_servers", "forbidden", "not_found", "too_many_attempts", "unavailable", "bad_request", "conflict", "bad_callback", "oauth_unavailable", "instance_error"];
     const sentences = codes.map((c) => mcpRefusalMessage(c));
     for (const s of sentences) assert.ok(typeof s === "string" && /[.!]$/.test(s) && !/[a-z]_[a-z]/.test(s));
     assert.equal(new Set(sentences).size, codes.length);
@@ -29,6 +29,11 @@ describe("parseServerDraft", () => {
     assert.equal(parseServerDraft({ ...ok, token: "  " }), null);
     assert.equal(parseServerDraft({ ...ok, auth: "none" }), null);
     assert.equal(parseServerDraft({ ...ok, auth: "oauth" }), null);
+  });
+
+  it("OAuth: nothing typed, each member authorizes later", () => {
+    assert.deepEqual(parseServerDraft({ name: "notion", url: "https://mcp.notion.com/mcp", auth: "oauth" }), { name: "notion", url: "https://mcp.notion.com/mcp", auth: "oauth" });
+    assert.equal(parseServerDraft({ name: "notion", url: "https://mcp.notion.com/mcp", auth: "basic" }), null);
   });
 
   it("refuses what is not a draft, or is oversized", () => {
@@ -65,5 +70,16 @@ describe("mcpPending", () => {
     assert.equal(mcpPending({ ...base, own: [server("pending")] }), true);
     assert.equal(mcpPending({ ...base, client: [server("pending")] }), true);
     assert.equal(mcpPending({ ...base, members: [{ id: "4", name: null, email: "k@acme.ci", servers: [server("pending")] }] }), true);
+  });
+});
+
+describe("parseOauthQuery", () => {
+  it("keeps the provider's four parameters, nothing else", () => {
+    assert.deepEqual(parseOauthQuery({ code: "c0de", state: "S1", iss: "https://mcp.notion.com", other: "x" }), { code: "c0de", state: "S1", iss: "https://mcp.notion.com" });
+    assert.deepEqual(parseOauthQuery({ error: "access_denied", state: "S1" }), { error: "access_denied", state: "S1" });
+  });
+
+  it("refuses a return without state, without code nor error, or with a non-printable value", () => {
+    for (const body of [null, {}, { code: "c" }, { state: "s" }, { code: "a b", state: "s" }, { code: "c\n", state: "s" }, { code: "x".repeat(4097), state: "s" }, { code: 7, state: "s" }]) assert.equal(parseOauthQuery(body), null, JSON.stringify(body));
   });
 });

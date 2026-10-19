@@ -5,7 +5,8 @@
 
 import { scopePath, type SettingScope } from "./llm.ts";
 
-export type McpAuth = "none" | "bearer";
+/** `oauth`: nothing typed here; each member then authorizes their own account from the MCP screen. */
+export type McpAuth = "none" | "bearer" | "oauth";
 /** Where the writing of a server on the instances stands. Not whether the server itself answers: the back office never calls it. */
 export type McpState = "applied" | "pending" | "failed";
 
@@ -61,9 +62,9 @@ export function parseServerDraft(body: unknown): McpServerDraft | null {
   const { name, url, auth, token } = body as Record<string, unknown>;
   if (typeof name !== "string" || !name.trim() || name.length > 60) return null;
   if (typeof url !== "string" || !url.trim() || url.length > 2000) return null;
-  if (auth !== "none" && auth !== "bearer") return null;
+  if (auth !== "none" && auth !== "bearer" && auth !== "oauth") return null;
   const draft: McpServerDraft = { name: name.trim(), url: url.trim(), auth };
-  if (auth === "none") return token === undefined || token === "" ? draft : null;
+  if (auth !== "bearer") return token === undefined || token === "" ? draft : null;
   if (typeof token !== "string" || !token.trim() || token.length > 4200) return null;
   return { ...draft, token: token.trim() };
 }
@@ -92,6 +93,10 @@ const REFUSALS: Record<string, string> = {
   not_found: "Ce serveur est introuvable.",
   too_many_attempts: "Trop d’essais en peu de temps. Réessayez dans une heure.",
   unavailable: "L’enregistrement est momentanément indisponible. Réessayez plus tard.",
+  conflict: "Votre instance n’est pas prête pour cette autorisation. Réessayez dans un instant.",
+  bad_callback: "Le retour du fournisseur est incomplet. Relancez l’autorisation.",
+  oauth_unavailable: "Ce serveur n’a pas proposé d’autorisation. Vérifiez son adresse, ou choisissez une autre méthode.",
+  instance_error: "Votre instance n’a pas pu traiter la demande. Réessayez dans un instant.",
 };
 
 /**
@@ -100,6 +105,34 @@ const REFUSALS: Record<string, string> = {
  */
 export function mcpRefusalMessage(code: string): string | null {
   return Object.hasOwn(REFUSALS, code) ? REFUSALS[code] : null;
+}
+
+/** An OAuth server as the caller's own instance holds it: authorized (tokens there) or not yet. */
+export interface McpOauthServer {
+  id: string;
+  name: string;
+  connected: boolean;
+  pending: boolean;
+}
+
+/** What the provider sent back to the browser, as the return page relays it. */
+export interface McpOauthQuery {
+  code?: string;
+  state: string;
+  iss?: string;
+  error?: string;
+}
+
+const QUERY_VALUE = /^[\x21-\x7e]{1,4096}$/;
+
+/** The four parameters of a provider's return, printable and bounded; null when `state` or both `code` and `error` are missing. */
+export function parseOauthQuery(body: unknown): McpOauthQuery | null {
+  if (!body || typeof body !== "object") return null;
+  const raw = body as Record<string, unknown>;
+  const pick = (k: string): string | undefined => (typeof raw[k] === "string" && QUERY_VALUE.test(raw[k] as string) ? (raw[k] as string) : undefined);
+  const q: McpOauthQuery = { state: pick("state") ?? "", code: pick("code"), iss: pick("iss"), error: pick("error") };
+  if (!q.state || (!q.code && !q.error)) return null;
+  return Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined)) as unknown as McpOauthQuery;
 }
 
 export const MCP_STATE_LABELS: Record<McpState, string> = {
