@@ -17,7 +17,7 @@ export function AttachButton({ onFiles, disabled }: { onFiles: (files: FileList)
         onClick={() => ref.current?.click()}
         aria-label="Joindre des fichiers"
         title="Joindre des fichiers"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50 max-sm:h-10 max-sm:w-10"
       >
         <Paperclip className="h-4 w-4" />
       </button>

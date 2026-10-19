@@ -24,11 +24,12 @@ export function EffortMenu({ value, disabled, onChange }: Props) {
           type="button"
           disabled={disabled}
           title={`Effort de réflexion : ${value ? REASONING_LABELS[value] : "par défaut"}`}
-          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-secondary/70 px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+          aria-label={`Effort de réflexion : ${value ? REASONING_LABELS[value] : "par défaut"}`}
+          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-secondary/70 px-3 max-sm:size-9 max-sm:justify-center max-sm:px-0 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
         >
           <Zap className="h-3.5 w-3.5 shrink-0" />
-          <span>{value ? REASONING_LABELS[value] : "Effort"}</span>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+          <span className="max-sm:hidden">{value ? REASONING_LABELS[value] : "Effort"}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 max-sm:hidden" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40">
