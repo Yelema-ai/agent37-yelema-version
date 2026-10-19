@@ -5,7 +5,7 @@ import { isServerId, mcpPending, mcpRefusalMessage, mcpScopePath, mcpServerPath,
 
 describe("mcpRefusalMessage", () => {
   it("each refusal code of the contract has its own French sentence", () => {
-    const codes = ["bad_name", "reserved_name", "duplicate_name", "bad_url", "bad_token", "too_many_servers", "forbidden", "not_found", "too_many_attempts", "unavailable", "bad_request", "conflict", "bad_callback", "oauth_unavailable", "instance_error"];
+    const codes = ["bad_name", "reserved_name", "duplicate_name", "bad_url", "bad_token", "too_many_servers", "forbidden", "not_found", "too_many_attempts", "unavailable", "bad_request", "conflict", "bad_callback", "oauth_unavailable", "instance_error", "bad_stdio"];
     const sentences = codes.map((c) => mcpRefusalMessage(c));
     for (const s of sentences) assert.ok(typeof s === "string" && /[.!]$/.test(s) && !/[a-z]_[a-z]/.test(s));
     assert.equal(new Set(sentences).size, codes.length);
@@ -29,6 +29,11 @@ describe("parseServerDraft", () => {
     assert.equal(parseServerDraft({ ...ok, token: "  " }), null);
     assert.equal(parseServerDraft({ ...ok, auth: "none" }), null);
     assert.equal(parseServerDraft({ ...ok, auth: "oauth" }), null);
+  });
+
+  it("Stdio: a catalogue key only, never an address, a token or a command", () => {
+    assert.deepEqual(parseServerDraft({ name: "partage", auth: "stdio", stdio: "fichiers" }), { name: "partage", url: "", auth: "stdio", stdio: "fichiers" });
+    for (const body of [{ stdio: "npx -y evil" }, { stdio: "fichiers", url: "https://x.co" }, { stdio: "fichiers", token: "t" }, {}]) assert.equal(parseServerDraft({ name: "partage", auth: "stdio", ...body }), null, JSON.stringify(body));
   });
 
   it("OAuth: nothing typed, each member authorizes later", () => {
@@ -61,8 +66,8 @@ describe("the back office's paths", () => {
 });
 
 describe("mcpPending", () => {
-  const server = (state: McpServer["state"]): McpServer => ({ id: "1", name: "crm", url: "https://mcp.exemple.com/sse", auth: "none", hint: null, state, updatedAt: null });
-  const base: McpOverview = { own: [] };
+  const server = (state: McpServer["state"]): McpServer => ({ id: "1", name: "crm", url: "https://mcp.exemple.com/sse", auth: "none", stdio: null, hint: null, state, updatedAt: null });
+  const base: McpOverview = { own: [], stdioCatalogue: [] };
 
   it("is true while a server is still being written anywhere the caller can see", () => {
     assert.equal(mcpPending(base), false);

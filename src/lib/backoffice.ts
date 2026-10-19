@@ -3,7 +3,8 @@ import type { ModelGroup } from "@/lib/model-options";
 import "server-only";
 import type { CompanyProfile } from "@/lib/company";
 import type { ComposioCall } from "@/lib/composio-usage";
-import { isServerId, mcpScopePath, mcpServerPath, type McpOauthQuery, type McpOauthServer, type McpOverview, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
+import { voiceKeyPath, type VoiceKeysOverview } from "@/lib/voice-keys";
+import { isServerId, mcpScopePath, mcpServerPath, type McpOauthQuery, type McpOauthServer, type McpOverview, type McpToolsOverview, type McpToolsReport, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
 import { vaultPath, type VaultDraft, type VaultItem, type VaultList, type VaultOverview, type VaultScope } from "@/lib/vault";
 import { scopePath, type LlmModelChoice, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { mailPath, type MailDetail, type MailDraft, type MailInbox, type MailRights, type MailRightsPatch, type MailSummary } from "@/lib/mail";
@@ -472,6 +473,21 @@ export const backoffice = {
   },
   finishMcpOauth: (token: string, query: McpOauthQuery) =>
     call<{ name: string; connected: boolean }>("/app/mcp/oauth/callback", { method: "POST", token, body: query, timeoutMs: MCP_OAUTH_TIMEOUT_MS }),
+  // The client's transcription keys (Intégrations › Voix): kept by the back office, never on an instance.
+  voiceKeys: (token: string) => call<VoiceKeysOverview>("/app/voice/keys", { token }),
+  putVoiceKey: (token: string, scope: SettingScope, draft: { provider: string; secret: string }) => {
+    const path = voiceKeyPath(scope);
+    if (!path) throw new BackofficeError(404, "not_found", "Ce membre est introuvable.");
+    return call<{ ok: true; verified: boolean }>(path, { method: "PUT", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS });
+  },
+  removeVoiceKey: (token: string, scope: SettingScope, provider: string) => {
+    const path = voiceKeyPath(scope, provider);
+    if (!path) throw new BackofficeError(404, "not_found", "Cette clé est introuvable.");
+    return call<{ ok: true }>(path, { method: "DELETE", token });
+  },
+  // What the servers expose, surveyed on the instances (never by the app): to recommend.
+  mcpTools: (token: string) => call<McpToolsOverview>("/app/mcp/tools", { token }),
+  refreshMcpTools: (token: string) => call<McpToolsReport>("/app/mcp/tools/refresh", { method: "POST", token, timeoutMs: MCP_OAUTH_TIMEOUT_MS }),
   cancelMcpOauth: (token: string) => call<{ ok: true }>("/app/mcp/oauth", { method: "DELETE", token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
 
   // The company memory. The two reads are made in an instance's name, like reportComposioCalls: the

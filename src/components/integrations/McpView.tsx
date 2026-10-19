@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Layers, Loader2, MoreHorizontal, Plus, RefreshCw, Server, ShieldCheck, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, Layers, Loader2, MoreHorizontal, Plus, RefreshCw, Server, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StateBadge } from "@/components/models/MemberSources";
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { apiFetch } from "@/lib/api";
 import type { SettingScope } from "@/lib/llm";
-import { mcpPending, type McpOauthServer, type McpOverview, type McpServer, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
+import { mcpPending, type McpOauthServer, type McpOverview, type McpServer, type McpServerDraft, type McpToolsOverview, type McpToolsReport, type McpWritten } from "@/lib/mcp-servers";
 import { McpServerDialog } from "./McpServerDialog";
 
 // Une pose prend d'ordinaire moins d'une minute par instance ; au-delà, on cesse de relire seul.
@@ -39,46 +39,82 @@ function OauthAccess({ server, access }: { server: McpServer; access: Access }) 
   );
 }
 
-function ServerCard({ server, note, access, onRemove }: { server: McpServer; note?: string; access?: Access; onRemove?: () => void }) {
+type Tools = McpToolsReport["servers"][number];
+
+/** Les outils relevés sur l'instance : texte venu du serveur, affiché tel quel, jamais interprété. */
+function ToolList({ tools }: { tools: Tools }) {
+  const [open, setOpen] = useState(false);
+  if (tools.state !== "ok") return null;
   return (
-    <div className="flex min-h-[76px] items-center gap-3 rounded-[22px] border border-line bg-surface py-3 pl-4 pr-3">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-tint text-brand">
-        <Server className="h-5 w-5" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <p className="truncate text-[15px] font-semibold text-ink">{server.name}</p>
-          {note && <span className="shrink-0 rounded-full bg-soft px-2 py-0.5 text-[11px] font-semibold text-ink-3">{note}</span>}
+    <div className="border-t border-line px-4 py-2">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center justify-between text-[12px] font-semibold text-ink-2">
+        {tools.tools.length} outil{tools.tools.length > 1 ? "s" : ""} disponible{tools.tools.length > 1 ? "s" : ""}
+        <ChevronDown className={open ? "h-3.5 w-3.5 rotate-180" : "h-3.5 w-3.5"} />
+      </button>
+      {open && (
+        <ul className="mt-1.5 max-h-48 space-y-1 overflow-y-auto">
+          {tools.tools.map((t) => (
+            <li key={t.name} className="text-[11px] leading-snug text-ink-3">
+              <span className="font-mono text-ink-2">{t.name}</span>
+              {t.description && <> — {t.description}</>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ServerCard({ server, note, access, tools, catalogueLabel, onRemove }: { server: McpServer; note?: string; access?: Access; tools?: Tools; catalogueLabel?: string; onRemove?: () => void }) {
+  return (
+    <div className="overflow-hidden rounded-[22px] border border-line bg-surface">
+      <div className="flex min-h-[76px] items-center gap-3 py-3 pl-4 pr-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-tint text-brand">
+          <Server className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <p className="truncate text-[15px] font-semibold text-ink">{server.name}</p>
+            {note && <span className="shrink-0 rounded-full bg-soft px-2 py-0.5 text-[11px] font-semibold text-ink-3">{note}</span>}
+          </div>
+          {server.auth === "stdio" ? (
+            <p className="truncate text-[12px] text-ink-3">Catalogue Yelema · {catalogueLabel ?? server.stdio}</p>
+          ) : (
+            <p className="truncate font-mono text-[12px] text-ink-3" title={server.url}>
+              {server.url}
+            </p>
+          )}
+          <p className="text-[11px] text-ink-3">
+            {server.auth === "stdio" ? "Lancé sur l’instance" : server.auth === "oauth" ? "OAuth · chacun autorise son compte" : server.hint ? `Jeton ${server.hint}` : "Sans jeton"}
+            {tools?.state === "failed" && <span className="text-ko"> · injoignable au dernier relevé</span>}
+          </p>
         </div>
-        <p className="truncate font-mono text-[12px] text-ink-3" title={server.url}>
-          {server.url}
-        </p>
-        <p className="text-[11px] text-ink-3">{server.auth === "oauth" ? "OAuth · chacun autorise son compte" : server.hint ? `Jeton ${server.hint}` : "Sans jeton"}</p>
+        <div className="flex shrink-0 items-center gap-1">
+          {access && server.state === "applied" ? <OauthAccess server={server} access={access} /> : <StateBadge state={server.state} />}
+          {(onRemove || (access?.connected && !access.busy)) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label={`Options pour ${server.name}`} className="grid h-8 w-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink">
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                {access?.connected && (
+                  <DropdownMenuItem onSelect={access.onAuthorize}>
+                    <RefreshCw /> Réautoriser
+                  </DropdownMenuItem>
+                )}
+                {onRemove && (
+                  <DropdownMenuItem variant="destructive" onSelect={onRemove}>
+                    <Trash2 /> Supprimer
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
-        {access && server.state === "applied" ? <OauthAccess server={server} access={access} /> : <StateBadge state={server.state} />}
-        {(onRemove || (access?.connected && !access.busy)) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" aria-label={`Options pour ${server.name}`} className="grid h-8 w-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink">
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              {access?.connected && (
-                <DropdownMenuItem onSelect={access.onAuthorize}>
-                  <RefreshCw /> Réautoriser
-                </DropdownMenuItem>
-              )}
-              {onRemove && (
-                <DropdownMenuItem variant="destructive" onSelect={onRemove}>
-                  <Trash2 /> Supprimer
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
+      {tools && <ToolList tools={tools} />}
     </div>
   );
 }
@@ -95,6 +131,8 @@ export function McpView() {
   const [tries, setTries] = useState(0);
   const [oauth, setOauth] = useState<Record<string, McpOauthServer>>({});
   const [authorizing, setAuthorizing] = useState<string | null>(null);
+  const [tools, setTools] = useState<McpToolsOverview | null>(null);
+  const [surveying, setSurveying] = useState(false);
   const [oauthTries, setOauthTries] = useState(0);
 
   const load = useCallback(async () => {
@@ -109,6 +147,26 @@ export function McpView() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const loadTools = useCallback(() => {
+    apiFetch<McpToolsOverview>("/api/mcp/tools").then(setTools, () => setTools(null));
+  }, []);
+  useEffect(() => {
+    if (data && !mcpPending(data)) loadTools();
+  }, [data, loadTools]);
+
+  async function survey() {
+    setSurveying(true);
+    try {
+      const own = await apiFetch<McpToolsReport>("/api/mcp/tools/refresh", { method: "POST" });
+      setTools((t) => ({ ...t, own }));
+      toast.success("Outils relevés sur votre instance");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSurveying(false);
+    }
+  }
 
   // L'accès OAuth se lit sur l'instance de l'appelant : seulement s'il porte un serveur OAuth.
   const hasOauth = Boolean(data && [...data.own, ...(data.client ?? [])].some((s) => s.auth === "oauth"));
@@ -135,6 +193,7 @@ export function McpView() {
       if (done?.connected) {
         toast.success(`Serveur ${done.name} autorisé`, { description: "Vos experts peuvent utiliser ses outils." });
         setAuthorizing(null);
+        loadTools();
       } else if (done && !done.pending && oauthTries > 3) setAuthorizing(null);
       else setOauthTries((n) => n + 1);
     }, OAUTH_POLL_MS);
@@ -171,6 +230,10 @@ export function McpView() {
   }, [data, tries, load]);
 
   const admin = data?.members !== undefined;
+  // Le relevé de l'instance concernée : la sienne, ou celle du membre regardé par l'administrateur.
+  const report = scope.kind === "member" ? tools?.members?.find((m) => m.id === scope.id)?.report : tools?.own;
+  const toolsOf = (s: McpServer) => report?.servers.find((t) => t.name === s.name);
+  const labelOf = (s: McpServer) => data?.stdioCatalogue.find((c) => c.key === s.stdio)?.label;
   const accessOf = (s: McpServer): Access | undefined =>
     s.auth === "oauth" && scope.kind !== "member" ? { connected: oauth[s.id]?.connected === true, busy: authorizing === s.id, onAuthorize: () => void authorize(s) } : undefined;
   // Un administrateur règle l'entreprise ou un membre ; un membre, seulement lui-même.
@@ -210,9 +273,16 @@ export function McpView() {
           <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Serveurs MCP</h2>
           <p className="mt-1 max-w-xl text-sm text-ink-3">Connectez vos serveurs Model Context Protocol (MCP) pour étendre les capacités de vos experts.</p>
         </div>
-        <Button onClick={() => setAdding(true)} className="self-start sm:self-auto">
-          <Plus /> Ajouter un serveur MCP
-        </Button>
+        <div className="flex gap-2 self-start sm:self-auto">
+          {scope.kind !== "member" && (
+            <Button variant="outline" onClick={() => void survey()} disabled={surveying} title={report ? `Dernier relevé : ${new Date(report.at).toLocaleString("fr-FR")}` : undefined}>
+              {surveying ? <Loader2 className="animate-spin" /> : <RefreshCw />} Relever les outils
+            </Button>
+          )}
+          <Button onClick={() => setAdding(true)}>
+            <Plus /> Ajouter un serveur MCP
+          </Button>
+        </div>
       </div>
 
       {admin && data?.members && (
@@ -240,10 +310,10 @@ export function McpView() {
         ) : servers.length + inherited.length > 0 ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {servers.map((s) => (
-              <ServerCard key={s.id} server={s} access={accessOf(s)} onRemove={() => setRemoving(s)} />
+              <ServerCard key={s.id} server={s} access={accessOf(s)} tools={toolsOf(s)} catalogueLabel={labelOf(s)} onRemove={() => setRemoving(s)} />
             ))}
             {inherited.map((s) => (
-              <ServerCard key={s.id} server={s} note="De l’entreprise" />
+              <ServerCard key={s.id} server={s} note="De l’entreprise" tools={toolsOf(s)} catalogueLabel={labelOf(s)} />
             ))}
           </div>
         ) : (
@@ -266,7 +336,7 @@ export function McpView() {
         )}
       </div>
 
-      <McpServerDialog open={adding} onOpenChange={setAdding} scopeLabel={scopeLabel} onSave={add} />
+      <McpServerDialog open={adding} onOpenChange={setAdding} scopeLabel={scopeLabel} catalogue={data?.stdioCatalogue ?? []} onSave={add} />
 
       <ConfirmDialog
         open={Boolean(removing)}

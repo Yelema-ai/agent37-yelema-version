@@ -5,8 +5,11 @@
 
 import { scopePath, type SettingScope } from "./llm.ts";
 
-/** `oauth`: nothing typed here; each member then authorizes their own account from the MCP screen. */
-export type McpAuth = "none" | "bearer" | "oauth";
+/**
+ * `oauth`: nothing typed here; each member then authorizes their own account from the MCP screen.
+ * `stdio`: an entry of Yelema's catalogue, a program run on the instance; no address, never a command.
+ */
+export type McpAuth = "none" | "bearer" | "oauth" | "stdio";
 /** Where the writing of a server on the instances stands. Not whether the server itself answers: the back office never calls it. */
 export type McpState = "applied" | "pending" | "failed";
 
@@ -17,6 +20,8 @@ export interface McpServer {
   name: string;
   url: string;
   auth: McpAuth;
+  /** The catalogue key of a `stdio` server. */
+  stdio: string | null;
   hint: string | null;
   state: McpState;
   updatedAt: string | null;
@@ -30,9 +35,18 @@ export interface McpMember {
   servers: McpServer[];
 }
 
+/** A server Yelema offers to run on the instance (its package and command stay in the back office). */
+export interface McpStdioOption {
+  key: string;
+  label: string;
+  description: string;
+  docs: string;
+}
+
 export interface McpOverview {
   /** The signed-in user's own servers. */
   own: McpServer[];
+  stdioCatalogue: McpStdioOption[];
   /** Admins only. */
   client?: McpServer[];
   members?: McpMember[];
@@ -51,6 +65,8 @@ export interface McpServerDraft {
   auth: McpAuth;
   /** With `bearer` only. */
   token?: string;
+  /** With `stdio` only: a key of `stdioCatalogue`. */
+  stdio?: string;
 }
 
 // Loose bounds only: the back office holds the real rules (the shape of a name, a public https
@@ -59,8 +75,9 @@ export interface McpServerDraft {
 /** A server draft from a request body, with nothing but its four fields; null when it is not one. */
 export function parseServerDraft(body: unknown): McpServerDraft | null {
   if (!body || typeof body !== "object") return null;
-  const { name, url, auth, token } = body as Record<string, unknown>;
+  const { name, url, auth, token, stdio } = body as Record<string, unknown>;
   if (typeof name !== "string" || !name.trim() || name.length > 60) return null;
+  if (auth === "stdio") return typeof stdio === "string" && /^[a-z0-9_-]{1,40}$/.test(stdio) && url === undefined && token === undefined ? { name: name.trim(), url: "", auth, stdio } : null;
   if (typeof url !== "string" || !url.trim() || url.length > 2000) return null;
   if (auth !== "none" && auth !== "bearer" && auth !== "oauth") return null;
   const draft: McpServerDraft = { name: name.trim(), url: url.trim(), auth };
@@ -97,6 +114,7 @@ const REFUSALS: Record<string, string> = {
   bad_callback: "Le retour du fournisseur est incomplet. Relancez l’autorisation.",
   oauth_unavailable: "Ce serveur n’a pas proposé d’autorisation. Vérifiez son adresse, ou choisissez une autre méthode.",
   instance_error: "Votre instance n’a pas pu traiter la demande. Réessayez dans un instant.",
+  bad_stdio: "Ce serveur ne fait pas partie du catalogue de Yelema.",
 };
 
 /**
@@ -144,4 +162,15 @@ export const MCP_STATE_LABELS: Record<McpState, string> = {
 /** True while the back office is still writing a server somewhere the caller can see. */
 export function mcpPending(o: McpOverview): boolean {
   return [...o.own, ...(o.client ?? []), ...(o.members ?? []).flatMap((m) => m.servers)].some((s) => s.state === "pending");
+}
+
+export type McpToolState = "ok" | "to_authorize" | "failed";
+/** What each server of the caller's instance exposes, as last surveyed there. Descriptions come from the servers: plain text only. */
+export interface McpToolsReport {
+  at: string;
+  servers: { name: string; managed: boolean; state: McpToolState; tools: { name: string; description: string }[] }[];
+}
+export interface McpToolsOverview {
+  own: McpToolsReport | null;
+  members?: { id: string; name: string | null; email: string; report: McpToolsReport | null }[];
 }
