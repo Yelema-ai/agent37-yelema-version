@@ -1,6 +1,6 @@
 "use client";
 
-
+import { useEffect, useRef, useState } from "react";
 import { Brain, Hand, Mic, MicOff, Minimize2, Phone, PhoneOff, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -22,6 +22,11 @@ const PHASE_LABEL: Record<CallPhase, string> = {
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 export const inCallPhase = (p: CallPhase) => p !== "idle" && p !== "ended" && p !== "unreachable";
+
+// The short answer under the face when a switch is turned on (Leslie, 19/10, choice A): two seconds,
+// then it fades. Nothing reaches the expert yet (useVoiceCall.ts).
+const NOTE_MS = 2000;
+const NOTE_FADE_MS = 300;
 
 /** The call as shown, from its state alone: CallProvider wires it to the live call. */
 export function CallView(p: {
@@ -47,6 +52,18 @@ export function CallView(p: {
   const inCall = inCallPhase(p.phase);
   const status = p.phase === "unreachable" ? p.reason : p.muted && (p.phase === "listening" || p.phase === "speaking") ? "Micro coupé" : PHASE_LABEL[p.phase];
   const timed = p.phase === "listening" || p.phase === "speaking" || p.phase === "thinking" || (p.phase === "ended" && p.elapsed > 0);
+  const [note, setNote] = useState<{ text: string; at: number; fading: boolean } | null>(null);
+  useEffect(() => {
+    if (!note || note.fading) return;
+    const t = setTimeout(() => setNote((n) => (n && n.at === note.at ? { ...n, fading: true } : n)), NOTE_MS);
+    return () => clearTimeout(t);
+  }, [note]);
+  useEffect(() => {
+    if (!note?.fading) return;
+    const t = setTimeout(() => setNote((n) => (n && n.at === note.at ? null : n)), NOTE_FADE_MS);
+    return () => clearTimeout(t);
+  }, [note]);
+  const say = (text: string | null) => setNote(text ? { text, at: Date.now(), fading: false } : null);
   return (
     <>
       {p.onMinimize && (
@@ -63,6 +80,18 @@ export function CallView(p: {
       <div className="flex flex-col items-center gap-2 text-center">
         <div className="relative">
           <Portrait photoUrl={p.photoUrl} name={p.name} phase={p.phase} muted={p.muted} />
+          {note && (
+            <span
+              role="status"
+              data-call-note=""
+              className={cn(
+                "absolute -bottom-1 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-ink px-3.5 py-1.5 text-[13px] font-semibold text-bg shadow-lg transition-opacity duration-300",
+                note.fading ? "opacity-0" : "opacity-100"
+              )}
+            >
+              {note.text}
+            </span>
+          )}
         </div>
         <DialogTitle className="text-lg">{p.name}</DialogTitle>
         <DialogDescription aria-live="polite" className={cn("min-h-5 text-sm", p.phase === "unreachable" ? "text-ko" : "text-ink-3")}>
@@ -74,8 +103,8 @@ export function CallView(p: {
 
       {inCall && (
         <div className="flex flex-wrap justify-center gap-2 pt-1">
-          <Pill icon={Brain} label="Réfléchis plus longtemps" on={p.longer} onClick={() => void p.onLonger()} />
-          <Pill icon={Hand} label="Laisse-moi finir" on={p.holding} onClick={() => void p.onHold()} />
+          <Pill icon={Brain} label="Réfléchis plus longtemps" on={p.longer} onClick={() => say(p.onLonger() ? "D’accord, je prends plus de temps" : "Je reprends normalement")} />
+          <Pill icon={Hand} label="Laisse-moi finir" on={p.holding} onClick={() => say(p.onHold() ? "Noté, je vous écoute" : null)} />
         </div>
       )}
 
