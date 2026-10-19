@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CalendarClock, Check, FileText, Loader2, MessageCircle, Play, ShieldCheck, Target, UserPlus } from "lucide-react";
+import { CalendarClock, Check, FileText, Loader2, MessageCircle, ShieldCheck, Target, UserPlus, Zap } from "lucide-react";
 import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { apiFetch } from "@/lib/api";
@@ -93,9 +93,10 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
 
       {useCase && (
         <div className="flex flex-col items-start gap-2 rounded-[18px] bg-tint px-5 py-4 @xl:flex-row @xl:gap-3.5">
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand px-2.5 py-1 text-[12.5px] font-semibold text-on-brand">
-            <Play className="h-3 w-3 fill-current" />
-            En action
+          {/* Une étiquette, pas un bouton : sans vidéo, un triangle de lecture promettait une lecture qui n'existe pas. */}
+          <span className="inline-flex shrink-0 items-center gap-1.5 pt-px text-[12.5px] font-semibold uppercase tracking-[0.06em] text-brand-ink">
+            <Zap className="h-3.5 w-3.5 fill-current" />
+            Exemple
           </span>
           <p className="text-[15px] leading-[1.55] text-ink">{useCase}</p>
         </div>
