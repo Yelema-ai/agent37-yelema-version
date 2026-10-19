@@ -1,9 +1,13 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useRouter } from "next/navigation";
 import { Maximize2, Mic, MicOff, PhoneOff } from "lucide-react";
+import { toast } from "sonner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { HALO_RGB, haloOf } from "@/lib/call-turns";
+import { agentTabPath } from "@/lib/expert-tabs";
 import { chosenVoice, type VoiceOption } from "@/lib/voice";
 import { loadVoicePrefs } from "@/lib/voice-prefs";
 import { cn } from "@/lib/utils";
@@ -15,7 +19,8 @@ import { useVoiceCall } from "./useVoiceCall";
 
 // The call with an expert lives here, above the pages (AppShell), so it goes on while the member
 // moves through the app: the window folds into a mini window (bottom right on a computer, a compact
-// strip under the top bar on a phone) and opens again.
+// strip under the top bar on a phone) and opens again. When the call ends, the end tone, the window
+// closes by itself after a moment and a toast offers the call's page (its summary, as in Fireflies).
 
 type Callee = { key: string; name: string; photoUrl: string | null };
 type View = "full" | "mini";
@@ -35,7 +40,10 @@ export function useCall(): CallContextValue {
   return c;
 }
 
+const CLOSE_AFTER_MS = 1500;
+
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+const duration = (s: number) => (s < 60 ? `${s} s` : `${Math.floor(s / 60)} min${s % 60 ? ` ${s % 60} s` : ""}`);
 
 const PHASE_SHORT: Record<string, string> = {
   connecting: "Appel en cours…",
@@ -55,6 +63,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [view, setView] = useState<View | null>(null);
   const voice = useRef<VoiceOption | null>(null);
   const voicesRef = useRef<VoiceOption[]>([]);
+  const router = useRouter();
+  const { experts } = useExpertsContext();
   const inCall = inCallPhase(live.phase);
   useRingback(view !== null && live.phase === "connecting");
 
@@ -82,6 +92,36 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     },
     [dial, inCall]
   );
+
+  // The call's page, newest call first in the expert's « Appels ».
+  const callsPath = useMemo(() => {
+    const e = expert && experts.find((x) => x.catalogueKey === expert.key);
+    return e ? `${agentTabPath(e.agentId, "calls", e.profileId)}?appel=dernier` : null;
+  }, [expert, experts]);
+
+  // Hung up by either side: the window goes by itself, a toast keeps the way to the summary.
+  const answeredFor = useRef(0);
+  if (inCall && live.elapsed > 0) answeredFor.current = live.elapsed;
+  useEffect(() => {
+    if (live.phase !== "ended" || !expert) return;
+    const seconds = answeredFor.current;
+    const name = expert.name;
+    const path = callsPath;
+    const t = setTimeout(() => {
+      setView(null);
+      answeredFor.current = 0;
+      if (seconds > 0) {
+        toast(`Appel terminé avec ${name}`, {
+          description: `Durée : ${duration(seconds)}`,
+          // eslint-disable-next-line @next/next/no-img-element
+          icon: expert.photoUrl ? <img src={expert.photoUrl} alt="" className="toast-face" /> : undefined,
+          action: path ? { label: "Voir le résumé", onClick: () => router.push(path) } : undefined,
+          duration: 10000,
+        });
+      }
+    }, CLOSE_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [live.phase, expert, callsPath, router]);
 
   const closeFull = (next: boolean) => {
     if (next) return;
