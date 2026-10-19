@@ -8,6 +8,7 @@ import { TopBar } from "@/components/app/TopBar";
 import { ComputerProvider } from "@/components/experts/ComputerProvider";
 import { ExpertsProvider } from "@/components/experts/ExpertsProvider";
 import type { InitialExperts } from "@/components/experts/useExperts";
+import { CallProvider, CallStrip } from "@/components/voice/CallProvider";
 import { cn } from "@/lib/utils";
 
 const COLLAPSE_KEY = "sbmini";
@@ -69,6 +70,8 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
   return (
     <ExpertsProvider initial={initialExperts}>
       <ActivityProvider>
+        {/* The call lives above the pages: it goes on, folded or not, while the member navigates. */}
+        <CallProvider>
         <div
           className="min-h-screen md:grid"
           style={{ gridTemplateColumns: `${collapsed ? 72 : 272}px minmax(0,1fr)` }}
@@ -93,11 +96,13 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
               fichiers gardent leur barre de saisie en bas, les pages longues défilant à l'intérieur. */}
           <main className="flex h-screen min-w-0 flex-col overflow-y-auto">
             <TopBar onMenu={() => setDrawerOpen(true)} />
+            <CallStrip />
             <ComputerProvider key={computerAgentId ?? "none"} agentId={computerAgentId}>
               {children}
             </ComputerProvider>
           </main>
         </div>
+        </CallProvider>
       </ActivityProvider>
     </ExpertsProvider>
   );

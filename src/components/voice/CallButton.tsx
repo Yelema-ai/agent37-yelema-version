@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CallDialog } from "./CallDialog";
+import { useCall } from "./CallProvider";
 import { useVoices } from "./useVoices";
 import { preloadFace } from "./face";
 
@@ -21,7 +21,7 @@ export function CallButton({
   iconOnly?: boolean;
 }) {
   const voices = useVoices();
-  const [open, setOpen] = useState(false);
+  const { call } = useCall();
   const shown = voices.length > 0;
   // The face is loaded as soon as the button shows, so the call opens on it.
   useEffect(() => {
@@ -34,7 +34,7 @@ export function CallButton({
         variant="secondary"
         size={iconOnly ? "icon" : "sm"}
         className={className}
-        onClick={() => setOpen(true)}
+        onClick={() => call(expert, voices)}
         onPointerEnter={() => preloadFace(expert.photoUrl)}
         onFocus={() => preloadFace(expert.photoUrl)}
         aria-label={iconOnly ? `${label} ${expert.name}` : undefined}
@@ -43,7 +43,6 @@ export function CallButton({
         <Phone />
         {!iconOnly && label}
       </Button>
-      <CallDialog open={open} onOpenChange={setOpen} expert={expert} voices={voices} />
     </>
   );
 }

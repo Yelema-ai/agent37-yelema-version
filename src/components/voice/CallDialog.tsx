@@ -1,17 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Brain, Hand, Mic, MicOff, Phone, PhoneOff, type LucideIcon } from "lucide-react";
-import { toast } from "sonner";
+
+import { Brain, Hand, Mic, MicOff, Minimize2, Phone, PhoneOff, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { HALO_PULSE_MS, HALO_RGB, haloOf, type CallPhase } from "@/lib/call-turns";
-import { chosenVoice, type VoiceOption } from "@/lib/voice";
-import { loadVoicePrefs } from "@/lib/voice-prefs";
 import { faceProps, FACE_PX } from "./face";
-import { useRingback } from "./useRingback";
-import { useVoiceCall } from "./useVoiceCall";
 
 const PHASE_LABEL: Record<CallPhase, string> = {
   idle: "",
@@ -28,64 +23,7 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2,
 
 export const inCallPhase = (p: CallPhase) => p !== "idle" && p !== "ended" && p !== "unreachable";
 
-/** Opening it calls at once, in the language and voice chosen ahead for this expert. */
-export function CallDialog({
-  open,
-  onOpenChange,
-  expert,
-  voices,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  expert: { key: string; name: string; photoUrl: string | null };
-  voices: VoiceOption[];
-}) {
-  const call = useVoiceCall();
-  const voice = useRef<VoiceOption | null>(null);
-  const inCall = inCallPhase(call.phase);
-  useRingback(open && call.phase === "connecting");
-
-  const dial = async () => {
-    const prefs = await loadVoicePrefs(expert.key);
-    voice.current = chosenVoice(voices, prefs);
-    call.start({ expert: expert.key, language: prefs.language, voice: voice.current?.key ?? null });
-  };
-
-  useEffect(() => {
-    if (open) void dial();
-  }, [open]);
-
-  const close = (next: boolean) => {
-    if (!next && inCall) call.hangUp();
-    onOpenChange(next);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={close}>
-      <DialogContent className="max-w-md" onOpenAutoFocus={(e) => e.preventDefault()} onInteractOutside={(e) => inCall && e.preventDefault()}>
-        <CallView
-          name={expert.name}
-          photoUrl={expert.photoUrl}
-          phase={call.phase}
-          reason={call.reason}
-          muted={call.muted}
-          longer={call.longer}
-          holding={call.holding}
-          elapsed={call.elapsed}
-          voiceLabel={voice.current?.label ?? null}
-          onMute={() => call.setMuted(!call.muted)}
-          onHangUp={call.hangUp}
-          onLonger={() => toast(call.toggleLonger() ? `${expert.name} prendra le temps de chercher.` : "Réponses rapides.")}
-          onHold={() => toast(call.toggleHold() ? `${expert.name} attend que vous ayez fini.` : `${expert.name} peut reprendre la parole.`)}
-          onClose={() => onOpenChange(false)}
-          onRedial={dial}
-        />
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** The call as shown, from its state alone: the dialog wires it to the live call. */
+/** The call as shown, from its state alone: CallProvider wires it to the live call. */
 export function CallView(p: {
   name: string;
   photoUrl: string | null;
@@ -98,8 +36,11 @@ export function CallView(p: {
   voiceLabel: string | null;
   onMute: () => void;
   onHangUp: () => void;
-  onLonger: () => void;
-  onHold: () => void;
+  /** Each returns the switch's new state. */
+  onLonger: () => boolean;
+  onHold: () => boolean;
+  /** Folds the window into the mini window; absent when there is no call to keep. */
+  onMinimize?: () => void;
   onClose: () => void;
   onRedial: () => void;
 }) {
@@ -108,8 +49,21 @@ export function CallView(p: {
   const timed = p.phase === "listening" || p.phase === "speaking" || p.phase === "thinking" || (p.phase === "ended" && p.elapsed > 0);
   return (
     <>
+      {p.onMinimize && (
+        <button
+          type="button"
+          onClick={p.onMinimize}
+          aria-label="Réduire l’appel"
+          title="Réduire : l’appel continue pendant que vous naviguez"
+          className="absolute left-3 top-3 grid size-10 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink"
+        >
+          <Minimize2 className="size-[18px]" />
+        </button>
+      )}
       <div className="flex flex-col items-center gap-2 text-center">
-        <Portrait photoUrl={p.photoUrl} name={p.name} phase={p.phase} muted={p.muted} />
+        <div className="relative">
+          <Portrait photoUrl={p.photoUrl} name={p.name} phase={p.phase} muted={p.muted} />
+        </div>
         <DialogTitle className="text-lg">{p.name}</DialogTitle>
         <DialogDescription aria-live="polite" className={cn("min-h-5 text-sm", p.phase === "unreachable" ? "text-ko" : "text-ink-3")}>
           {status}
@@ -120,8 +74,8 @@ export function CallView(p: {
 
       {inCall && (
         <div className="flex flex-wrap justify-center gap-2 pt-1">
-          <Pill icon={Brain} label="Réfléchis plus longtemps" on={p.longer} onClick={p.onLonger} />
-          <Pill icon={Hand} label="Laisse-moi finir" on={p.holding} onClick={p.onHold} />
+          <Pill icon={Brain} label="Réfléchis plus longtemps" on={p.longer} onClick={() => void p.onLonger()} />
+          <Pill icon={Hand} label="Laisse-moi finir" on={p.holding} onClick={() => void p.onHold()} />
         </div>
       )}
 
