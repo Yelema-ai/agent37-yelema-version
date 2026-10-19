@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { toast } from "sonner";
 import { AudioLines, FolderOpen, Mail, MessageSquare, MoreHorizontal, Pencil, Repeat, Phone, Wrench } from "lucide-react";
@@ -137,6 +137,11 @@ export function AgentWorkspace({
   const canEdit = usePublicConfig().authVia === "backoffice" && !!expert?.catalogueKey;
   const [editOpen, setEditOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  // The phone's tab pills scroll: the current one is brought into view.
+  const pillsRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    pillsRef.current?.querySelector<HTMLElement>("[aria-current=page]")?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [currentTab]);
 
   const chatPath = agentTabPath(agentId, "chat", profileId);
   // Write the open thread into the chat URL without adding a path segment. pushState for an explicit
@@ -288,7 +293,7 @@ export function AgentWorkspace({
                 )}
               </div>
             )}
-            <nav className="flex items-center gap-1 overflow-x-auto px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <nav ref={pillsRef} className="flex items-center gap-1 overflow-x-auto px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {tabs.map((t) => (
                 <button
                   key={t.id}
