@@ -1,67 +1,57 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { KeyRound, Loader2, Lock, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { Loader2, Lock, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Pager } from "@/components/Pager";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { apiFetch } from "@/lib/api";
-import type { McpOverview } from "@/lib/mcp-servers";
-import { IDENTIFIER_TYPES, profileLabel, type VaultDraft, type VaultItem, type VaultList, type VaultScope } from "@/lib/vault";
-import { cn } from "@/lib/utils";
+import { paginate } from "@/lib/paginate";
+import { IDENTIFIER_TYPES, entriesOf, profileLabel, type VaultDraft, type VaultEntry, type VaultOverview } from "@/lib/vault";
 import { VaultItemDialog } from "./VaultItemDialog";
 
-const url = (scope: VaultScope, profile: string, handle?: string) =>
-  `/api/vault/${scope.kind === "own" ? "own" : `members/${encodeURIComponent(scope.id)}`}/${encodeURIComponent(profile)}${handle ? `/${encodeURIComponent(handle)}` : ""}`;
+const PER_PAGE = 10;
+const typeLabel = (t: VaultEntry["identifierType"]) => IDENTIFIER_TYPES.find((x) => x.value === t)?.label ?? t;
+const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—");
+const vaultUrl = (profile: string, handle?: string) => `/api/vault/own/${encodeURIComponent(profile)}${handle ? `/${encodeURIComponent(handle)}` : ""}`;
 
-const typeLabel = (t: VaultItem["identifierType"]) => IDENTIFIER_TYPES.find((x) => x.value === t)?.label ?? t;
-
-// Intégrations · Identifiants : d'abord l'expert, puis ses connexions. Un administrateur choisit aussi
-// le membre dont il règle l'instance. Rien n'est gardé ici : chaque affichage relit le coffre.
+// Intégrations · Identifiants : les connexions confiées aux experts de SA propre instance. Une liste
+// déroulante filtre par expert (aucun choix : toutes) ; chaque affichage relit le coffre de l'instance.
 export function VaultView() {
-  const [members, setMembers] = useState<{ id: string; label: string }[] | null>(null);
-  const [scope, setScope] = useState<VaultScope>({ kind: "own" });
-  const [profile, setProfile] = useState("default");
-  const [data, setData] = useState<VaultList | null>(null);
+  const [data, setData] = useState<VaultOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
   const [adding, setAdding] = useState(false);
-  const [removing, setRemoving] = useState<VaultItem | null>(null);
-
-  // Les membres de l'espace, pour un administrateur seulement (le même aperçu que l'écran MCP).
-  useEffect(() => {
-    apiFetch<McpOverview>("/api/mcp")
-      .then((o) => setMembers(o.members ? o.members.map((m) => ({ id: m.id, label: m.name ?? m.email })) : []))
-      .catch(() => setMembers([]));
-  }, []);
+  const [removing, setRemoving] = useState<VaultEntry | null>(null);
 
   const load = useCallback(async () => {
-    setData(null);
     try {
-      const list = await apiFetch<VaultList>(url(scope, profile));
-      setData(list);
+      setData(await apiFetch<VaultOverview>("/api/vault/own"));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
     }
-  }, [scope, profile]);
+  }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const expertName = profileLabel(profile);
+  const rows = data ? entriesOf(data.items, profile) : [];
+  const shown = paginate(rows, page, PER_PAGE);
 
-  async function add(draft: VaultDraft) {
-    await apiFetch(url(scope, profile), { method: "POST", body: JSON.stringify(draft) });
-    toast.success(`Connexion « ${draft.label} » confiée à ${expertName}`);
+  async function add(target: string, draft: VaultDraft) {
+    await apiFetch(vaultUrl(target), { method: "POST", body: JSON.stringify(draft) });
+    toast.success(`Connexion « ${draft.label} » confiée à ${profileLabel(target)}`);
     setAdding(false);
     await load();
   }
 
   async function remove() {
     if (!removing) return;
-    await apiFetch(url(scope, profile, removing.id), { method: "DELETE" });
+    await apiFetch(vaultUrl(removing.profile, removing.id), { method: "DELETE" });
     toast.success(`Connexion « ${removing.label} » retirée`);
     await load();
   }
@@ -78,103 +68,98 @@ export function VaultView() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
-        {members && members.length > 0 && (
-          <label className="space-y-1 text-xs font-semibold text-ink-3">
-            <span>Instance de</span>
-            <select
-              value={scope.kind === "own" ? "" : scope.id}
-              onChange={(e) => {
-                setScope(e.target.value ? { kind: "member", id: e.target.value } : { kind: "own" });
-                setProfile("default");
-              }}
-              className="block rounded-xl border border-line bg-surface px-3 py-2 text-sm font-normal text-ink"
-            >
-              <option value="">Moi</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <div className="space-y-1">
-          <p className="text-xs font-semibold text-ink-3">Expert</p>
-          <div className="flex flex-wrap gap-1.5">
-            {(data?.profiles ?? [profile]).map((p) => (
-              <button key={p} type="button" aria-pressed={p === profile} onClick={() => setProfile(p)} className={cn("rounded-full border px-3 py-1.5 text-[13px] font-semibold", p === profile ? "border-brand bg-tint text-brand" : "border-line bg-surface text-ink-2")}>
-                {profileLabel(p)}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      <label className="block max-w-xs space-y-1 text-xs font-semibold text-ink-3">
+        <span>Expert</span>
+        <select
+          value={profile ?? ""}
+          onChange={(e) => {
+            setProfile(e.target.value || null);
+            setPage(1);
+          }}
+          disabled={!data}
+          className="block w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm font-normal text-ink"
+        >
+          <option value="">Tous les experts</option>
+          {data?.profiles.map((p) => (
+            <option key={p} value={p}>
+              {profileLabel(p)}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <div className="flex items-start gap-3.5 rounded-[22px] border border-line bg-surface p-4 text-sm text-ink-2">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-tint text-brand">
           <Lock className="h-5 w-5" />
         </div>
         <p className="text-xs leading-relaxed text-ink-3">
-          Les mots de passe sont chiffrés dans le coffre de l’instance. Yelema ne les garde pas et ne les affiche jamais. Pas de double authentification : choisissez un compte qui n’en demande pas. L’expert ne remplit que les pages du site exact enregistré.
+          Les mots de passe sont chiffrés dans le coffre de votre instance. Yelema ne les garde pas et ne les affiche jamais. Pas de double authentification : choisissez un compte qui n’en demande pas. L’expert ne remplit que les pages du site exact enregistré.
         </p>
       </div>
 
-      <div className="space-y-3">
-        <p className="text-[13px] font-semibold uppercase tracking-wider text-ink-3">Connexions de {expertName} ({data ? data.items.length : "…"})</p>
-        {error && !data ? (
-          <p className="max-w-xl rounded-xl bg-ko-pale px-4 py-3 text-sm text-ko">{error}</p>
-        ) : !data ? (
-          <div className="flex min-h-[10rem] flex-col items-center justify-center gap-2 rounded-[22px] border border-line bg-surface p-8 text-xs text-ink-3">
-            <Loader2 className="h-6 w-6 animate-spin" />
-            Lecture du coffre de l’instance…
+      {error && !data ? (
+        <p className="max-w-xl rounded-xl bg-ko-pale px-4 py-3 text-sm text-ko">{error}</p>
+      ) : !data ? (
+        <div className="flex min-h-[10rem] flex-col items-center justify-center gap-2 rounded-lg border border-line bg-surface p-8 text-xs text-ink-3">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          Lecture du coffre de l’instance…
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-line px-6 py-12 text-center">
+          <p className="text-sm font-semibold text-ink">{profile ? `Aucune connexion confiée à ${profileLabel(profile)}` : "Aucune connexion confiée à vos experts"}</p>
+          <p className="mt-1 max-w-sm text-xs text-ink-3">Ajoutez l’accès à un site (portail administratif, banque, outil métier) et dites à quoi il sert.</p>
+          <Button onClick={() => setAdding(true)} variant="outline" size="sm" className="mt-4">
+            <Plus /> Ajouter une connexion
+          </Button>
+        </div>
+      ) : (
+        <div>
+          <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+            <table className="w-full min-w-[820px] text-sm">
+              <thead className="bg-soft text-left text-xs text-ink-3">
+                <tr>
+                  <th className="px-4 py-2.5 font-medium">Expert</th>
+                  <th className="px-4 py-2.5 font-medium">Libellé</th>
+                  <th className="px-4 py-2.5 font-medium">Site</th>
+                  <th className="px-4 py-2.5 font-medium">Identifiant</th>
+                  <th className="px-4 py-2.5 font-medium">À quoi elle sert</th>
+                  <th className="px-4 py-2.5 font-medium">Ajoutée le</th>
+                  <th className="px-4 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {shown.items.map((it) => (
+                  <tr key={`${it.profile}:${it.id}`} className="border-t border-line align-top">
+                    <td className="px-4 py-3 font-medium text-ink">{profileLabel(it.profile)}</td>
+                    <td className="px-4 py-3 text-ink">{it.label}</td>
+                    <td className="max-w-[220px] truncate px-4 py-3 font-mono text-[12px] text-ink-2" title={it.origin}>{it.origin}</td>
+                    <td className="px-4 py-3 text-ink-2">
+                      <span className="text-ink-3">{typeLabel(it.identifierType)} · </span>
+                      {it.identifier}
+                    </td>
+                    <td className="max-w-[260px] px-4 py-3 text-ink-3">{it.purpose || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-ink-3">{day(it.createdAt)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <Button variant="ghost" size="sm" onClick={() => setRemoving(it)} aria-label={`Retirer ${it.label}`}>
+                        <Trash2 /> Retirer
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ) : data.items.length ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {data.items.map((it) => (
-              <div key={it.id} className="flex items-start gap-3 rounded-[22px] border border-line bg-surface py-3 pl-4 pr-3">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-tint text-brand">
-                  <KeyRound className="h-5 w-5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-semibold text-ink">{it.label}</p>
-                  <p className="truncate font-mono text-[12px] text-ink-3" title={it.origin}>{it.origin}</p>
-                  <p className="truncate text-[12px] text-ink-2">{typeLabel(it.identifierType)} · {it.identifier}</p>
-                  {it.purpose && <p className="mt-1 line-clamp-2 text-[12px] text-ink-3">{it.purpose}</p>}
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button type="button" aria-label={`Options pour ${it.label}`} className="grid h-8 w-8 place-items-center rounded-full text-ink-3 hover:bg-soft hover:text-ink">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44">
-                    <DropdownMenuItem variant="destructive" onSelect={() => setRemoving(it)}>
-                      <Trash2 /> Supprimer
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center rounded-[22px] border border-dashed border-line px-6 py-12 text-center">
-            <p className="text-sm font-semibold text-ink">Aucune connexion confiée à {expertName}</p>
-            <p className="mt-1 max-w-sm text-xs text-ink-3">Ajoutez l’accès à un site (portail administratif, banque, outil métier) et dites à quoi il sert.</p>
-            <Button onClick={() => setAdding(true)} variant="outline" size="sm" className="mt-4">
-              <Plus /> Ajouter une connexion
-            </Button>
-          </div>
-        )}
-      </div>
+          <Pager page={shown} total={rows.length} size={PER_PAGE} onPage={setPage} />
+        </div>
+      )}
 
-      <VaultItemDialog open={adding} onOpenChange={setAdding} expertName={expertName} onSave={add} />
+      <VaultItemDialog open={adding} onOpenChange={setAdding} profile={profile} profiles={data?.profiles ?? []} onSave={add} />
 
       <ConfirmDialog
         open={Boolean(removing)}
         onOpenChange={(open) => !open && setRemoving(null)}
         title="Retirer la connexion"
-        description={`Retirer « ${removing?.label ?? ""} » ? ${expertName} ne pourra plus se connecter à ce site.`}
+        description={`Retirer « ${removing?.label ?? ""} » ? ${removing ? profileLabel(removing.profile) : "L’expert"} ne pourra plus se connecter à ce site.`}
         confirmText="Retirer"
         destructive
         onConfirm={remove}

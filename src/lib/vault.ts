@@ -22,6 +22,20 @@ export interface VaultList {
   items: VaultItem[];
 }
 
+/** Une connexion avec l'expert qui la porte (vue de toute l'instance). */
+export type VaultEntry = VaultItem & { profile: string };
+
+export interface VaultOverview {
+  /** `default`, puis les experts installés sur l'instance. */
+  profiles: string[];
+  items: VaultEntry[];
+}
+
+/** Les connexions d'un expert, ou de tous (`null`), les plus récentes d'abord. */
+export function entriesOf(items: VaultEntry[], profile: string | null): VaultEntry[] {
+  return items.filter((i) => profile === null || i.profile === profile).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+}
+
 export interface VaultDraft {
   label: string;
   origin: string;

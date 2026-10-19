@@ -4,7 +4,7 @@ import "server-only";
 import type { CompanyProfile } from "@/lib/company";
 import type { ComposioCall } from "@/lib/composio-usage";
 import { mcpScopePath, mcpServerPath, type McpOverview, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
-import { vaultPath, type VaultDraft, type VaultItem, type VaultList, type VaultScope } from "@/lib/vault";
+import { vaultPath, type VaultDraft, type VaultItem, type VaultList, type VaultOverview, type VaultScope } from "@/lib/vault";
 import { scopePath, type LlmModelChoice, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { mailPath, type MailDetail, type MailDraft, type MailInbox, type MailRights, type MailRightsPatch, type MailSummary } from "@/lib/mail";
 import { isPublicId, type MemoryList, type MemoryNote, type MemoryPatch, type OrgAssignmentDraft, type OrgChart, type OrgGrantDraft, type OrgMember, type OrgRole } from "@/lib/memory";
@@ -434,6 +434,7 @@ export const backoffice = {
   // the address itself; it reads the caller's role on the session and refuses with a code the route
   // turns into a sentence (src/lib/mcp-servers.ts). A token never comes back.
   // Site logins entrusted to one profile of an instance: read on the instance each time, never a password back.
+  vaultOverview: (token: string) => call<VaultOverview>("/app/vault/own", { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   vault: (token: string, scope: VaultScope, profile: string) => {
     const path = vaultPath(scope, profile);
     if (!path) throw new BackofficeError(404, "not_found", "Profil introuvable.");

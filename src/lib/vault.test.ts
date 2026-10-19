@@ -24,3 +24,11 @@ test("names and refusal sentences", () => {
   assert.match(vaultRefusalMessage("bad_origin") ?? "", /https/);
   assert.equal(vaultRefusalMessage("toString"), null);
 });
+
+test("entries of one expert or of all, newest first", async () => {
+  const { entriesOf } = await import("./vault.ts");
+  const e = (id: string, profile: string, createdAt: string) => ({ id, profile, createdAt, label: id, origin: "https://a.b", identifierType: "email" as const, identifier: "x", purpose: "" });
+  const items = [e("a", "adjoua", "2026-10-01"), e("b", "default", "2026-10-03"), e("c", "adjoua", "2026-10-02")];
+  assert.deepEqual(entriesOf(items, null).map((i) => i.id), ["b", "c", "a"]);
+  assert.deepEqual(entriesOf(items, "adjoua").map((i) => i.id), ["c", "a"]);
+});
