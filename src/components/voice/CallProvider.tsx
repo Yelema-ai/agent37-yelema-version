@@ -30,6 +30,10 @@ interface CallContextValue {
   call(expert: Callee, voices: VoiceOption[]): void;
   /** The folded call for the phone's strip (CallStrip), null when there is none. */
   strip: React.ReactNode;
+  /** A call holds the microphone: dictation stands aside. */
+  active: boolean;
+  /** The mini window floats bottom right on a computer: the Yélé bubble moves above it. */
+  folded: boolean;
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -38,6 +42,12 @@ export function useCall(): CallContextValue {
   const c = useContext(CallContext);
   if (!c) throw new Error("useCall outside CallProvider");
   return c;
+}
+
+/** Outside the app's shell (no CallProvider) there is never a call. */
+export function useCallState(): { active: boolean; folded: boolean } {
+  const c = useContext(CallContext);
+  return { active: c?.active ?? false, folded: c?.folded ?? false };
 }
 
 const CLOSE_AFTER_MS = 1500;
@@ -145,7 +155,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         )
       : null;
   const strip = mini ? mini("strip") : null;
-  const value = useMemo(() => ({ call, strip }), [call, strip]);
+  const folded = mini !== null;
+  const value = useMemo(() => ({ call, strip, active: inCall, folded }), [call, strip, inCall, folded]);
 
   return (
     <CallContext.Provider value={value}>

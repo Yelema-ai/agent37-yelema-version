@@ -13,6 +13,7 @@ import { useChatContext } from "./ChatProvider";
 import { findModel, prettyModelLabel, type ChatSettings } from "./types";
 import type { SendSettings } from "./useChat";
 import { useDictation } from "./useDictation";
+import { useCallState } from "@/components/voice/CallProvider";
 import { useVoices } from "@/components/voice/useVoices";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 
@@ -80,6 +81,11 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
     onError: (message) => toast.error(message),
   });
   const dictating = dictation.state !== "idle";
+  // A call already holds the microphone: no second one, and a dictation under way gives way.
+  const { active: onCall } = useCallState();
+  useEffect(() => {
+    if (onCall && dictation.state !== "idle") dictation.cancel();
+  }, [onCall, dictation]);
 
   // Sending stays open while the expert answers: the message joins the running turn, or waits behind it.
   const canSend = (text.trim().length > 0 || att.hasFiles) && !att.blocksSend && !dictating;
@@ -149,8 +155,9 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
             <button
               type="button"
               onClick={() => void dictation.start()}
-              aria-label="Dicter un message"
-              title="Dicter un message"
+              disabled={onCall}
+              aria-label={onCall ? "Pendant l’appel, écrivez au clavier" : "Dicter un message"}
+              title={onCall ? "Pendant l’appel, écrivez au clavier" : "Dicter un message"}
               // When the composer is narrow (phone, reduced window, side columns open), ONE round button:
               // the microphone while the message is empty, then Envoyer. Container query, not the viewport.
               className={cn(
