@@ -40,7 +40,11 @@ export function NotificationBell() {
         <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
           <span className="text-sm font-bold text-ink">Notifications</span>
           {unread > 0 && (
-            <button type="button" onClick={markAllRead} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-ink hover:underline">
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-brand-ink hover:underline pointer-coarse:-my-3 pointer-coarse:min-h-11"
+            >
               <CheckCheck className="size-3.5" />
               Tout marquer comme lu
             </button>

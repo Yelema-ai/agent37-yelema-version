@@ -25,7 +25,15 @@ const SUGGESTED = DEFAULT_INTEGRATION_TOOLKITS.filter((t) => ["gmail", "googledr
 /** Le logo d'une intégration : celui du connecteur, la marque du canal, l'initiale d'un serveur MCP. */
 function ItemLogo({ item, size = "md", ring = false }: { item: Pick<OverviewItem, "name" | "logo" | "channel">; size?: "sm" | "md"; ring?: boolean }) {
   const box = cn(size === "sm" ? "h-8 w-8 rounded-full" : "h-10 w-10 rounded-xl", ring && "ring-2 ring-surface");
-  if (item.logo) return <ToolLogo logo={item.logo} name={item.name} className={cn(box, "bg-surface border border-line")} imgClassName={size === "sm" ? "h-[18px] w-[18px]" : undefined} />;
+  if (item.logo)
+    return (
+      <ToolLogo
+        logo={item.logo}
+        name={item.name}
+        className={cn(box, "bg-surface border border-line")}
+        imgClassName={size === "sm" ? "h-[18px] w-[18px]" : undefined}
+      />
+    );
   if (item.channel) {
     const { Icon, color } = channelBrand(item.channel);
     return (
@@ -35,7 +43,9 @@ function ItemLogo({ item, size = "md", ring = false }: { item: Pick<OverviewItem
     );
   }
   return (
-    <span className={cn("grid shrink-0 place-items-center bg-tint font-display font-bold uppercase text-brand-ink", size === "sm" ? "text-[12px]" : "text-sm", box)}>
+    <span
+      className={cn("grid shrink-0 place-items-center bg-tint font-display font-bold uppercase text-brand-ink", size === "sm" ? "text-[12px]" : "text-sm", box)}
+    >
       {item.name.charAt(0)}
     </span>
   );
@@ -51,7 +61,11 @@ function Stack({ items, max = 4 }: { items: Pick<OverviewItem, "key" | "name" | 
           <ItemLogo item={i} size="sm" ring />
         </span>
       ))}
-      {more > 0 && <span className="-ml-2 grid h-8 min-w-8 place-items-center rounded-full bg-soft-2 px-1.5 text-[12px] font-bold text-ink-2 ring-2 ring-surface">+{more}</span>}
+      {more > 0 && (
+        <span className="-ml-2 grid h-8 min-w-8 place-items-center rounded-full bg-soft-2 px-1.5 text-[12px] font-bold text-ink-2 ring-2 ring-surface">
+          +{more}
+        </span>
+      )}
     </span>
   );
 }
@@ -63,10 +77,27 @@ const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : 
 export function OverviewCards({ summary, sections }: { summary: IntegrationsSummary; sections: OverviewSections }) {
   const active = (list: OverviewItem[]) => list.filter((i) => i.state === "active");
   const cards = [
-    { key: "mcp", label: "Outils MCP", value: summary.tools, note: plural(summary.servers, "serveur", "serveurs"), items: sections.servers, href: "/integrations/mcp" },
-    { key: "connectors", label: "Connecteurs", value: active(sections.connectors).length, note: null, items: sections.connectors, href: "/integrations/connecteurs" },
+    {
+      key: "mcp",
+      label: "Outils MCP",
+      value: summary.tools,
+      note: plural(summary.servers, "serveur", "serveurs"),
+      items: sections.servers,
+      href: "/integrations/mcp",
+    },
+    {
+      key: "connectors",
+      label: "Connecteurs",
+      value: active(sections.connectors).length,
+      note: null,
+      items: sections.connectors,
+      href: "/integrations/connecteurs",
+    },
     { key: "channels", label: "Canaux", value: active(sections.channels).length, note: null, items: sections.channels, href: "/integrations/canaux" },
   ];
+  // Le Recommandé de l'aperçu, puis chaque connecteur ou canal qui attend un geste, avec son logo.
+  const pending = [...sections.connectors, ...sections.channels].filter((i) => i.state !== "active");
+  const todo = summary.todo.length + pending.length;
   return (
     <div className="space-y-6">
       <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Aperçu</h2>
@@ -75,7 +106,11 @@ export function OverviewCards({ summary, sections }: { summary: IntegrationsSumm
           const waiting = c.items.filter((i) => i.state !== "active").length;
           const on = active(c.items);
           return (
-            <Link key={c.key} href={c.href} className="flex min-h-[148px] flex-col rounded-[22px] border border-line bg-surface p-4 transition-colors hover:border-brand/40">
+            <Link
+              key={c.key}
+              href={c.href}
+              className="flex min-h-[148px] flex-col rounded-[22px] border border-line bg-surface p-4 transition-colors hover:border-brand/40"
+            >
               <span className="flex items-center justify-between gap-2">
                 <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-3">{c.label}</span>
                 {(on.length > 0 || waiting > 0) && (
@@ -96,7 +131,7 @@ export function OverviewCards({ summary, sections }: { summary: IntegrationsSumm
       </div>
       <div className="space-y-3">
         <p className="text-[13px] font-semibold uppercase tracking-wider text-ink-3">Recommandé</p>
-        {summary.todo.length === 0 ? (
+        {todo === 0 ? (
           <p className="flex items-center gap-2 rounded-[22px] border border-line bg-surface p-4 text-sm text-ink-2">
             <CheckCircle2 className="h-4 w-4 text-ok" /> Tout est branché
           </p>
@@ -104,6 +139,15 @@ export function OverviewCards({ summary, sections }: { summary: IntegrationsSumm
           <div className="divide-y divide-line overflow-hidden rounded-[22px] border border-line bg-surface">
             {summary.todo.map((r) => (
               <RecommendedRow key={r.key} r={r} sections={sections} />
+            ))}
+            {pending.map((i) => (
+              <div key={i.key} className="flex min-h-16 items-center gap-3 px-4 py-3">
+                <ItemLogo item={i} size="sm" />
+                <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{`${STATE[i.state].action} ${i.name}`}</p>
+                <Button asChild size="sm" variant="secondary" className="shrink-0 pointer-coarse:h-11 pointer-coarse:px-4">
+                  <Link href={i.href}>{STATE[i.state].action}</Link>
+                </Button>
+              </div>
             ))}
           </div>
         )}
@@ -152,9 +196,14 @@ export function OverviewList({ sections }: { sections: OverviewSections }) {
             <section key={g.key} className={cn(n > 0 && "border-t border-line")} aria-label={g.label}>
               <div className="flex items-center gap-2 bg-soft px-4 py-2.5">
                 <h3 className="text-[13px] font-semibold uppercase tracking-wider text-ink-2">{g.label}</h3>
-                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-surface px-1.5 text-[11.5px] font-bold text-ink-2 ring-1 ring-line">{g.items.length}</span>
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-surface px-1.5 text-[11.5px] font-bold text-ink-2 ring-1 ring-line">
+                  {g.items.length}
+                </span>
                 {waiting > 0 && <span className="text-[12px] font-semibold text-coral-ink">{waiting} à régler</span>}
-                <Link href={g.href} className="-my-2 ml-auto inline-flex min-h-11 items-center gap-1 px-1 text-[13px] font-semibold text-brand-ink hover:underline">
+                <Link
+                  href={g.href}
+                  className="-my-2 ml-auto inline-flex min-h-11 items-center gap-1 px-1 text-[13px] font-semibold text-brand-ink hover:underline"
+                >
                   <Plus className="h-3.5 w-3.5" /> Ajouter
                 </Link>
               </div>
@@ -195,7 +244,11 @@ function ListRow({ item }: { item: OverviewItem }) {
           <Link href={item.href}>{st.action}</Link>
         </Button>
       ) : (
-        <Link href={item.href} aria-label={`Gérer ${item.name}`} className="-mr-2 grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-soft hover:text-ink">
+        <Link
+          href={item.href}
+          aria-label={`Gérer ${item.name}`}
+          className="-mr-2 grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-soft hover:text-ink"
+        >
           <ChevronRight className="h-4 w-4" />
         </Link>
       )}
