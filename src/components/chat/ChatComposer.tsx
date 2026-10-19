@@ -103,7 +103,7 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
   return (
     <div
       className={cn(
-        "mx-auto w-full rounded-[22px] border border-line bg-surface shadow-[0_8px_30px_rgb(48_22_103_/_0.06)] transition-[border-color,box-shadow] focus-within:border-brand/30",
+        "@container mx-auto w-full rounded-[22px] border border-line bg-surface shadow-[0_8px_30px_rgb(48_22_103_/_0.06)] transition-[border-color,box-shadow] focus-within:border-brand/30",
         large ? "max-w-2xl" : "max-w-3xl"
       )}
     >
@@ -151,11 +151,12 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
               onClick={() => void dictation.start()}
               aria-label="Dicter un message"
               title="Dicter un message"
-              // On a phone, ONE round button: the microphone while the message is empty, then Envoyer.
+              // When the composer is narrow (phone, reduced window, side columns open), ONE round button:
+              // the microphone while the message is empty, then Envoyer. Container query, not the viewport.
               className={cn(
                 "inline-flex size-9 items-center justify-center rounded-xl text-ink-2 transition-colors hover:bg-soft hover:text-ink disabled:opacity-40",
-                "max-sm:size-10 max-sm:rounded-full max-sm:bg-brand max-sm:text-on-brand max-sm:hover:bg-brand max-sm:hover:text-on-brand",
-                canSend && "max-sm:hidden"
+                "@max-xl:size-10 @max-xl:rounded-full @max-xl:bg-brand @max-xl:text-on-brand @max-xl:hover:bg-brand @max-xl:hover:text-on-brand",
+                canSend && "@max-xl:hidden"
               )}
             >
               <Mic className="h-[18px] w-[18px]" />
@@ -166,9 +167,9 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
               type="button"
               onClick={onStop}
               aria-label="Arrêter"
-              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-ink px-4 text-sm font-semibold text-bg hover:opacity-90 max-sm:w-10 max-sm:justify-center max-sm:rounded-full max-sm:px-0"
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-ink px-4 text-sm font-semibold text-bg hover:opacity-90 @max-xl:w-10 @max-xl:justify-center @max-xl:rounded-full @max-xl:px-0"
             >
-              <Square className="h-3 w-3" fill="currentColor" strokeWidth={0} /> <span className="max-sm:sr-only">Arrêter</span>
+              <Square className="h-3 w-3" fill="currentColor" strokeWidth={0} /> <span className="@max-xl:sr-only">Arrêter</span>
             </button>
           )}
           {(!isStreaming || canSend) && (
@@ -179,12 +180,12 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
               aria-label="Envoyer"
               className={cn(
                 "inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand transition-opacity hover:opacity-90 disabled:opacity-40",
-                "max-sm:w-10 max-sm:justify-center max-sm:rounded-full max-sm:px-0",
-                !canSend && canDictate && "max-sm:hidden"
+                "@max-xl:w-10 @max-xl:justify-center @max-xl:rounded-full @max-xl:px-0",
+                !canSend && canDictate && "@max-xl:hidden"
               )}
             >
               {att.uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              <span className="max-sm:sr-only">Envoyer</span>
+              <span className="@max-xl:sr-only">Envoyer</span>
             </button>
           )}
         </div>

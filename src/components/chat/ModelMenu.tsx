@@ -42,12 +42,12 @@ export function ModelMenu({ groups, model, defaultModel, defaultLabel, disabled,
           disabled={disabled}
           title={`Modèle : ${label}`}
           aria-label={`Modèle : ${label}`}
-          // On a phone: the icon alone, so the composer's tools hold on one line in 360 px.
-          className="inline-flex h-8 max-w-[12rem] items-center gap-1.5 rounded-full bg-secondary/70 px-3 max-sm:size-9 max-sm:justify-center max-sm:px-0 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+          // In a narrow composer (container under 36rem): the icon alone, so the tools hold on one line.
+          className="inline-flex h-8 max-w-[12rem] items-center gap-1.5 rounded-full bg-secondary/70 px-3 @max-xl:size-9 @max-xl:justify-center @max-xl:px-0 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
         >
           <Sparkles className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate max-sm:hidden">{label}</span>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 max-sm:hidden" />
+          <span className="truncate @max-xl:hidden">{label}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 @max-xl:hidden" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-h-80 w-60 overflow-y-auto">
