@@ -12,13 +12,14 @@ const TABS = [
   { href: "/integrations/emails", label: "E-mails", exact: false, adminOnly: true, backoffice: true },
   { href: "/integrations/modeles", label: "Modèles", exact: false, adminOnly: false, backoffice: true },
   { href: "/integrations/mcp", label: "MCP", exact: false, adminOnly: false },
+  { href: "/integrations/identifiants", label: "Identifiants", exact: false, adminOnly: false, backoffice: true },
 ];
 
 // Le cadre des intégrations : ce qui se branche sur les experts. Connecteurs et Canaux, pour chacun,
 // règlent sa propre instance. E-mails, pour les admins, dit qui peut faire écrire chaque expert.
 // Modèles dit sur quel compte de modèle tournent les experts : un admin le règle pour l'entreprise
 // ou pour un membre, un membre pour lui-même si son admin l'a permis. MCP, aux mêmes portées, branche
-// sur les experts les serveurs d'outils du client.
+// sur les experts les serveurs d'outils du client. Identifiants confie à un expert l'accès à un site.
 export default function IntegrationsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { current } = useWorkspace();

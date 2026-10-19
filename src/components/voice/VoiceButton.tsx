@@ -5,7 +5,8 @@ import { AudioLines } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { readVoicePrefs, writeVoicePrefs, type VoicePrefs } from "@/lib/voice";
+import type { VoicePrefs } from "@/lib/voice";
+import { loadVoicePrefs, saveVoicePrefs } from "@/lib/voice-prefs";
 import { useVoices } from "./useVoices";
 import { VoiceSettings } from "./VoiceSettings";
 
@@ -15,14 +16,22 @@ export function VoiceButton({ expert, className, compact = false }: { expert: { 
   const [open, setOpen] = useState(false);
   const [prefs, setPrefs] = useState<VoicePrefs>({ language: "fr", voices: {} });
   useEffect(() => {
-    if (open) setPrefs(readVoicePrefs(expert.key));
+    let live = true;
+    if (open) void loadVoicePrefs(expert.key).then((p) => live && setPrefs(p));
+    return () => {
+      live = false;
+    };
   }, [open, expert.key]);
   if (voices.length === 0) return null;
 
-  const save = () => {
-    writeVoicePrefs(expert.key, prefs);
-    toast.success(`Voix de ${expert.name} enregistrée.`);
-    setOpen(false);
+  const save = async () => {
+    try {
+      await saveVoicePrefs(expert.key, prefs);
+      toast.success(`Voix de ${expert.name} enregistrée.`);
+      setOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "La voix n’a pas pu être enregistrée.");
+    }
   };
 
   return (
@@ -40,7 +49,7 @@ export function VoiceButton({ expert, className, compact = false }: { expert: { 
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Annuler
             </Button>
-            <Button onClick={save}>Enregistrer</Button>
+            <Button onClick={() => void save()}>Enregistrer</Button>
           </div>
         </DialogContent>
       </Dialog>

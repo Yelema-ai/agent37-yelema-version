@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { HALO_PULSE_MS, HALO_RGB, haloOf, type CallPhase } from "@/lib/call-turns";
-import { chosenVoice, readVoicePrefs, type VoiceOption } from "@/lib/voice";
+import { chosenVoice, type VoiceOption } from "@/lib/voice";
+import { loadVoicePrefs } from "@/lib/voice-prefs";
 import { faceProps, FACE_PX } from "./face";
 import { useRingback } from "./useRingback";
 import { useVoiceCall } from "./useVoiceCall";
@@ -44,14 +45,14 @@ export function CallDialog({
   const inCall = inCallPhase(call.phase);
   useRingback(open && call.phase === "connecting");
 
-  const dial = () => {
-    const prefs = readVoicePrefs(expert.key);
+  const dial = async () => {
+    const prefs = await loadVoicePrefs(expert.key);
     voice.current = chosenVoice(voices, prefs);
     call.start({ expert: expert.key, language: prefs.language, voice: voice.current?.key ?? null });
   };
 
   useEffect(() => {
-    if (open) dial();
+    if (open) void dial();
   }, [open]);
 
   const close = (next: boolean) => {

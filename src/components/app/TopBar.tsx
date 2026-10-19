@@ -19,6 +19,7 @@ function crumbs(pathname: string, experts: Expert[]): string[] {
   if (pathname.startsWith("/integrations/emails")) return ["Intégrations", "E-mails"];
   if (pathname.startsWith("/integrations/modeles")) return ["Intégrations", "Modèles"];
   if (pathname.startsWith("/integrations/mcp")) return ["Intégrations", "MCP"];
+  if (pathname.startsWith("/integrations/identifiants")) return ["Intégrations", "Identifiants"];
   if (pathname.startsWith("/integrations")) return ["Intégrations"];
   if (pathname.startsWith("/administration/instances")) return ["Administration", "Instances"];
   if (pathname.startsWith("/administration/facturation")) return ["Administration", "Facturation"];

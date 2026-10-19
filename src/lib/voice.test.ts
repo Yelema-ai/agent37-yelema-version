@@ -129,3 +129,11 @@ test("frenchSpacing keeps « 5 % » and « : » with the word before", () => {
   const t = frenchSpacing("remise de 5 % s’ils hésitent");
   assert.equal(t.slice(...findInText(t, "5 %")[0]), "5\u00a0%");
 });
+
+test("the voices kept by the back office: the expert's own over those for all; a patch clears what is unset", async () => {
+  const { voicesFor, voicePatch } = await import("./voice.ts");
+  assert.deepEqual(voicesFor({ "*": { fr: "akissi", en: "amelia" }, koffi: { fr: "moussa" } }, "koffi"), { fr: "moussa", en: "amelia" });
+  assert.deepEqual(voicesFor({ "*": { fr: "akissi" } }, "awa"), { fr: "akissi" });
+  assert.deepEqual(voicesFor({}, "awa"), {});
+  assert.deepEqual(voicePatch("koffi", { fr: "moussa" }), { koffi: { fr: "moussa", en: null } });
+});

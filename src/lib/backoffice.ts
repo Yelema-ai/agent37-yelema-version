@@ -4,6 +4,7 @@ import "server-only";
 import type { CompanyProfile } from "@/lib/company";
 import type { ComposioCall } from "@/lib/composio-usage";
 import { mcpScopePath, mcpServerPath, type McpOverview, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
+import { vaultPath, type VaultDraft, type VaultItem, type VaultList, type VaultScope } from "@/lib/vault";
 import { scopePath, type LlmModelChoice, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { mailPath, type MailDetail, type MailDraft, type MailInbox, type MailRights, type MailRightsPatch, type MailSummary } from "@/lib/mail";
 import { isPublicId, type MemoryList, type MemoryNote, type MemoryPatch, type OrgAssignmentDraft, type OrgChart, type OrgGrantDraft, type OrgMember, type OrgRole } from "@/lib/memory";
@@ -57,11 +58,14 @@ export interface BoSession {
   expiresAt: number;
 }
 
+/** `voices`: per expert key or `*`, per language, a voice key or `null` back to the default. */
+export type MePatch = { firstName?: string; lastName?: string; jobTitle?: string; voices?: Record<string, Partial<Record<"fr" | "en", string | null>>> };
+
 export interface BoMe {
   /** `id` is the account's stable id: the user's connected apps (Composio) hang off it. */
   /** `name` is « Prénom Nom », computed by the back office from the two. */
   /** `avatarUrl`: the member's own photo, once the back office keeps one (`PUT /app/me/avatar`). */
-  user: { id: string; email: string; firstName: string | null; lastName: string | null; name: string | null; jobTitle: string | null; role: "admin" | "member"; avatarUrl?: string | null };
+  user: { id: string; email: string; firstName: string | null; lastName: string | null; name: string | null; jobTitle: string | null; role: "admin" | "member"; avatarUrl?: string | null; /** Call voice per expert (`*` = all) and language, shared with the mobile app. */ voices?: Record<string, Partial<Record<"fr" | "en", string>>> };
   workspace: { id: string; name: string; logoUrl: string | null };
   instance: { id: string } | null;
 }
@@ -308,7 +312,7 @@ export const backoffice = {
   logout: (token: string) => call<{ ok: true }>("/app/auth/logout", { method: "POST", token }),
 
   me: (token: string) => call<BoMe>("/app/me", { token }),
-  updateMe: (token: string, patch: { firstName?: string; lastName?: string; jobTitle?: string }) => call<BoMe>("/app/me", { method: "PATCH", token, body: patch }),
+  updateMe: (token: string, patch: MePatch) => call<BoMe>("/app/me", { method: "PATCH", token, body: patch }),
   // The member's own photo (multipart, field `file`): the back office checks the type and the size,
   // keeps it and answers the profile with its `avatarUrl`. `DELETE` goes back to the initial.
   setMyAvatar: (token: string, form: FormData) => call<BoMe>("/app/me/avatar", { method: "PUT", token, form, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
@@ -429,6 +433,22 @@ export const backoffice = {
   // token, encrypts the token, writes the server on the instances in the background and never calls
   // the address itself; it reads the caller's role on the session and refuses with a code the route
   // turns into a sentence (src/lib/mcp-servers.ts). A token never comes back.
+  // Site logins entrusted to one profile of an instance: read on the instance each time, never a password back.
+  vault: (token: string, scope: VaultScope, profile: string) => {
+    const path = vaultPath(scope, profile);
+    if (!path) throw new BackofficeError(404, "not_found", "Profil introuvable.");
+    return call<VaultList>(path, { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS });
+  },
+  addVaultItem: (token: string, scope: VaultScope, profile: string, draft: VaultDraft) => {
+    const path = vaultPath(scope, profile);
+    if (!path) throw new BackofficeError(404, "not_found", "Profil introuvable.");
+    return call<{ ok: true; item: VaultItem }>(path, { method: "POST", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS });
+  },
+  removeVaultItem: (token: string, scope: VaultScope, profile: string, handle: string) => {
+    const path = vaultPath(scope, profile, handle);
+    if (!path) throw new BackofficeError(404, "not_found", "Connexion introuvable.");
+    return call<{ ok: true }>(path, { method: "DELETE", token, timeoutMs: SETTING_WRITE_TIMEOUT_MS });
+  },
   mcp: (token: string) => call<McpOverview>("/app/mcp", { token }),
   addMcpServer: (token: string, scope: SettingScope, draft: McpServerDraft) => {
     const path = mcpScopePath(scope);

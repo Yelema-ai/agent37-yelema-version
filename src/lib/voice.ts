@@ -44,7 +44,9 @@ export function callHeaders(h: Headers): Record<string, string> | null {
   return { "X-Yelema-Expert": expert, "X-Yelema-Language": language, ...(voice ? { "X-Yelema-Voice": voice } : {}) };
 }
 
-// ---- The member's choice, kept in this browser ---------------------------------------------------
+// ---- The member's choice ------------------------------------------------------------------------
+// The voice is kept by the back office (`voices` of `/app/me`), so the web app and the mobile app
+// share it and an update never loses it. The call language stays a setting of this browser.
 
 export interface VoicePrefs {
   language: VoiceLanguage;
@@ -76,8 +78,31 @@ export function readVoicePrefs(expert: string): VoicePrefs {
 
 export function writeVoicePrefs(expert: string, prefs: VoicePrefs): void {
   try {
-    localStorage.setItem(`${PREFS_KEY}:${expert}`, JSON.stringify(prefs));
+    localStorage.setItem(`${PREFS_KEY}:${expert}`, JSON.stringify({ language: prefs.language, voices: {} }));
   } catch {}
+}
+
+/** Voices kept by the back office: per expert key, `*` for all of them. */
+export type ServerVoices = Record<string, Partial<Record<VoiceLanguage, string>>>;
+
+/** The voices that apply to this expert: its own, else those chosen for all. */
+export const voicesFor = (server: ServerVoices, expert: string): Partial<Record<VoiceLanguage, string>> => ({ ...(server["*"] ?? {}), ...(server[expert] ?? {}) });
+
+/** `PATCH /api/account { voices }` body for one expert: a voice per language, `null` back to the default. */
+export const voicePatch = (expert: string, voices: Partial<Record<VoiceLanguage, string>>): ServerVoices | Record<string, Record<VoiceLanguage, string | null>> => ({
+  [expert]: { fr: voices.fr ?? null, en: voices.en ?? null },
+});
+
+/** A voice still in this browser from before the back office kept it, to push once; null if none. */
+export function legacyVoices(expert: string): Partial<Record<VoiceLanguage, string>> | null {
+  try {
+    const own = parseVoicePrefs(localStorage.getItem(`${PREFS_KEY}:${expert}`))?.voices ?? {};
+    const all = parseVoicePrefs(localStorage.getItem(PREFS_KEY))?.voices ?? {};
+    const merged = { ...all, ...own };
+    return Object.keys(merged).length ? merged : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---- Narrowing the list: gender × country ------------------------------------------------------------
