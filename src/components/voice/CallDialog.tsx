@@ -42,7 +42,7 @@ export function CallView(p: {
   onMute: () => void;
   onHangUp: () => void;
   /** Each returns the switch's new state. */
-  onLonger: () => boolean;
+  onLonger: (onFail?: () => void) => boolean;
   onHold: () => boolean;
   /** Folds the window into the mini window; absent when there is no call to keep. */
   onMinimize?: () => void;
@@ -103,7 +103,7 @@ export function CallView(p: {
 
       {inCall && (
         <div className="flex flex-wrap justify-center gap-2 pt-1">
-          <Pill icon={Brain} label="Réfléchis plus longtemps" on={p.longer} onClick={() => say(p.onLonger() ? "D’accord, je prends plus de temps" : "Je reprends normalement")} />
+          <Pill icon={Brain} label="Réfléchis plus longtemps" on={p.longer} onClick={() => say(p.onLonger(() => say("Impossible pour le moment, réessayez.")) ? "D’accord, je prends plus de temps" : "Je reprends normalement")} />
           <Pill icon={Hand} label="Laisse-moi finir" on={p.holding} onClick={() => say(p.onHold() ? "Noté, je vous écoute" : null)} />
         </div>
       )}

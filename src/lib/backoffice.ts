@@ -392,6 +392,8 @@ export const backoffice = {
     call<Record<string, unknown>>("/app/voice/calls", { method: "POST", token, body, headers }),
   voiceSignal: (token: string, conversationId: string, step: SignalingStep, body: unknown) =>
     call<Record<string, unknown>>(`/app/voice/calls/${conversationId}/${step}`, { method: SIGNALING_METHOD[step], token, body }),
+  voiceThinkLonger: (token: string, conversationId: string, on: boolean) =>
+    call<{ thinkLonger: boolean }>(`/app/voice/calls/${conversationId}/think-longer`, { method: "POST", token, body: { on } }),
   mailInboxes: async (token: string) => (await call<{ items: MailInbox[] }>("/app/mail/inboxes", { token })).items,
   // Newest first, 25 a page; `page` is the previous answer's `nextPageToken`.
   mailMessages: (token: string, expert: string, page?: string) =>

@@ -13,12 +13,10 @@ import { playHangupTone } from "./useRingback";
 // level, and "thinking" (between the end of the member's sentence and the expert's voice) from the
 // member's microphone too, measured on the very stream the SDK sends (src/lib/call-turns.ts).
 //
-// « Réfléchis plus longtemps » and « Laisse-moi finir » are the mobile app's two switches. The SDK
-// does not carry them to the expert yet (as on mobile: an Aethex dependency); here they lengthen
-// the thinking wait and keep the member's pauses from ending their turn.
-// Nothing of either switch is sent to the expert: the Aethex SDK has only interrupt(). Asked of
-// Aethex (retours du 19/10, point 8): a call-time signal for « laisse-moi finir » and « réfléchis
-// plus longtemps ». Meanwhile the call window only confirms the switch under the face (CallDialog.tsx).
+// « Réfléchis plus longtemps » goes to the back office (`calls/:id/think-longer`), which asks the expert to
+// think harder; « Laisse-moi finir » is `{ type: 'hold-floor', on }` on the call's data channel, handled by
+// Aethex. Both are sent again once the call is up. Locally they also lengthen the thinking wait and keep
+// the member's pauses from ending their turn.
 
 export type { CallPhase };
 
@@ -46,7 +44,8 @@ export interface UseVoiceCall {
   hangUp(): void;
   setMuted(muted: boolean): void;
   /** Each returns the new state. */
-  toggleLonger(): boolean;
+  /** `onFail`: the back office refused, the switch is already back. */
+  toggleLonger(onFail?: () => void): boolean;
   toggleHold(): boolean;
 }
 
@@ -79,6 +78,17 @@ export function useVoiceCall(): UseVoiceCall {
     call.current = null;
     mic.current?.close();
     mic.current = null;
+  }, []);
+
+  const sendLonger = useCallback(async (on: boolean) => {
+    const id = call.current?.getSessionId();
+    if (!id) throw new Error("call not connected");
+    const res = await fetch(`${VOICE_BASE}/calls/${encodeURIComponent(id)}/think-longer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ on }),
+    });
+    if (!res.ok) throw new Error(`think-longer ${res.status}`);
   }, []);
 
   const fail = useCallback(
@@ -152,6 +162,14 @@ export function useVoiceCall(): UseVoiceCall {
                 connected = true;
                 answered.current = true;
                 go("listening");
+                const sw = switches.current;
+                if (sw.longer)
+                  sendLonger(true).catch(() => {
+                    if (call.current !== c || !switches.current.longer) return;
+                    switches.current.longer = false;
+                    setLonger(false);
+                  });
+                if (sw.holding) c.send({ type: "hold-floor", on: true });
                 const t0 = Date.now();
                 timers.current.push(setInterval(meter(), LEVEL_MS), setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 1000));
               } else if (s === "ended") {
@@ -162,7 +180,10 @@ export function useVoiceCall(): UseVoiceCall {
             onPeerStateChange: (p) => {
               if (!connected) return;
               if (p === "disconnected" || p === "failed") go("reconnecting");
-              else if (p === "connected" && phaseRef.current === "reconnecting") go("listening");
+              else if (p === "connected" && phaseRef.current === "reconnecting") {
+                go("listening");
+                if (switches.current.holding) c.send({ type: "hold-floor", on: true });
+              }
             },
             onError: (e) => fail(refusal ?? messageOf(e)),
             onClose: () => {
@@ -177,7 +198,7 @@ export function useVoiceCall(): UseVoiceCall {
         fail(refusal);
       }
     },
-    [fail, go, meter, release]
+    [fail, go, meter, release, sendLonger]
   );
 
   const hangUp = useCallback(() => {
@@ -191,17 +212,32 @@ export function useVoiceCall(): UseVoiceCall {
     call.current?.setMuted(m);
   }, []);
 
-  const toggleLonger = useCallback(() => {
-    const on = !switches.current.longer;
-    switches.current.longer = on;
-    setLonger(on);
-    return on;
-  }, []);
+  const toggleLonger = useCallback<UseVoiceCall["toggleLonger"]>(
+    (onFail) => {
+      const on = !switches.current.longer;
+      switches.current.longer = on;
+      setLonger(on);
+      const c = call.current;
+      // Before the call is up there is no conversation yet: the switch is sent once it is.
+      if (c?.getSessionId())
+        sendLonger(on).catch(() => {
+          // A later tap, or another call, wins.
+          if (call.current !== c || switches.current.longer !== on) return;
+          switches.current.longer = !on;
+          setLonger(!on);
+          onFail?.();
+        });
+      return on;
+    },
+    [sendLonger]
+  );
 
   const toggleHold = useCallback(() => {
     const on = !switches.current.holding;
     switches.current.holding = on;
     setHolding(on);
+    // The whole state, not a toggle: a repeated or late message stays harmless.
+    if (call.current?.getSessionId()) call.current.send({ type: "hold-floor", on });
     return on;
   }, []);
 

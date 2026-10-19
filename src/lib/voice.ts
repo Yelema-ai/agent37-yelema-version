@@ -24,7 +24,7 @@ export const VOICE_LANGUAGES: { id: VoiceLanguage; label: string }[] = [
 export const SIGNALING_METHOD = { offer: "POST", ice: "PATCH", status: "GET", end: "POST", feedback: "POST" } as const;
 export type SignalingStep = keyof typeof SIGNALING_METHOD;
 
-const CONVERSATION_ID = /^[A-Za-z0-9_-]{1,128}$/;
+export const CONVERSATION_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const KEY = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 /** The step a relayed request names, or null when the path or the method is not one the SDK sends. */
