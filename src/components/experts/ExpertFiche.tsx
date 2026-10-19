@@ -101,15 +101,7 @@ export function ExpertFiche({ expertKey }: { expertKey: string }) {
         </div>
       )}
 
-      {expert.video.url && (
-        <video
-          controls
-          preload="none"
-          poster={expert.video.posterUrl ?? undefined}
-          src={expert.video.url}
-          className="aspect-video w-full rounded-card border border-line bg-black"
-        />
-      )}
+      {/* Pas de vidéo sur la fiche de poste, même si le catalogue en sert une : la vidéo de survol reste sur les cartes de la galerie. */}
 
       {site ? (
         <SiteSections sheet={site} pronoun={site.pronoun ?? expert.pronoun} name={expert.name} />
