@@ -3,8 +3,10 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { preconnect } from "react-dom";
 import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { useWorkspace } from "@/components/WorkspaceProvider";
+import { COMPOSIO_LOGOS_ORIGIN } from "@/lib/integration-catalog";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -27,6 +29,8 @@ export default function IntegrationsLayout({ children }: { children: React.React
   const pathname = usePathname();
   const { current } = useWorkspace();
   const { authVia } = usePublicConfig();
+  // The catalog's logos are the app's own; a search result's comes from Composio: the connection is opened early.
+  preconnect(COMPOSIO_LOGOS_ORIGIN);
   const tabs = TABS.filter(
     (t) => (!t.adminOnly || current?.role === "admin") && (!("backoffice" in t) || authVia === "backoffice")
   );

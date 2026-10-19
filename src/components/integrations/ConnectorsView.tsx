@@ -21,6 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ToolLogo } from "./ToolLogo";
 
 const SEARCH_DEBOUNCE_MS = 250;
 const MIN_SEARCH = 3; // the toolkits route 400s a non-empty query shorter than this
@@ -335,29 +336,5 @@ function ToolTile({
         </Button>
       )}
     </div>
-  );
-}
-
-function ToolLogo({ logo, name }: { logo: string | null; name: string }) {
-  const [failed, setFailed] = useState(false);
-  if (logo && !failed) {
-    return (
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-soft">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={logo}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          onError={() => setFailed(true)}
-          className="h-6 w-6 object-contain"
-        />
-      </span>
-    );
-  }
-  return (
-    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-tint font-display text-sm font-bold text-brand-ink">
-      {name.charAt(0).toUpperCase()}
-    </span>
   );
 }
