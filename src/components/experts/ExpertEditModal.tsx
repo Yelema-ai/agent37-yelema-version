@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Palette, RotateCcw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,9 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
   const { reload, applyLook } = useExpertsContext();
   const [look, setLook] = useState<ExpertLook | null>(null);
   const [name, setName] = useState("");
-  const [busy, setBusy] = useState<"name" | "avatar" | null>(null);
+  const [busy, setBusy] = useState<"save" | "reset" | null>(null);
+  // The picture chosen but not sent yet: a file from the device, or a portrait from the studio.
+  const [pending, setPending] = useState<{ file: File } | { draft: ExpertAvatarDraft } | null>(null);
   const [studioOpen, setStudioOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -45,7 +47,9 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
 
   useEffect(() => {
     if (!open) return;
+    // Opening again starts from what the back office has: what was not saved is dropped.
     setLook(null);
+    setPending(null);
     apiFetch<ExpertLook>(url).then(
       (l) => {
         setLook(l);
@@ -65,57 +69,67 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
     reload();
   };
 
-  async function run(what: "name" | "avatar", action: () => Promise<ExpertLook>, done: string) {
-    setBusy(what);
-    try {
-      changed(await action());
-      toast.success(done);
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  const sendAvatar = (form: FormData) =>
-    run(
-      "avatar",
-      async () => {
-        const res = await fetch(`${url}/avatar`, { method: "PUT", body: form });
-        if (!res.ok) throw new Error(await readApiError(res, "L’image n’a pas pu être enregistrée."));
-        return (await res.json()) as ExpertLook;
-      },
-      "Portrait enregistré."
-    );
-
   const pickFile = (file: File | undefined) => {
     if (fileInput.current) fileInput.current.value = "";
     if (!file) return;
     if (!IMAGE_TYPES.includes(file.type)) return void toast.error("Choisissez une image PNG, JPEG ou WebP.");
     if (file.size > MAX_UPLOAD_BYTES) return void toast.error(TOO_LARGE);
-    const form = new FormData();
-    form.set("file", file);
-    void sendAvatar(form);
+    setPending({ file });
   };
 
-  const applyDraft = (draft: ExpertAvatarDraft) => {
+  const applyDraft = (draft: ExpertAvatarDraft) => setPending({ draft });
+
+  // What the circle shows before saving: the chosen file read locally, or the studio's portrait.
+  const pendingFile = pending && "file" in pending ? pending.file : null;
+  const localPreview = useMemo(() => (pendingFile ? URL.createObjectURL(pendingFile) : null), [pendingFile]);
+  useEffect(() => () => {
+    if (localPreview) URL.revokeObjectURL(localPreview);
+  }, [localPreview]);
+  const preview = localPreview ?? (pending && "draft" in pending ? pending.draft.url : null);
+
+  const sendAvatar = async (p: NonNullable<typeof pending>) => {
     const form = new FormData();
-    form.set("draftId", draft.draftId);
-    void sendAvatar(form);
+    if ("file" in p) form.set("file", p.file);
+    else form.set("draftId", p.draft.draftId);
+    const res = await fetch(`${url}/avatar`, { method: "PUT", body: form });
+    if (!res.ok) throw new Error(await readApiError(res, "L’image n’a pas pu être enregistrée."));
+    return (await res.json()) as ExpertLook;
   };
 
   const cleaned = expertName(name);
   const nameChanged = look !== null && cleaned !== null && cleaned !== (look.displayName ?? look.defaultName);
 
-  function saveName(e: React.FormEvent) {
-    e.preventDefault();
-    if (!look || !cleaned || busy) return;
-    // Its catalogue name again is the same as no name of the member's own.
-    const displayName = cleaned === look.defaultName ? null : cleaned;
-    void run("name", () => apiFetch<ExpertLook>(url, { method: "PATCH", body: JSON.stringify({ displayName }) }), `L’expert s’appelle désormais ${cleaned}.`);
+  const dirty = nameChanged || pending !== null;
+
+  // One gesture for everything chosen: the picture first, then the name. A step that went through
+  // stays (the screen shows the back office's state); the error says what is left.
+  async function save(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (!look || busy || !dirty || !cleaned) return;
+    setBusy("save");
+    let pictureSaved = false;
+    try {
+      if (pending) {
+        changed(await sendAvatar(pending));
+        setPending(null);
+        pictureSaved = true;
+      }
+      if (nameChanged && cleaned) {
+        // Its catalogue name again is the same as no name of the member's own.
+        const displayName = cleaned === look.defaultName ? null : cleaned;
+        changed(await apiFetch<ExpertLook>(url, { method: "PATCH", body: JSON.stringify({ displayName }) }));
+      }
+      toast.success(nameChanged && cleaned ? `C’est enregistré : l’expert s’appelle désormais ${cleaned}.` : "C’est enregistré : le nouveau portrait est en place.");
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(pictureSaved ? `Le portrait est enregistré, mais pas le nom : ${(err as Error).message}` : (err as Error).message);
+    } finally {
+      setBusy(null);
+    }
   }
 
-  const portrait = look?.avatarUrl ?? look?.defaultAvatarUrl ?? null;
+  const saved = look?.avatarUrl ?? look?.defaultAvatarUrl ?? null;
+  const portrait = preview ?? saved;
   const customized = Boolean(look && (look.displayName || look.avatarUrl));
 
   // Back to the catalogue's name and face, in one gesture: the name first, then the picture. Each
@@ -123,7 +137,8 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
   // as the back office now has it.
   async function resetAll() {
     if (!look) return;
-    setBusy("name");
+    setBusy("reset");
+    setPending(null);
     let l = look;
     const step = (next: ExpertLook) => {
       l = next;
@@ -154,14 +169,9 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
 
           {look ? (
             <div className="flex flex-col gap-5">
-              <form onSubmit={saveName} className="flex flex-col gap-1.5">
+              <form id="expert-edit" onSubmit={save} className="flex flex-col gap-1.5">
                 <Label htmlFor="expert-name">Son nom</Label>
-                <div className="flex gap-2">
-                  <Input id="expert-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={EXPERT_NAME_MAX} required autoComplete="off" />
-                  <Button type="submit" disabled={!nameChanged || busy !== null} className="shrink-0">
-                    {busy === "name" ? <Loader2 className="size-4 animate-spin" /> : "Renommer"}
-                  </Button>
-                </div>
+                <Input id="expert-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={EXPERT_NAME_MAX} required autoComplete="off" disabled={busy !== null} />
                 <p className="text-xs text-ink-3">
                   {cleaned || !name.trim() ? "Il se présentera et signera sous ce nom, dans la discussion, sur vos canaux et au téléphone." : EXPERT_NAME_RULE}
                 </p>
@@ -174,7 +184,7 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
                   {/* Fixed color on purpose: behind a portrait, in both themes. */}
                   <div className="relative size-20 shrink-0 overflow-hidden rounded-full bg-[#8E6FB0]">
                     {portrait && <ExpertImage src={portrait} size={80} className="size-full object-cover object-[50%_15%]" />}
-                    {busy === "avatar" && (
+                    {busy === "save" && pending && (
                       <div className="absolute inset-0 grid place-items-center bg-black/30">
                         <Loader2 className="size-5 animate-spin text-white" />
                       </div>
@@ -212,9 +222,13 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
                 </div>
               )}
 
-              <div className="flex justify-end">
-                <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-                  Fermer
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button type="button" variant="ghost" disabled={busy === "save"} onClick={() => onOpenChange(false)}>
+                  Annuler
+                </Button>
+                <Button type="submit" form="expert-edit" disabled={!dirty || !cleaned || busy !== null} className="min-w-32 gap-1.5">
+                  {busy === "save" && <Loader2 className="size-4 animate-spin" />}
+                  {busy === "save" ? "Enregistrement…" : "Enregistrer"}
                 </Button>
               </div>
             </div>
@@ -241,7 +255,7 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
           onOpenChange={setStudioOpen}
           expertKey={expertKey}
           expertName={look.displayName ?? look.defaultName}
-          currentAvatarUrl={portrait}
+          currentAvatarUrl={saved}
           onApplyAvatar={applyDraft}
         />
       )}
