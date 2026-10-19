@@ -1,18 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { ChannelsResponse } from "@/lib/channels";
 import type { McpOauthServer, McpToolsOverview } from "@/lib/mcp-servers";
-import { summarize, type IntegrationsSummary } from "@/lib/recommendations";
+import { overview, summarize } from "@/lib/recommendations";
 import type { IntegrationConnectionsResult } from "@/lib/types";
+import { OverviewCards, OverviewList } from "./IntegrationsOverviewVariants";
 
 // Intégrations · Aperçu : ce qui est branché sur les experts de la personne connectée, et ce qu'il
 // lui reste à brancher. Une source qui ne répond pas compte pour vide, sans faire tomber l'aperçu.
-export function IntegrationsOverview({ agentId }: { agentId: string }) {
-  const [summary, setSummary] = useState<IntegrationsSummary | null>(null);
+// `variant` : une des deux propositions à comparer (IntegrationsOverviewVariants), sinon cette version.
+export function IntegrationsOverview({ agentId, variant = null }: { agentId: string; variant?: "a" | "b" | null }) {
+  const [input, setInput] = useState<Parameters<typeof summarize>[0] | null>(null);
+  const summary = useMemo(() => (input ? summarize(input) : null), [input]);
+  const sections = useMemo(() => (input && variant ? overview(input) : null), [input, variant]);
 
   useEffect(() => {
     let alive = true;
@@ -23,7 +27,7 @@ export function IntegrationsOverview({ agentId }: { agentId: string }) {
       soft(apiFetch<ChannelsResponse>(`/api/agents/${agentId}/channels`), { channels: [], teams_endpoint: null }),
       soft(apiFetch<IntegrationConnectionsResult>(`/api/agents/${agentId}/integrations/connections`), { connections: [] }),
     ]).then(([tools, oauth, channels, connections]) => {
-      if (alive) setSummary(summarize({ report: tools.own, oauth: oauth.servers, channels: channels.channels, connections: connections.connections }));
+      if (alive) setInput({ report: tools.own, oauth: oauth.servers, channels: channels.channels, connections: connections.connections });
     });
     return () => {
       alive = false;
@@ -36,6 +40,9 @@ export function IntegrationsOverview({ agentId }: { agentId: string }) {
         <Loader2 className="h-6 w-6 animate-spin text-ink-3" />
       </div>
     );
+
+  if (sections && variant === "a") return <OverviewCards summary={summary} sections={sections} />;
+  if (sections && variant === "b") return <OverviewList sections={sections} />;
 
   const facts = [
     { label: "Outils MCP disponibles", value: String(summary.tools), note: `${summary.servers} serveur${summary.servers > 1 ? "s" : ""}` },

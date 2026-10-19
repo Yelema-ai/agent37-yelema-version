@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { MessagingPlatform } from "./channels.ts";
-import { summarize } from "./recommendations.ts";
+import { overview, summarize } from "./recommendations.ts";
 import type { IntegrationConnection } from "./types.ts";
 
 const channel = (id: string, name: string, connected: boolean): MessagingPlatform => ({ id, name, enabled: connected, state: connected ? "connected" : "disabled" }) as unknown as MessagingPlatform;
@@ -36,5 +36,26 @@ describe("summarize", () => {
     const s = summarize({ report: null, oauth: [], channels: [], connections: [] });
     assert.deepEqual([s.tools, s.servers], [0, 0]);
     assert.deepEqual(s.todo.map((t) => t.key), ["connectors"]);
+  });
+});
+
+describe("overview", () => {
+  it("une ligne par application, par canal mis en route et par serveur du client ; ce qui attend un geste d'abord", () => {
+    const c = (slug: string, status = "ACTIVE", over: Partial<IntegrationConnection> = {}) => ({ id: slug + status, status, toolkitSlug: slug, toolkitName: slug.toUpperCase(), ...over }) as IntegrationConnection;
+    const broken = { ...channel("slack", "Slack", false), enabled: true, state: "startup_failed", error_message: "token" } as MessagingPlatform;
+    const o = overview({
+      report: REPORT,
+      oauth: [{ id: "1", name: "linear", connected: false, pending: false }, { id: "2", name: "notion", connected: true, pending: false }],
+      channels: [channel("telegram", "Telegram", true), broken, channel("whatsapp", "WhatsApp", false)],
+      connections: [c("gmail"), c("gmail", "EXPIRED"), c("hubspot", "INITIATED"), c("asana", "FAILED"), c("canva", "ACTIVE", { isDisabled: true })],
+    });
+    assert.deepEqual(o.connectors.map((x) => [x.name, x.state, x.logo]), [
+      ["HubSpot", "to_authorize", "/logos/composio/hubspot.svg"],
+      ["ASANA", "to_check", "https://logos.composio.dev/api/asana"],
+      ["Gmail", "active", "/logos/composio/gmail.svg"],
+    ]);
+    assert.deepEqual(o.channels.map((x) => [x.channel, x.state]), [["slack", "to_check"], ["telegram", "active"]]);
+    // Le serveur de Yelema (managed) ne se règle pas ici ; un serveur OAuth pas encore relevé est à autoriser.
+    assert.deepEqual(o.servers.map((x) => [x.name, x.state, x.tools]), [["linear", "to_authorize", null], ["crm", "to_check", null], ["notion", "active", 2]]);
   });
 });
