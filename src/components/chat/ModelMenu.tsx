@@ -40,12 +40,14 @@ export function ModelMenu({ groups, model, defaultModel, defaultLabel, disabled,
         <button
           type="button"
           disabled={disabled}
-          title={`Model: ${label}`}
-          className="inline-flex h-8 max-w-[12rem] items-center gap-1.5 rounded-full bg-secondary/70 px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+          title={`Modèle : ${label}`}
+          aria-label={`Modèle : ${label}`}
+          // In a narrow composer (container under 36rem): the icon alone, so the tools hold on one line.
+          className="inline-flex h-8 max-w-[12rem] items-center gap-1.5 rounded-full bg-secondary/70 px-3 @max-xl:size-9 @max-xl:justify-center @max-xl:px-0 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
         >
           <Sparkles className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">{label}</span>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate @max-xl:hidden">{label}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 @max-xl:hidden" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-h-80 w-60 overflow-y-auto">
@@ -61,7 +63,7 @@ export function ModelMenu({ groups, model, defaultModel, defaultLabel, disabled,
                   <span className="flex-1 truncate">{prettyModelLabel(m.label)}</span>
                   {m.id === defaultModel && (
                     <span className="ml-2 shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      Default
+                      Par défaut
                     </span>
                   )}
                 </DropdownMenuItem>

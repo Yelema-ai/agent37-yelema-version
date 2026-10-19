@@ -11,9 +11,25 @@ import { useVoices } from "./useVoices";
 import { VoiceSettings } from "./VoiceSettings";
 
 /** "Voix" in an expert's menu: the language and voice its calls (and dictation) take. */
-export function VoiceButton({ expert, className, compact = false }: { expert: { key: string; name: string }; className?: string; compact?: boolean }) {
+export function VoiceButton({
+  expert,
+  className,
+  compact = false,
+  open: openProp,
+  onOpenChange,
+}: {
+  expert: { key: string; name: string };
+  className?: string;
+  compact?: boolean;
+  /** Opened from elsewhere (an expert's menu on a phone): no button of its own. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const voices = useVoices();
-  const [open, setOpen] = useState(false);
+  const [openOwn, setOpenOwn] = useState(false);
+  const controlled = openProp !== undefined;
+  const open = controlled ? openProp : openOwn;
+  const setOpen = (v: boolean) => (controlled ? onOpenChange?.(v) : setOpenOwn(v));
   const [prefs, setPrefs] = useState<VoicePrefs>({ language: "fr", voices: {} });
   useEffect(() => {
     let live = true;
@@ -36,10 +52,12 @@ export function VoiceButton({ expert, className, compact = false }: { expert: { 
 
   return (
     <>
-      <Button variant="outline" size={compact ? "icon" : "sm"} className={className} onClick={() => setOpen(true)} aria-label={`Voix de ${expert.name}`} title={`Voix de ${expert.name}`}>
-        <AudioLines />
-        {!compact && "Voix"}
-      </Button>
+      {!controlled && (
+        <Button variant="outline" size={compact ? "icon" : "sm"} className={className} onClick={() => setOpen(true)} aria-label={`Voix de ${expert.name}`} title={`Voix de ${expert.name}`}>
+          <AudioLines />
+          {!compact && "Voix"}
+        </Button>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
           <DialogTitle>Voix de {expert.name}</DialogTitle>

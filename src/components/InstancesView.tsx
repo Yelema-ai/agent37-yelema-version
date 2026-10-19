@@ -63,7 +63,7 @@ export function InstancesView() {
         <p className="text-sm text-muted-foreground">Aucune instance pour le moment.</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border bg-card">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm max-sm:min-w-[640px]">
             <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
               <tr>
                 <th className="px-4 py-2.5 font-medium">Nom</th>

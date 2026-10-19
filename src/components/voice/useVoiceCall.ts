@@ -16,6 +16,9 @@ import { playHangupTone } from "./useRingback";
 // « Réfléchis plus longtemps » and « Laisse-moi finir » are the mobile app's two switches. The SDK
 // does not carry them to the expert yet (as on mobile: an Aethex dependency); here they lengthen
 // the thinking wait and keep the member's pauses from ending their turn.
+// Nothing of either switch is sent to the expert: the Aethex SDK has only interrupt(). Asked of
+// Aethex (retours du 19/10, point 8): a call-time signal for « laisse-moi finir » and « réfléchis
+// plus longtemps ». Meanwhile the call window only confirms the switch under the face (CallDialog.tsx).
 
 export type { CallPhase };
 

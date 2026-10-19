@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { toast } from "sonner";
-import { FolderOpen, Mail, MessageSquare, Pencil, Repeat, Phone, Wrench } from "lucide-react";
+import { AudioLines, FolderOpen, Mail, MessageSquare, MoreHorizontal, Pencil, Repeat, Phone, Wrench } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { agentTabPath, parseAgentRoute, type AgentTab } from "@/lib/expert-tabs";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useMyAgents } from "@/components/useMyAgents";
@@ -135,6 +136,12 @@ export function AgentWorkspace({
   // Its member may rename it and change its picture, where the back office keeps them.
   const canEdit = usePublicConfig().authVia === "backoffice" && !!expert?.catalogueKey;
   const [editOpen, setEditOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  // The phone's tab pills scroll: the current one is brought into view.
+  const pillsRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    pillsRef.current?.querySelector<HTMLElement>("[aria-current=page]")?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [currentTab]);
 
   const chatPath = agentTabPath(agentId, "chat", profileId);
   // Write the open thread into the chat URL without adding a path segment. pushState for an explicit
@@ -245,45 +252,65 @@ export function AgentWorkspace({
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          {/* Phones and tablets: the rail folds into a header with tab pills. */}
-          <nav className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line bg-surface px-4 py-2.5 lg:hidden">
+          {/* Phones and tablets: the rail folds into a header (who, state, call, a « … » menu for the
+              rest) above a row of tab pills. Nothing is cut: the header shrinks the name, never a button. */}
+          <div className="shrink-0 border-b border-line bg-surface lg:hidden">
             {expert && (
-              <>
+              <div className="flex items-center gap-2 px-4 pb-1 pt-2.5">
                 <ExpertAvatar expert={{ ...expert, gateway: null }} size="sm" />
-                <span className="ml-2 mr-2 min-w-0 shrink-0">
-                  <span className="block text-sm font-bold leading-tight text-ink">{expert.displayName}</span>
-                  {inbox && <span className="block max-w-[150px] truncate text-[10px] text-ink-3">{inbox.address}</span>}
+                <span className="ml-0.5 min-w-0 flex-1">
+                  <span className="block truncate text-sm font-bold leading-tight text-ink">{expert.displayName}</span>
+                  {inbox && <span className="block truncate text-[10px] text-ink-3">{inbox.address}</span>}
                 </span>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => setEditOpen(true)}
-                    aria-label="Personnaliser son nom et son portrait"
-                    className="mr-2 grid size-7 shrink-0 place-items-center rounded-full bg-soft text-ink-2 hover:bg-soft-2"
-                  >
-                    <Pencil className="size-3" />
-                  </button>
+                {profileId && <ExpertReadiness agentId={agentId} profileId={profileId} expertName={expertName} onOpenTools={() => selectTab("tools")} className="shrink-0" />}
+                {callee && <CallButton expert={callee} iconOnly className="size-11 shrink-0 rounded-full" />}
+                {(canEdit || (callee && voiceOn)) && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Plus d’options pour ${expertName}`}
+                        className="grid size-11 shrink-0 place-items-center rounded-full bg-soft text-ink-2 hover:bg-soft-2"
+                      >
+                        <MoreHorizontal className="size-5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      {canEdit && (
+                        <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                          <Pencil className="size-4" />
+                          Personnaliser
+                        </DropdownMenuItem>
+                      )}
+                      {callee && voiceOn && (
+                        <DropdownMenuItem onSelect={() => setVoiceOpen(true)}>
+                          <AudioLines className="size-4" />
+                          Sa voix
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
-                {profileId && <ExpertReadiness agentId={agentId} profileId={profileId} expertName={expertName} onOpenTools={() => selectTab("tools")} className="mr-2 shrink-0" />}
-                {callee && <CallButton expert={callee} className="mr-1 shrink-0" />}
-                {callee && <VoiceButton expert={callee} compact className="mr-2 size-8 shrink-0" />}
-              </>
+              </div>
             )}
-            {tabs.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => selectTab(t.id)}
-                aria-current={currentTab === t.id ? "page" : undefined}
-                className={cn(
-                  "shrink-0 rounded-full px-3 py-1.5 text-[13px] font-semibold",
-                  currentTab === t.id ? "bg-tint text-brand-ink" : "text-ink-2 hover:bg-soft"
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
-          </nav>
+            <nav ref={pillsRef} className="flex items-center gap-1 overflow-x-auto px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {tabs.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => selectTab(t.id)}
+                  aria-current={currentTab === t.id ? "page" : undefined}
+                  className={cn(
+                    "min-h-9 shrink-0 rounded-full px-3 py-1.5 text-[13px] font-semibold",
+                    currentTab === t.id ? "bg-tint text-brand-ink" : "text-ink-2 hover:bg-soft"
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </nav>
+            {callee && voiceOn && <VoiceButton expert={callee} open={voiceOpen} onOpenChange={setVoiceOpen} />}
+          </div>
           {/* Chat owns its full height and stays MOUNTED (just hidden) across tab switches. */}
           {chatOpened && (
             <div className={cn("min-h-0 flex-1", !isChat && "hidden")}>

@@ -38,7 +38,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="min-h-screen bg-background text-foreground antialiased">
         <PublicConfigProvider config={config}>{children}</PublicConfigProvider>
-        <Toaster richColors position="top-center" />
+        {/* Couleurs, police et bouton « Ouvrir » aux couleurs Yelema : globals.css (bloc sonner). */}
+        {/* En long, à l'horizontale (Leslie, 19/10) : sonner pose --width en style inline, seul son prop style la remplace. */}
+        <Toaster richColors closeButton position="top-center" style={{ "--width": "min(560px, calc(100vw - 32px))" } as React.CSSProperties} />
       </body>
     </html>
   );

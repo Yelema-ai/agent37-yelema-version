@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2, PhoneCall, RefreshCw, Search, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { callDuration, findInText, frenchSpacing, summarySections, transcriptOf, type CallRecord } from "@/lib/voice";
@@ -37,6 +38,14 @@ export function ExpertCalls({ expert }: { expert: Expert }) {
   const [error, setError] = useState<string | null>(null);
   // The call whose page is open; null for the list.
   const [openId, setOpenId] = useState<string | null>(null);
+  // « Voir le résumé » at the end of a call lands here with ?appel=dernier: the newest call opens.
+  const wanted = useSearchParams().get("appel");
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current || !wanted || !calls?.length) return;
+    opened.current = true;
+    setOpenId(wanted === "dernier" ? calls[0].id : (calls.find((c) => c.id === wanted)?.id ?? null));
+  }, [wanted, calls]);
 
   const load = useCallback(async () => {
     try {
