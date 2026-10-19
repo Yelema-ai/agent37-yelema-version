@@ -194,3 +194,95 @@
 @media (prefers-reduced-motion: reduce) {
   .call-halo { animation: none !important; }
 }
+
+/* Notifications (sonner, app/layout.tsx), aux couleurs Yelema pour TOUS les toasts : fond surface,
+   bordure fine, rayon de la charte, police de l'app, action « Ouvrir » violette. Les variables
+   suivent le thème de l'app (classe .dark), pas celui du système. Hors @layer exprès : les styles
+   de sonner sont injectés sans couche, une règle en couche perdrait toujours. */
+html [data-sonner-toaster][data-theme] {
+  font-family: var(--font-sans);
+  --border-radius: var(--radius-xl);
+  --normal-bg: var(--surface);
+  --normal-bg-hover: var(--soft);
+  --normal-border: var(--line);
+  --normal-border-hover: var(--line);
+  --normal-text: var(--ink);
+  --success-bg: var(--surface);
+  --success-border: var(--line);
+  --success-text: var(--ink);
+  --info-bg: var(--surface);
+  --info-border: var(--line);
+  --info-text: var(--ink);
+  --warning-bg: var(--surface);
+  --warning-border: var(--line);
+  --warning-text: var(--ink);
+  /* L'erreur garde sa teinte : fond rouge pâle, texte rouge lisible dans les deux thèmes. */
+  --error-bg: var(--ko-pale);
+  --error-border: color-mix(in srgb, var(--ko) 28%, transparent);
+  --error-text: var(--ko);
+}
+html [data-sonner-toast][data-styled="true"] {
+  gap: 10px;
+  padding: 14px 16px;
+  font-size: 14px;
+  box-shadow: 0 10px 30px rgb(48 22 103 / 0.14);
+}
+html.dark [data-sonner-toast][data-styled="true"] {
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.45);
+}
+html [data-sonner-toast] [data-title] {
+  font-weight: 600;
+  line-height: 1.35;
+}
+html [data-sonner-toast] [data-description] {
+  color: var(--ink-3);
+  line-height: 1.4;
+}
+html [data-sonner-toast][data-type="error"] [data-description] {
+  color: inherit;
+  opacity: 0.85;
+}
+html [data-sonner-toast][data-type="success"] [data-icon] { color: var(--ok); }
+html [data-sonner-toast][data-type="info"] [data-icon] { color: var(--brand-ink); }
+html [data-sonner-toast][data-type="warning"] [data-icon] { color: var(--coral-ink); }
+/* La pastille de l'Expert, quand le toast en porte une. */
+html [data-sonner-toast] [data-icon]:has(> .toast-face) {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+}
+html [data-sonner-toast] .toast-face {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  object-fit: cover;
+  object-position: 50% 15%;
+  background: #8e6fb0;
+}
+html [data-sonner-toast][data-styled="true"] [data-button] {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--on-brand);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+}
+html [data-sonner-toast][data-styled="true"] [data-button]:hover {
+  opacity: 0.9;
+}
+html [data-sonner-toast] [data-close-button] {
+  left: auto;
+  right: 0;
+  transform: translate(35%, -35%);
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink-3);
+}
+html [data-sonner-toast] [data-close-button]:hover,
+html [data-sonner-toast]:hover [data-close-button]:hover {
+  background: var(--soft);
+  border-color: var(--line);
+  color: var(--ink);
+}

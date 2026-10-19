@@ -152,7 +152,10 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       const open = () => openConversation(n.agentId, n.profile, n.sessionId);
       if (n.toast) {
         const show = n.kind === "failed" ? toast.error : toast;
-        show(title, { id: n.key, description: body, action: { label: "Ouvrir", onClick: open }, duration: 8000 });
+        // The expert's face stands in for the icon of a reply or a routine; a failure keeps the error mark.
+        // eslint-disable-next-line @next/next/no-img-element
+        const icon = n.kind !== "failed" && expert?.photoUrl ? <img src={expert.photoUrl} alt="" className="toast-face" /> : undefined;
+        show(title, { id: n.key, description: body, icon, action: { label: "Ouvrir", onClick: open }, duration: 8000 });
       }
       if (n.system) systemNotify(title, body, n.key, open);
     },

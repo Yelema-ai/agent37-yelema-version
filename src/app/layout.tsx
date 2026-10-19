@@ -38,7 +38,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="min-h-screen bg-background text-foreground antialiased">
         <PublicConfigProvider config={config}>{children}</PublicConfigProvider>
-        <Toaster richColors position="top-center" />
+        {/* Couleurs, police et bouton « Ouvrir » aux couleurs Yelema : globals.css (bloc sonner). */}
+        <Toaster richColors closeButton position="top-center" />
       </body>
     </html>
   );
