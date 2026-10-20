@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { DropOverlay } from "@/components/DropOverlay";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessages } from "./ChatMessages";
+import { ChatSessionsPanel } from "./ChatSessionsPanel";
 import { useChatContext } from "./ChatProvider";
 import { useChat } from "./useChat";
 import { useChatAttachments } from "./useChatAttachments";
@@ -125,6 +126,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
       {att.dragOver && <DropOverlay label="Déposez vos fichiers pour les joindre" />}
       <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
+          {profile && <ChatSessionsPanel />}
           {face && <ExpertAvatar expert={face} size="sm" />}
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold leading-tight text-ink">{headerTitle}</h1>
