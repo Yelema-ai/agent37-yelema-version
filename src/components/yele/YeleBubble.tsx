@@ -36,9 +36,17 @@ function keepSession(c: Companion, id: string | null): void {
   } catch {}
 }
 
-function Portrait() {
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src="/experts/yele.jpg" alt="" className="size-10 rounded-full object-cover ring-2 ring-brand/30" />;
+// Yélé is the brand's asterisk with a face (hermes-experts yele/avatars), not a portrait: the still
+// picture by default, the smiling loop when asked for (WebP, which Safari plays too), never for a
+// visitor who asked for less motion.
+function Portrait({ animated = false }: { animated?: boolean }) {
+  return (
+    <picture className="grid size-10 shrink-0 place-items-center rounded-full bg-tint ring-2 ring-brand/30">
+      {animated && <source srcSet="/yele/yele-anime.webp" media="(prefers-reduced-motion: no-preference)" type="image/webp" />}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/yele/yele-fixe.webp" alt="" width={128} height={128} className="size-9 object-contain" />
+    </picture>
+  );
 }
 
 function Panel({ companion, raised, folded, onClose }: { companion: Companion; raised: boolean; folded: boolean; onClose: () => void }) {
@@ -74,13 +82,13 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
   const shown = messages.filter((m) => m.role !== "system");
 
   return (
-    <div role="dialog" aria-label="Yélé, accompagnement" className={cn("fixed right-4 z-50 flex h-[580px] max-h-[80vh] w-[calc(100vw-32px)] max-w-[420px] flex-col overflow-hidden rounded-[26px] border border-line bg-surface shadow-[0_20px_50px_rgba(0,0,0,0.22)] sm:right-6", raised ? "bottom-40" : "bottom-20", folded && "sm:bottom-48")}>
+    <div role="dialog" aria-label="Yélé, accompagnement" className={cn("fixed right-4 z-50 flex h-[580px] w-[calc(100vw-32px)] max-w-[420px] flex-col overflow-hidden rounded-[26px] border border-line bg-surface shadow-[0_20px_50px_rgba(0,0,0,0.22)] sm:right-6", raised ? "bottom-52 max-h-[calc(100dvh-15rem)]" : cn("bottom-20 max-h-[80vh]", folded && "sm:bottom-48"))}>
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <div className="flex items-center gap-3">
-          <Portrait />
+          <Portrait animated />
           <div>
             <p className="text-sm font-bold text-ink">Yélé</p>
-            <p className="text-[11px] text-ink-3">Prise en main, conseils et support</p>
+            <p className="text-[11px] text-ink-3">Votre agent d’accompagnement&nbsp;: prise en main, conseils et support</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -152,7 +160,8 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
 export function YeleBubble() {
   const { companion } = useExpertsContext();
   const [open, setOpen] = useState(false);
-  // An expert's workspace keeps its chat composer at the bottom: the bubble sits above it.
+  // An expert's workspace keeps its chat composer at the bottom: the bubble sits clear above it (and
+  // so above a folded call too), never on the composer's Envoyer button.
   const raised = usePathname()?.startsWith("/experts/") ?? false;
   // A folded call floats in the same corner on a computer (on a phone it is a strip at the top).
   const { folded } = useCallState();
@@ -164,9 +173,9 @@ export function YeleBubble() {
         onClick={() => setOpen((o) => !o)}
         aria-label={open ? "Fermer Yélé" : "Ouvrir Yélé, accompagnement"}
         aria-expanded={open}
-        className={cn("fixed right-6 z-50 flex items-center gap-2.5 rounded-full border border-line bg-surface p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.16)] transition-transform hover:scale-105", raised ? "bottom-24" : "bottom-6", folded && "sm:bottom-32", open && "ring-2 ring-brand/50")}
+        className={cn("fixed right-6 z-50 flex items-center gap-2.5 rounded-full border border-line bg-surface p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.16)] transition-transform hover:scale-105", raised ? "bottom-36" : cn("bottom-6", folded && "sm:bottom-32"), open && "ring-2 ring-brand/50")}
       >
-        <Portrait />
+        <Portrait animated={open} />
         {!open && <span className="hidden pr-3 text-xs font-semibold text-ink sm:inline">Yélé</span>}
       </button>
       {open && <Panel key={companion.agentId} companion={companion} raised={raised} folded={folded} onClose={() => setOpen(false)} />}
