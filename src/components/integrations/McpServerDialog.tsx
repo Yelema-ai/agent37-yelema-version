@@ -1,30 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Boxes, Globe, Key, Loader2, Plus, ShieldCheck } from "lucide-react";
+import { Globe, Key, Loader2, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { McpAuth, McpServerDraft, McpStdioOption } from "@/lib/mcp-servers";
+import type { McpAuth, McpServerDraft } from "@/lib/mcp-servers";
 import { cn } from "@/lib/utils";
 
-const AUTH_OPTIONS: { value: McpAuth; label: string; description: string; icon: typeof Globe }[] = [
+const AUTH_OPTIONS: { value: Exclude<McpAuth, "stdio">; label: string; description: string; icon: typeof Globe }[] = [
   { value: "none", label: "Aucune", description: "Serveur public, sans clé", icon: Globe },
   { value: "bearer", label: "Jeton Bearer", description: "Une clé ou un jeton d’accès", icon: Key },
   { value: "oauth", label: "OAuth", description: "Connexion sur la page du fournisseur (Notion, Linear…)", icon: ShieldCheck },
-  { value: "stdio", label: "Catalogue Yelema", description: "Un programme vérifié par Yelema, lancé sur votre instance", icon: Boxes },
 ];
 
 // Le dialogue d'ajout d'un serveur MCP. Il ne garde rien : le brouillon part au back-office, qui
 // contrôle le nom, l'adresse et le jeton, et dont le refus revient ici en une phrase.
-export function McpServerDialog({ open, onOpenChange, scopeLabel, catalogue, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; scopeLabel: string; catalogue: McpStdioOption[]; onSave: (draft: McpServerDraft) => Promise<void> }) {
+export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; scopeLabel: string; onSave: (draft: McpServerDraft) => Promise<void> }) {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
-  const [auth, setAuth] = useState<McpAuth>("none");
+  const [auth, setAuth] = useState<Exclude<McpAuth, "stdio">>("none");
   const [token, setToken] = useState("");
-  const [stdio, setStdio] = useState("");
   const [busy, setBusy] = useState(false);
 
   // Un dialogue rouvert repart vide : un jeton saisi puis abandonné ne reste pas dans la page.
@@ -34,17 +32,16 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, catalogue, onS
     setUrl("");
     setAuth("none");
     setToken("");
-    setStdio("");
   }, [open]);
 
-  const ready = Boolean(name.trim() && (auth === "stdio" ? stdio : url.trim() && (auth !== "bearer" || token.trim())));
+  const ready = Boolean(name.trim() && url.trim() && (auth !== "bearer" || token.trim()));
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!ready || busy) return;
     setBusy(true);
     try {
-      await onSave(auth === "stdio" ? { name: name.trim(), url: "", auth, stdio } : { name: name.trim(), url: url.trim(), auth, ...(auth === "bearer" ? { token: token.trim() } : {}) });
+      await onSave({ name: name.trim(), url: url.trim(), auth, ...(auth === "bearer" ? { token: token.trim() } : {}) });
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -70,19 +67,17 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, catalogue, onS
               <p className="text-xs text-ink-3">Des minuscules, des chiffres ou « _ », sans espace ni tiret. Vos experts retrouvent ses outils sous ce nom.</p>
             </div>
 
-            {auth !== "stdio" && (
-              <div className="space-y-1.5">
+            <div className="space-y-1.5">
                 <Label htmlFor="mcp-url">
                   Adresse du serveur <span className="text-ko">*</span>
                 </Label>
                 <Input id="mcp-url" type="url" placeholder="https://exemple.com/mcp" value={url} onChange={(e) => setUrl(e.target.value)} disabled={busy} required autoComplete="off" spellCheck={false} className="font-mono text-[13px]" />
                 <p className="text-xs text-ink-3">En https, joignable depuis Internet : vos experts tournent dans le cloud, pas sur votre réseau.</p>
               </div>
-            )}
 
             <fieldset className="space-y-1.5" disabled={busy}>
               <legend className="mb-1.5 text-sm font-medium text-ink">Authentification</legend>
-              <div role="radiogroup" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div role="radiogroup" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 {AUTH_OPTIONS.map((opt) => {
                   const selected = auth === opt.value;
                   const Icon = opt.icon;
@@ -115,28 +110,6 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, catalogue, onS
                 </Label>
                 <Input id="mcp-token" type="password" placeholder="Jeton ou clé secrète" value={token} onChange={(e) => setToken(e.target.value)} disabled={busy} required autoComplete="off" spellCheck={false} />
                 <p className="text-xs text-ink-3">Chiffré et gardé par Yelema ; il ne sera plus affiché, seulement ses quatre derniers caractères.</p>
-              </div>
-            )}
-
-            {auth === "stdio" && (
-              <div role="radiogroup" aria-label="Serveur du catalogue" className="space-y-2">
-                {catalogue.length === 0 && <p className="text-xs text-ink-3">Aucun serveur n’est encore proposé.</p>}
-                {catalogue.map((opt) => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    role="radio"
-                    aria-checked={stdio === opt.key}
-                    onClick={() => {
-                      setStdio(opt.key);
-                      if (!name.trim()) setName(opt.key);
-                    }}
-                    className={cn("block w-full rounded-xl border p-3 text-left transition-colors", stdio === opt.key ? "border-brand bg-tint/60" : "border-line bg-surface hover:border-brand/40")}
-                  >
-                    <span className="block text-sm font-semibold text-ink">{opt.label}</span>
-                    <span className="mt-0.5 block text-xs text-ink-3">{opt.description}</span>
-                  </button>
-                ))}
               </div>
             )}
 

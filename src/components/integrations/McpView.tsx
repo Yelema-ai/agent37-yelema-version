@@ -336,7 +336,7 @@ export function McpView() {
         )}
       </div>
 
-      <McpServerDialog open={adding} onOpenChange={setAdding} scopeLabel={scopeLabel} catalogue={data?.stdioCatalogue ?? []} onSave={add} />
+      <McpServerDialog open={adding} onOpenChange={setAdding} scopeLabel={scopeLabel} onSave={add} />
 
       <ConfirmDialog
         open={Boolean(removing)}
