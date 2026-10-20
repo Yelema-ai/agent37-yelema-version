@@ -52,7 +52,10 @@ const PAGES: { word: RegExp; label: string; href: string }[] = [
   { word: /\brecruter\b/i, label: "Recruter", href: "/recruter" },
 ];
 function pagesIn(text: string, here: string) {
-  return PAGES.filter((p) => p.word.test(text) && here !== p.href).slice(0, 3);
+  const found = PAGES.filter((p) => p.word.test(text) && here !== p.href);
+  // A tab of Intégrations makes the Intégrations button useless.
+  const tab = found.some((p) => p.href.startsWith("/integrations/"));
+  return found.filter((p) => !(tab && p.href === "/integrations")).slice(0, 3);
 }
 
 // When each Yélé discussion was last active, as in the conversations rail.
