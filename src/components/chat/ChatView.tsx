@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { ChevronRight, Loader2, Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { ComputerButton, ComputerDialog, ComputerPanel } from "@/components/experts/ExpertComputer";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
@@ -11,7 +11,6 @@ import { DropOverlay } from "@/components/DropOverlay";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessages } from "./ChatMessages";
 import { ChatSessionsPanel } from "./ChatSessionsPanel";
-import { CONV, setRailOpen, useRailOpen } from "./rail-store";
 import { useChatContext } from "./ChatProvider";
 import { useChat } from "./useChat";
 import { useChatAttachments } from "./useChatAttachments";
@@ -58,7 +57,6 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
   // refocuses the composer through the same shared signal selecting/creating a thread uses.
   const att = useChatAttachments(agentId, requestComposerFocus);
   const { clearFiles } = att;
-  const railOpen = useRailOpen();
 
   // Switching threads / starting a new chat empties the staged tray, so a file picked for one
   // conversation can't silently ride along into the next.
@@ -131,14 +129,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
           {profile && <ChatSessionsPanel />}
           {face && <ExpertAvatar expert={face} size="sm" />}
           <div className="min-w-0">
-            {CONV === "c" && profile ? (
-              <button type="button" onClick={() => setRailOpen(!railOpen)} aria-pressed={railOpen} title={railOpen ? "Masquer les conversations" : "Toutes les conversations"} className="-mx-1.5 flex max-w-full items-center gap-1 rounded-md px-1.5 hover:bg-soft">
-                <h1 className="truncate text-sm font-semibold leading-tight text-ink">{headerTitle}</h1>
-                <ChevronRight className={cn("hidden h-4 w-4 shrink-0 text-ink-3 transition-transform lg:block", railOpen && "rotate-180")} />
-              </button>
-            ) : (
-              <h1 className="truncate text-sm font-semibold leading-tight text-ink">{headerTitle}</h1>
-            )}
+            <h1 className="truncate text-sm font-semibold leading-tight text-ink">{headerTitle}</h1>
             <p className="truncate text-xs text-ink-3">{agentName}</p>
           </div>
         </div>

@@ -22,7 +22,7 @@ import { useMailInboxes } from "@/components/experts/useMailInboxes";
 import { expertDisplayName } from "@/lib/experts";
 import { DRIVE_ROOT } from "@/lib/drive-paths";
 import { ChatProvider } from "@/components/chat/ChatProvider";
-import { CONV, setRailOpen, useRailOpen } from "@/components/chat/rail-store";
+import { setRailOpen, useRailOpen } from "@/components/chat/rail-store";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatView } from "@/components/chat/ChatView";
 import { FilesTab } from "@/components/files/FilesTab";
@@ -241,7 +241,9 @@ export function AgentWorkspace({
                   <Icon className="h-[18px] w-[18px]" />
                   {t.label}
                 </button>,
-                CONV === "b" && t.id === "chat" ? (
+                // Under Discussion, on a computer: opens and closes the column of conversations beside
+                // the chat (from another tab, it goes back to the chat with the column open).
+                t.id === "chat" ? (
                   <button
                     key="conversations"
                     type="button"
@@ -249,8 +251,11 @@ export function AgentWorkspace({
                       if (currentTab !== "chat") selectTab("chat");
                       setRailOpen(currentTab !== "chat" ? true : !railOpen);
                     }}
-                    aria-pressed={railOpen}
-                    className={cn("ml-7 flex min-h-9 items-center gap-2 rounded-[10px] px-2.5 text-left text-[13px] font-semibold transition-colors", railOpen && currentTab === "chat" ? "bg-tint text-brand-ink" : "text-ink-3 hover:bg-soft hover:text-ink")}
+                    aria-pressed={railOpen && currentTab === "chat"}
+                    className={cn(
+                      "ml-7 flex min-h-9 items-center gap-2 rounded-[10px] px-2.5 text-left text-[13px] font-semibold transition-colors",
+                      railOpen && currentTab === "chat" ? "bg-tint text-brand-ink" : "text-ink-3 hover:bg-soft hover:text-ink"
+                    )}
                   >
                     Conversations
                     <ChevronRight className={cn("ml-auto h-4 w-4 transition-transform", railOpen && currentTab === "chat" && "rotate-180")} />
@@ -325,8 +330,8 @@ export function AgentWorkspace({
           {/* Chat owns its full height and stays MOUNTED (just hidden) across tab switches. */}
           {chatOpened && (
             <div className={cn("flex min-h-0 flex-1", !isChat && "hidden")}>
-              {/* The conversations open in their own column beside the chat from the chat's « Conversations »
-                  button, and close to give the chat its whole width (phones and tablets: a panel). */}
+              {/* The conversations open in their own column beside the chat from « Conversations » under
+                  Discussion, and close to give the chat its whole width (phones and tablets: a panel). */}
               {railOpen && (
                 <div className="hidden w-[288px] shrink-0 flex-col border-r border-line bg-surface px-2.5 py-3 lg:flex">
                   <ChatSidebar />
