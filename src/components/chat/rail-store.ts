@@ -32,3 +32,6 @@ export function useRailOpen(): boolean {
     () => false
   );
 }
+
+// TEMPORAIRE (planche du 20/10) : ?conv=a|b|c, l'emplacement du bouton qui ouvre les conversations. Retiré avant la PR.
+export const CONV = typeof window === "undefined" ? "a" : (new URLSearchParams(window.location.search).get("conv") ?? "a");

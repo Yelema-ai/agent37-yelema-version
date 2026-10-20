@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { toast } from "sonner";
-import { AudioLines, FolderOpen, Mail, MessageSquare, MoreHorizontal, Pencil, Repeat, Phone, Wrench } from "lucide-react";
+import { AudioLines, ChevronRight, FolderOpen, Mail, MessageSquare, MoreHorizontal, Pencil, Repeat, Phone, Wrench } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { agentTabPath, parseAgentRoute, type AgentTab } from "@/lib/expert-tabs";
 import { useWorkspace } from "@/components/WorkspaceProvider";
@@ -22,7 +22,8 @@ import { useMailInboxes } from "@/components/experts/useMailInboxes";
 import { expertDisplayName } from "@/lib/experts";
 import { DRIVE_ROOT } from "@/lib/drive-paths";
 import { ChatProvider } from "@/components/chat/ChatProvider";
-import { useRailOpen } from "@/components/chat/rail-store";
+import { CONV, setRailOpen, useRailOpen } from "@/components/chat/rail-store";
+import { useChatContext } from "@/components/chat/ChatProvider";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatView } from "@/components/chat/ChatView";
 import { FilesTab } from "@/components/files/FilesTab";
@@ -31,6 +32,12 @@ import { CallButton } from "@/components/voice/CallButton";
 import { VoiceButton } from "@/components/voice/VoiceButton";
 import { ExpertCalls } from "@/components/voice/ExpertCalls";
 import { useVoices } from "@/components/voice/useVoices";
+
+// How many conversations the expert has (inside ChatProvider, which the workspace renders).
+function ConversationCount() {
+  const n = useChatContext().sessions.length;
+  return n > 0 ? <span className="tabular-nums">{n}</span> : null;
+}
 
 const TABS: { id: AgentTab; label: string; icon: typeof MessageSquare }[] = [
   { id: "chat", label: "Discussion", icon: MessageSquare },
@@ -227,7 +234,7 @@ export function AgentWorkspace({
             {tabs.map((t) => {
               const Icon = t.icon;
               const isActive = currentTab === t.id;
-              return (
+              return [
                 <button
                   key={t.id}
                   type="button"
@@ -240,8 +247,24 @@ export function AgentWorkspace({
                 >
                   <Icon className="h-[18px] w-[18px]" />
                   {t.label}
-                </button>
-              );
+                </button>,
+                CONV === "b" && t.id === "chat" ? (
+                  <button
+                    key="conversations"
+                    type="button"
+                    onClick={() => {
+                      if (currentTab !== "chat") selectTab("chat");
+                      setRailOpen(currentTab !== "chat" ? true : !railOpen);
+                    }}
+                    aria-pressed={railOpen}
+                    className={cn("ml-7 flex min-h-9 items-center gap-2 rounded-[10px] px-2.5 text-left text-[13px] font-semibold transition-colors", railOpen && currentTab === "chat" ? "bg-tint text-brand-ink" : "text-ink-3 hover:bg-soft hover:text-ink")}
+                  >
+                    Conversations
+                    <ConversationCount />
+                    <ChevronRight className={cn("ml-auto h-4 w-4 transition-transform", railOpen && currentTab === "chat" && "rotate-180")} />
+                  </button>
+                ) : null,
+              ];
             })}
           </nav>
 
