@@ -31,9 +31,6 @@ import { VoiceButton } from "@/components/voice/VoiceButton";
 import { ExpertCalls } from "@/components/voice/ExpertCalls";
 import { useVoices } from "@/components/voice/useVoices";
 
-// TEMPORAIRE (planche du 20/10) : ?rail=a ou ?rail=b, retiré avant la PR.
-const RAIL = typeof window === "undefined" ? "a" : (new URLSearchParams(window.location.search).get("rail") ?? "a");
-
 const TABS: { id: AgentTab; label: string; icon: typeof MessageSquare }[] = [
   { id: "chat", label: "Discussion", icon: MessageSquare },
   { id: "files", label: "Livrables", icon: FolderOpen },
@@ -180,35 +177,7 @@ export function AgentWorkspace({
     >
       <div className="flex min-h-0 flex-1">
         <aside className="hidden w-[262px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-line bg-surface px-3 py-3.5 lg:flex">
-          {expert && isChat && RAIL === "a" && (
-            // On the Chat tab the portrait folds into one row so the conversations get the column's height.
-            <div className="flex items-center gap-2.5 px-1 pb-1">
-              <ExpertAvatar expert={{ ...expert, gateway: null }} size="md" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-bold leading-tight text-ink">{expert.displayName}</span>
-                {expert.role && <span className="line-clamp-2 block text-[11px] font-semibold uppercase leading-snug tracking-[0.06em] text-ink-3">{expert.role}</span>}
-              </span>
-              {canEdit && (
-                <button
-                  type="button"
-                  onClick={() => setEditOpen(true)}
-                  title="Personnaliser son nom et son portrait"
-                  aria-label="Personnaliser son nom et son portrait"
-                  className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-soft hover:text-ink"
-                >
-                  <Pencil className="size-3.5" />
-                </button>
-              )}
-            </div>
-          )}
-          {expert && isChat && RAIL === "a" && (
-            <div className="mx-1 mb-1 flex items-center gap-1.5">
-              {profileId && <ExpertReadiness agentId={agentId} profileId={profileId} expertName={expertName} onOpenTools={() => selectTab("tools")} className="self-center" />}
-              {callee && <CallButton expert={callee} className="ml-auto h-9 flex-1" />}
-              {callee && <VoiceButton expert={callee} />}
-            </div>
-          )}
-          {expert && !(isChat && RAIL === "a") && (
+          {expert && (
             <>
               {/* Fixed colors on purpose: a picture with white text over it, in both themes. */}
               <div className="relative isolate aspect-[1/1.02] shrink-0 overflow-hidden rounded-[22px] bg-[#8E6FB0] text-white">
@@ -274,12 +243,6 @@ export function AgentWorkspace({
             })}
           </nav>
 
-          {/* The thread list folds into this one rail on the Chat tab (no second sidebar). */}
-          {isChat && RAIL !== "b" && (
-            <div className="mt-3 flex min-h-[200px] flex-1 flex-col border-t border-line pt-3">
-              <ChatSidebar />
-            </div>
-          )}
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -345,13 +308,13 @@ export function AgentWorkspace({
           {/* Chat owns its full height and stays MOUNTED (just hidden) across tab switches. */}
           {chatOpened && (
             <div className={cn("flex min-h-0 flex-1", !isChat && "hidden")}>
-              {RAIL === "b" && (
-                <div className="hidden w-[280px] shrink-0 flex-col border-r border-line bg-surface px-2 py-3 lg:flex">
-                  <ChatSidebar />
-                </div>
-              )}
+              {/* The conversations get their own column, the whole height, beside the chat (on phones and
+                  tablets they open from the chat's header). */}
+              <div className="hidden w-[288px] shrink-0 flex-col border-r border-line bg-surface px-2.5 py-3 lg:flex">
+                <ChatSidebar />
+              </div>
               <div className="min-w-0 flex-1">
-              <ChatView initialMessage={initialMessage} driveFolder={driveFolder ?? (profileId ? `${DRIVE_ROOT}/${expertName}` : DRIVE_ROOT)} />
+                <ChatView initialMessage={initialMessage} driveFolder={driveFolder ?? (profileId ? `${DRIVE_ROOT}/${expertName}` : DRIVE_ROOT)} />
               </div>
             </div>
           )}

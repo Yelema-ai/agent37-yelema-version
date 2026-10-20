@@ -44,6 +44,13 @@ function groupSessions(sessions: ChatSession[]): { label: string; items: ChatSes
   return groups.filter((g) => g.items.length > 0);
 }
 
+type Filter = "all" | "unread" | "routines";
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: "all", label: "Tout" },
+  { id: "unread", label: "Non lues" },
+  { id: "routines", label: "Routines" },
+];
+
 const BADGES = {
   running: { text: "En cours…", className: "text-ink-3" },
   unread: { text: "Nouvelle réponse", className: "text-brand-ink" },
@@ -63,7 +70,8 @@ function ConversationBadge({ status }: { status: keyof typeof BADGES }) {
 // The conversation rail of one expert: in the expert's left column on a computer, in a side panel on
 // phones and tablets (`onNavigate` closes it). Selecting or starting a thread updates the chat URL
 // (?session=) so refresh/Back/share reopen it. Routine runs repeat the same title every day, so they
-// fold into one « Routines » group at the end instead of drowning the conversations people started.
+// show their repeat icon and have their own filter, and « Plus ancien » starts folded, so they never drown
+// the conversations people started.
 export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { agentId, profile, sessions, activeSessionId, onChatTab, loadingSessions, reloadSessions, refreshingSessions, sessionsError, selectSession, startNewChat, deleteSession, renameSession } =
     useChatContext();
@@ -74,16 +82,19 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const pendingDelete = sessions.find((s) => s.session_id === pendingDeleteId) ?? null;
   const [query, setQuery] = useState("");
-  const [routinesOpen, setRoutinesOpen] = useState(false);
-  const { groups, routines } = useMemo(() => {
+  const [filter, setFilter] = useState<Filter>("all");
+  const [folded, setFolded] = useState<Record<string, boolean>>({ "Plus ancien": true });
+  const unreadCount = sessions.filter((s) => statusOf(s.session_id) === "unread").length;
+  const groups = useMemo(() => {
     const q = fold(query.trim());
-    const found = q ? sessions.filter((s) => fold(s.routine ?? s.title ?? "Nouvelle conversation").includes(q)) : sessions;
-    // While searching, everything that matches is listed by date, routines included.
-    if (q) return { groups: groupSessions(found), routines: [] as ChatSession[] };
-    return { groups: groupSessions(found.filter((s) => !s.routine)), routines: found.filter((s) => s.routine) };
-  }, [sessions, query]);
-  // The open thread is never hidden in a folded group.
-  const showRoutines = routinesOpen || routines.some((s) => s.session_id === highlightedSessionId);
+    let found = q ? sessions.filter((s) => fold(s.routine ?? s.title ?? "Nouvelle conversation").includes(q)) : sessions;
+    if (filter === "unread") found = found.filter((s) => statusOf(s.session_id) === "unread");
+    if (filter === "routines") found = found.filter((s) => s.routine);
+    return groupSessions(found);
+  }, [sessions, query, filter, statusOf]);
+  // A search or a filter shows everything it finds, and the open thread is never hidden in a folded group.
+  const isFolded = (g: { label: string; items: ChatSession[] }) =>
+    !query.trim() && filter === "all" && !!folded[g.label] && !g.items.some((s) => s.session_id === highlightedSessionId);
   const pick = (sessionId: string) => {
     selectSession(sessionId);
     onNavigate?.();
@@ -118,8 +129,8 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   }
 
   function renderRow(s: ChatSession) {
-    // In the Routines group the routine's name is enough; in a search result it keeps its prefix.
-    const label = s.routine ? (query.trim() ? `Routine : ${s.routine}` : s.routine) : s.title || "Nouvelle conversation";
+    // A routine run is named after its routine; the repeat icon says what it is.
+    const label = s.routine ?? (s.title || "Nouvelle conversation");
     const status = statusOf(s.session_id);
     if (editingId === s.session_id)
       return (
@@ -152,7 +163,7 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
             highlightedSessionId === s.session_id ? "bg-soft-2 font-semibold text-ink" : "text-ink-2 hover:bg-soft"
           )}
         >
-          {s.routine && <Repeat className="h-3.5 w-3.5 shrink-0 text-ink-3" aria-hidden />}
+          {s.routine && <Repeat className="h-3.5 w-3.5 shrink-0 text-ink-3" aria-label="Routine" />}
           <span className="min-w-0 flex-1">
             <span className={cn("block truncate", status === "unread" && "font-semibold text-ink")}>{label}</span>
             {status && <ConversationBadge status={status} />}
@@ -187,7 +198,9 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
     <>
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center justify-between px-2.5 pb-2 pt-1">
-          <span className="text-xs font-semibold uppercase tracking-wide text-ink-3">Conversations</span>
+          <span className="text-[15px] font-bold text-ink">
+            Conversations{sessions.length > 0 && <span className="ml-1 font-semibold tabular-nums text-ink-3">({sessions.length})</span>}
+          </span>
           <span className="flex items-center gap-1">
           <button
             type="button"
@@ -221,14 +234,14 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
             </button>
           </p>
         ) : null}
-        {sessions.length > 8 && (
-          <label className="relative mx-1 mb-1 block">
+        {sessions.length > 0 && (
+          <label className="relative mx-1 mb-2 block">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-3" aria-hidden />
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher"
+              placeholder="Chercher"
               aria-label="Rechercher une conversation"
               className="h-9 w-full rounded-[10px] border border-line bg-soft pl-8 pr-8 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-brand/40 focus:bg-surface [&::-webkit-search-cancel-button]:hidden"
             />
@@ -245,23 +258,27 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           </label>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {/* Routine runs first, folded: one line instead of the same title every morning. */}
-          {routines.length > 0 && (
-            <div className="mb-1 border-b border-line pb-1">
+        {sessions.length > 0 && (
+          <div role="group" aria-label="Filtrer les conversations" className="mx-1 mb-2 flex gap-1.5 border-b border-line pb-2.5">
+            {FILTERS.map(({ id, label }) => (
               <button
+                key={id}
                 type="button"
-                onClick={() => setRoutinesOpen(!showRoutines)}
-                aria-expanded={showRoutines}
-                className="flex w-full items-center gap-1.5 rounded-[10px] px-2.5 py-2 text-left text-[11px] font-semibold text-ink-3 hover:bg-soft"
+                onClick={() => setFilter(id)}
+                aria-pressed={filter === id}
+                className={cn(
+                  "h-8 rounded-full border px-3 text-[12.5px] font-semibold transition-colors",
+                  filter === id ? "border-brand/40 bg-tint text-brand-ink" : "border-line text-ink-2 hover:bg-soft"
+                )}
               >
-                <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", showRoutines && "rotate-90")} aria-hidden />
-                Routines
-                <span className="ml-auto tabular-nums">{routines.length}</span>
+                {label}
+                {id === "unread" && unreadCount > 0 && <span className="ml-1 tabular-nums">{unreadCount}</span>}
               </button>
-              {showRoutines && <nav className="flex flex-col gap-0.5">{[...routines].sort((x, y) => activeAt(y) - activeAt(x)).map(renderRow)}</nav>}
-            </div>
-          )}
+            ))}
+          </div>
+        )}
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {loadingSessions ? (
             <div className="flex items-center gap-2 px-2.5 py-2 text-xs text-ink-3">
               <Loader2 className="h-3 w-3 animate-spin" /> Chargement…
@@ -269,17 +286,29 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           ) : sessions.length === 0 ? (
             <p className="px-2.5 py-2 text-[13px] text-ink-3">Aucune conversation pour l’instant.</p>
           ) : (
-            groups.map((g) => (
-              <div key={g.label} className="mb-2">
-                <div className="px-2.5 pb-1 pt-2 text-[11px] font-semibold text-ink-3">{g.label}</div>
-                <nav className="flex flex-col gap-0.5">
-                  {g.items.map(renderRow)}
-                </nav>
-              </div>
-            ))
+            groups.map((g) => {
+              const shut = isFolded(g);
+              return (
+                <div key={g.label} className="mb-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setFolded({ ...folded, [g.label]: !shut })}
+                    aria-expanded={!shut}
+                    className="flex min-h-9 w-full items-center gap-1.5 rounded-[10px] px-2 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3 hover:bg-soft"
+                  >
+                    <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", !shut && "rotate-90")} aria-hidden />
+                    {g.label}
+                    <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-soft px-1.5 text-[11px] tabular-nums tracking-normal">{g.items.length}</span>
+                  </button>
+                  {!shut && <nav className="flex flex-col gap-0.5">{g.items.map(renderRow)}</nav>}
+                </div>
+              );
+            })
           )}
-          {!loadingSessions && query.trim() && groups.length === 0 && (
-            <p className="px-2.5 py-2 text-[13px] text-ink-3">Aucune conversation ne correspond.</p>
+          {!loadingSessions && sessions.length > 0 && groups.length === 0 && (
+            <p className="px-2.5 py-2 text-[13px] text-ink-3">
+              {query.trim() ? "Aucune conversation ne correspond." : filter === "unread" ? "Tout est lu." : "Aucune routine pour l’instant."}
+            </p>
           )}
         </div>
       </div>
