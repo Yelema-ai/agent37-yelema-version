@@ -209,8 +209,16 @@ export function McpView() {
 
   function openAccess() {
     if (!flow?.url) return;
-    if (popup.current && !popup.current.closed) popup.current.focus();
-    else window.open(flow.url, "mcp-oauth", "popup,width=600,height=750,noopener");
+    if (popup.current && !popup.current.closed) {
+      try {
+        popup.current.location.href = flow.url;
+      } catch {
+        popup.current = window.open(flow.url, "mcp-oauth", "popup,width=600,height=750,noopener");
+      }
+      popup.current?.focus();
+    } else {
+      popup.current = window.open(flow.url, "mcp-oauth", "popup,width=600,height=750,noopener");
+    }
   }
 
   async function startAuth(serverId: string, name: string) {
@@ -222,8 +230,11 @@ export function McpView() {
       setFlow((f) => (f?.serverId === serverId ? { ...f, url: authorizationUrl } : f));
       const w = popup.current;
       if (w && !w.closed) {
-        w.opener = null;
-        w.location.href = authorizationUrl;
+        try {
+          w.location.href = authorizationUrl;
+        } catch {
+          // Navigation asynchrone interceptée : le bouton Ouvrir l accès prend le relais
+        }
       }
     } catch (e) {
       closePopup();
