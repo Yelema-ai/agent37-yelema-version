@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { History, PanelLeft } from "lucide-react";
+import { History, MessagesSquare, PanelLeft } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ChatSidebar } from "./ChatSidebar";
@@ -35,6 +35,18 @@ export function ChatSessionsPanel() {
         className={cn("-ml-2 hidden size-10 shrink-0 place-items-center rounded-lg transition-colors lg:grid", railOpen ? "bg-tint text-brand-ink" : "text-ink-2 hover:bg-soft")}
       >
         <PanelLeft className="h-5 w-5" />
+      </button>
+      )}
+      {CONV === "d" && (
+      <button
+        type="button"
+        onClick={() => setRailOpen(!railOpen)}
+        aria-pressed={railOpen}
+        aria-label={railOpen ? "Masquer les conversations" : "Afficher les conversations"}
+        title={railOpen ? "Masquer les conversations" : "Afficher les conversations"}
+        className={cn("-ml-2 hidden size-10 shrink-0 place-items-center rounded-lg transition-colors lg:grid", railOpen ? "bg-tint text-brand-ink" : "text-ink-2 hover:bg-soft")}
+      >
+        <MessagesSquare className="h-5 w-5" />
       </button>
       )}
       {CONV === "z" && (
