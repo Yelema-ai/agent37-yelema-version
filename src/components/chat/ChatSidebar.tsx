@@ -2,7 +2,10 @@
 
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useConversationStatus } from "@/components/activity/hooks";
-import { ChevronRight, Loader2, Pencil, Plus, Repeat, RotateCw, Search, Trash2, X } from "lucide-react";
+import { CheckCheck, ChevronRight, Loader2, MoreHorizontal, Pencil, Plus, Repeat, RotateCw, Search, Trash2, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useNotifications } from "@/components/activity/ActivityProvider";
+import { convKey } from "@/lib/activity";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { cn } from "@/lib/utils";
 import { useChatContext } from "./ChatProvider";
@@ -84,7 +87,9 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [folded, setFolded] = useState<Record<string, boolean>>({ "Plus ancien": true });
-  const unreadCount = sessions.filter((s) => statusOf(s.session_id) === "unread").length;
+  const unreadIds = sessions.filter((s) => statusOf(s.session_id) === "unread").map((s) => s.session_id);
+  const unreadCount = unreadIds.length;
+  const { markRead } = useNotifications();
   const groups = useMemo(() => {
     const q = fold(query.trim());
     let found = q ? sessions.filter((s) => fold(s.routine ?? s.title ?? "Nouvelle conversation").includes(q)) : sessions;
@@ -169,26 +174,26 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
             {status && <ConversationBadge status={status} />}
           </span>
           {/* The date gives way to the row's actions on hover. */}
-          <span className="shrink-0 text-[11.5px] font-normal tabular-nums text-ink-3 group-hover:invisible">{shortWhen(activeAt(s))}</span>
+          <span className="shrink-0 text-[11.5px] font-normal tabular-nums text-ink-3 group-hover:invisible group-has-[[data-state=open]]:invisible pointer-coarse:mr-7 pointer-coarse:group-hover:visible pointer-coarse:group-has-[[data-state=open]]:visible">{shortWhen(activeAt(s))}</span>
         </button>
-        <button
-          type="button"
-          onClick={() => startRename(s.session_id, s.title)}
-          aria-label={`Renommer ${label}`}
-          title="Renommer"
-          className="absolute right-8 top-1/2 -translate-y-1/2 text-ink-3 opacity-0 transition-opacity hover:text-ink group-hover:opacity-100"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setPendingDeleteId(s.session_id)}
-          aria-label={`Supprimer ${label}`}
-          title="Supprimer"
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3 opacity-0 transition-opacity hover:text-ko group-hover:opacity-100"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        {/* Renommer and Supprimer behind « … »: on hover with a mouse, always shown on a touch screen. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={`Actions pour ${label}`}
+            title="Renommer ou supprimer"
+            className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-ink-3 opacity-0 transition-opacity hover:bg-soft-2 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44 p-1.5">
+            <DropdownMenuItem onSelect={() => startRename(s.session_id, s.title)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
+              <Pencil className="size-4" /> Renommer
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setPendingDeleteId(s.session_id)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm text-ko">
+              <Trash2 className="size-4" /> Supprimer
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     );
   }
@@ -267,7 +272,7 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                 onClick={() => setFilter(id)}
                 aria-pressed={filter === id}
                 className={cn(
-                  "h-8 rounded-full border px-3 text-[12.5px] font-semibold transition-colors",
+                  "h-8 shrink-0 whitespace-nowrap rounded-full border px-2.5 text-[12.5px] font-semibold transition-colors",
                   filter === id ? "border-brand/40 bg-tint text-brand-ink" : "border-line text-ink-2 hover:bg-soft"
                 )}
               >
@@ -275,6 +280,17 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                 {id === "unread" && unreadCount > 0 && <span className="ml-1 tabular-nums">{unreadCount}</span>}
               </button>
             ))}
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                onClick={() => markRead(unreadIds.map((id) => convKey(agentId, profile, id)))}
+                title="Tout marquer comme lu"
+                aria-label="Tout marquer comme lu"
+                className="ml-auto grid size-8 place-items-center rounded-full text-ink-3 hover:bg-soft hover:text-ink"
+              >
+                <CheckCheck className="h-4 w-4" />
+              </button>
+            )}
           </div>
         )}
 
