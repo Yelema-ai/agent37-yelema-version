@@ -22,6 +22,7 @@ import { useMailInboxes } from "@/components/experts/useMailInboxes";
 import { expertDisplayName } from "@/lib/experts";
 import { DRIVE_ROOT } from "@/lib/drive-paths";
 import { ChatProvider } from "@/components/chat/ChatProvider";
+import { useRailOpen } from "@/components/chat/rail-store";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatView } from "@/components/chat/ChatView";
 import { FilesTab } from "@/components/files/FilesTab";
@@ -65,6 +66,7 @@ export function AgentWorkspace({
   initialTab: AgentTab;
 }) {
   const pathname = usePathname();
+  const railOpen = useRailOpen();
   const { setCurrentId } = useWorkspace();
 
   // Deep-linking to an agent scopes the WorkspaceProvider to its workspace, so the fleet/switcher
@@ -308,11 +310,13 @@ export function AgentWorkspace({
           {/* Chat owns its full height and stays MOUNTED (just hidden) across tab switches. */}
           {chatOpened && (
             <div className={cn("flex min-h-0 flex-1", !isChat && "hidden")}>
-              {/* The conversations get their own column, the whole height, beside the chat (on phones and
-                  tablets they open from the chat's header). */}
-              <div className="hidden w-[288px] shrink-0 flex-col border-r border-line bg-surface px-2.5 py-3 lg:flex">
-                <ChatSidebar />
-              </div>
+              {/* The conversations open in their own column beside the chat from the chat's « Conversations »
+                  button, and close to give the chat its whole width (phones and tablets: a panel). */}
+              {railOpen && (
+                <div className="hidden w-[288px] shrink-0 flex-col border-r border-line bg-surface px-2.5 py-3 lg:flex">
+                  <ChatSidebar />
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <ChatView initialMessage={initialMessage} driveFolder={driveFolder ?? (profileId ? `${DRIVE_ROOT}/${expertName}` : DRIVE_ROOT)} />
               </div>
