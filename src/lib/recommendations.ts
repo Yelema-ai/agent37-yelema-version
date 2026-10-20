@@ -29,7 +29,7 @@ export function summarize(input: { report: McpToolsReport | null; oauth: McpOaut
   return { tools: ok.reduce((n, s) => n + s.tools.length, 0), servers: ok.length, connectors, channels, todo };
 }
 
-// ---- Les lignes de l'aperçu (variantes A et B à comparer, ?variante=a|b) ----
+// ---- Ce que les cartes de l'aperçu montrent : chaque intégration et son état ----
 
 /** Où en est une intégration : en service, en attente d'une connexion chez le fournisseur, ou en panne. */
 export type OverviewState = "active" | "to_authorize" | "to_check";

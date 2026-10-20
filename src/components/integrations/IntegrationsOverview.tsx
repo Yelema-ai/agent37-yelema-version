@@ -2,21 +2,59 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { channelBrand } from "@/components/channels/BrandIcons";
 import { apiFetch } from "@/lib/api";
 import type { ChannelsResponse } from "@/lib/channels";
 import type { McpOauthServer, McpToolsOverview } from "@/lib/mcp-servers";
-import { overview, summarize } from "@/lib/recommendations";
+import { overview, summarize, type OverviewItem } from "@/lib/recommendations";
 import type { IntegrationConnectionsResult } from "@/lib/types";
-import { OverviewCards, OverviewList } from "./IntegrationsOverviewVariants";
+import { cn } from "@/lib/utils";
+import { ToolLogo } from "./ToolLogo";
 
-// Intégrations · Aperçu : ce qui est branché sur les experts de la personne connectée, et ce qu'il
-// lui reste à brancher. Une source qui ne répond pas compte pour vide, sans faire tomber l'aperçu.
-// `variant` : une des deux propositions à comparer (IntegrationsOverviewVariants), sinon cette version.
-export function IntegrationsOverview({ agentId, variant = null }: { agentId: string; variant?: "a" | "b" | null }) {
+// Intégrations · Aperçu : ce qui est branché sur les experts de la personne connectée, en trois cartes
+// (MCP, connecteurs, canaux) avec les logos de ce qui marche et ce qui reste à régler. Pas de liste de
+// recommandations dessous (Leslie, 20/10) : la carte dit « 2 à régler » et mène à l'onglet où le faire.
+// Une source qui ne répond pas compte pour vide, sans faire tomber l'aperçu.
+
+/** Le logo d'une intégration : celui du connecteur, la marque du canal, l'initiale d'un serveur MCP. */
+function ItemLogo({ item }: { item: Pick<OverviewItem, "name" | "logo" | "channel"> }) {
+  const box = "h-8 w-8 rounded-full ring-2 ring-surface";
+  if (item.logo) return <ToolLogo logo={item.logo} name={item.name} className={cn(box, "border border-line bg-surface")} imgClassName="h-[18px] w-[18px]" />;
+  if (item.channel) {
+    const { Icon, color } = channelBrand(item.channel);
+    return (
+      <span className={cn("grid shrink-0 place-items-center border border-line bg-surface", box)}>
+        <Icon className="h-4 w-4" {...(color ? { style: { color } } : {})} />
+      </span>
+    );
+  }
+  return <span className={cn("grid shrink-0 place-items-center bg-tint font-display text-[12px] font-bold uppercase text-brand-ink", box)}>{item.name.charAt(0)}</span>;
+}
+
+function Stack({ items, max = 4 }: { items: OverviewItem[]; max?: number }) {
+  const shown = items.slice(0, max);
+  const more = items.length - shown.length;
+  return (
+    <span className="flex items-center">
+      {shown.map((i, n) => (
+        <span key={i.key} className={n ? "-ml-2" : undefined} title={i.name}>
+          <ItemLogo item={i} />
+        </span>
+      ))}
+      {more > 0 && (
+        <span className="-ml-2 grid h-8 min-w-8 place-items-center rounded-full bg-soft-2 px-1.5 text-[12px] font-bold text-ink-2 ring-2 ring-surface">+{more}</span>
+      )}
+    </span>
+  );
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+
+export function IntegrationsOverview({ agentId }: { agentId: string }) {
   const [input, setInput] = useState<Parameters<typeof summarize>[0] | null>(null);
   const summary = useMemo(() => (input ? summarize(input) : null), [input]);
-  const sections = useMemo(() => (input && variant ? overview(input) : null), [input, variant]);
+  const sections = useMemo(() => (input ? overview(input) : null), [input]);
 
   useEffect(() => {
     let alive = true;
@@ -34,54 +72,46 @@ export function IntegrationsOverview({ agentId, variant = null }: { agentId: str
     };
   }, [agentId]);
 
-  if (!summary)
+  if (!summary || !sections)
     return (
       <div className="flex min-h-[12rem] items-center justify-center rounded-[22px] border border-line bg-surface">
         <Loader2 className="h-6 w-6 animate-spin text-ink-3" />
       </div>
     );
 
-  if (sections && variant === "a") return <OverviewCards summary={summary} sections={sections} />;
-  if (sections && variant === "b") return <OverviewList sections={sections} />;
-
-  const facts = [
-    { label: "Outils MCP disponibles", value: String(summary.tools), note: `${summary.servers} serveur${summary.servers > 1 ? "s" : ""}` },
-    { label: "Connecteurs", value: String(summary.connectors.length), note: summary.connectors.slice(0, 3).join(", ") || "Aucun" },
-    { label: "Canaux", value: String(summary.channels.length), note: summary.channels.join(", ") || "Aucun" },
+  const active = (list: OverviewItem[]) => list.filter((i) => i.state === "active");
+  const cards = [
+    { key: "mcp", label: "Outils MCP", value: summary.tools, note: plural(summary.servers, "serveur", "serveurs"), items: sections.servers, href: "/integrations/mcp" },
+    { key: "connectors", label: "Connecteurs", value: active(sections.connectors).length, note: null, items: sections.connectors, href: "/integrations/connecteurs" },
+    { key: "channels", label: "Canaux", value: active(sections.channels).length, note: null, items: sections.channels, href: "/integrations/canaux" },
   ];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Aperçu</h2>
-        <p className="mt-1 max-w-xl text-sm text-ink-3">Ce que vos experts ont sous la main, et ce qui leur manque encore.</p>
-      </div>
+      <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Aperçu</h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {facts.map((f) => (
-          <div key={f.label} className="rounded-[22px] border border-line bg-surface p-4">
-            <p className="text-[12px] font-semibold uppercase tracking-wider text-ink-3">{f.label}</p>
-            <p className="mt-1 font-display text-[28px] font-bold text-ink">{f.value}</p>
-            <p className="truncate text-xs text-ink-3" title={f.note}>{f.note}</p>
-          </div>
-        ))}
-      </div>
-      <div className="space-y-3">
-        <p className="text-[13px] font-semibold uppercase tracking-wider text-ink-3">Recommandé</p>
-        {summary.todo.length === 0 ? (
-          <p className="flex items-center gap-2 rounded-[22px] border border-line bg-surface p-4 text-sm text-ink-2">
-            <CheckCircle2 className="h-4 w-4 text-ok" /> Tout est branché. Ajoutez un serveur MCP ou un connecteur quand un besoin apparaît.
-          </p>
-        ) : (
-          summary.todo.map((r) => (
-            <Link key={r.key} href={r.href} className="flex items-center gap-3 rounded-[22px] border border-line bg-surface p-4 transition-colors hover:border-brand/40">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-ink">{r.title}</p>
-                <p className="text-xs text-ink-3">{r.detail}</p>
-              </div>
-              <ArrowRight className="h-4 w-4 shrink-0 text-ink-3" />
+        {cards.map((c) => {
+          const waiting = c.items.filter((i) => i.state !== "active").length;
+          const on = active(c.items);
+          return (
+            <Link key={c.key} href={c.href} className="flex flex-col rounded-[22px] border border-line bg-surface p-4 transition-colors hover:border-brand/40">
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-[12px] font-semibold uppercase tracking-wider text-ink-3">{c.label}</span>
+                {(on.length > 0 || waiting > 0) && (
+                  <span className={cn("inline-flex items-center gap-1.5 text-[12px] font-semibold", waiting ? "text-coral-ink" : "text-ok")}>
+                    <span className={cn("size-2 rounded-full", waiting ? "bg-coral" : "bg-ok")} aria-hidden />
+                    {waiting ? `${waiting} à régler` : "Actif"}
+                  </span>
+                )}
+              </span>
+              <span className="mt-1 flex items-baseline gap-2">
+                <span className="font-display text-[28px] font-bold text-ink">{c.value}</span>
+                {c.note && <span className="text-xs text-ink-3">{c.note}</span>}
+              </span>
+              <span className="mt-auto pt-3 sm:min-h-[52px]">{on.length ? <Stack items={on} /> : <span className="text-[13px] text-ink-3">Aucun</span>}</span>
             </Link>
-          ))
-        )}
+          );
+        })}
       </div>
     </div>
   );
