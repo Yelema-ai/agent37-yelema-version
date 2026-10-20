@@ -109,6 +109,7 @@ const REFUSALS: Record<string, string> = {
   forbidden: "Ce réglage est réservé aux administrateurs de votre espace.",
   not_found: "Ce serveur est introuvable.",
   too_many_attempts: "Trop d’essais en peu de temps. Réessayez dans une heure.",
+  stale_flow: "Cette fenêtre appartient à une autorisation remplacée depuis : terminez-la dans la dernière fenêtre ouverte.",
   unavailable: "L’enregistrement est momentanément indisponible. Réessayez plus tard.",
   conflict: "Votre instance n’est pas prête pour cette autorisation. Réessayez dans un instant.",
   bad_callback: "Le retour du fournisseur est incomplet. Relancez l’autorisation.",
