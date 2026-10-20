@@ -185,6 +185,26 @@
   color: var(--link);
   text-decoration: underline;
 }
+/* Lists: the bullets and numbers stay inside the bubble (Streamdown's list-inside is not in the
+   compiled CSS, and the reset leaves lists without any indent). */
+.chat-markdown ul,
+.chat-markdown ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+  list-style-position: outside;
+}
+.chat-markdown ul {
+  list-style-type: disc;
+}
+.chat-markdown ol {
+  list-style-type: decimal;
+}
+.chat-markdown li + li {
+  margin-top: 0.25em;
+}
+.chat-markdown li::marker {
+  color: var(--ink-3);
+}
 
 /* The call's halo: the connection pulses, a reconnection blinks (CallDialog.tsx). */
 @keyframes call-halo {
