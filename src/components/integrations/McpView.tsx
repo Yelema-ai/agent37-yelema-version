@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, ChevronDown, Layers, Loader2, MoreHorizontal, Plus, RefreshCw, Server, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { apiFetch } from "@/lib/api";
 import type { SettingScope } from "@/lib/llm";
 import { mcpPending, type McpOauthServer, type McpOverview, type McpServer, type McpServerDraft, type McpToolsOverview, type McpToolsReport, type McpWritten } from "@/lib/mcp-servers";
+import { type McpOauthFlow } from "./McpOauthSteps";
 import { McpServerDialog } from "./McpServerDialog";
 
 // Une pose prend d'ordinaire moins d'une minute par instance ; au-delà, on cesse de relire seul.
@@ -75,6 +76,11 @@ function ServerCard({ server, note, access, tools, catalogueLabel, onRemove }: {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <p className="truncate text-[15px] font-semibold text-ink">{server.name}</p>
+            {server.auth === "oauth" && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-tint px-2 py-0.5 text-[11px] font-semibold text-brand">
+                <ShieldCheck className="h-3 w-3" /> OAuth
+              </span>
+            )}
             {note && <span className="shrink-0 rounded-full bg-soft px-2 py-0.5 text-[11px] font-semibold text-ink-3">{note}</span>}
           </div>
           {server.auth === "stdio" ? (
@@ -130,7 +136,8 @@ export function McpView() {
   const [removing, setRemoving] = useState<McpServer | null>(null);
   const [tries, setTries] = useState(0);
   const [oauth, setOauth] = useState<Record<string, McpOauthServer>>({});
-  const [authorizing, setAuthorizing] = useState<string | null>(null);
+  const [flow, setFlow] = useState<McpOauthFlow | null>(null);
+  const popup = useRef<Window | null>(null);
   const [tools, setTools] = useState<McpToolsOverview | null>(null);
   const [surveying, setSurveying] = useState(false);
   const [oauthTries, setOauthTries] = useState(0);
@@ -184,40 +191,88 @@ export function McpView() {
     if (hasOauth) void loadOauth();
   }, [hasOauth, loadOauth]);
 
-  // Tant que la fenêtre du fournisseur est ouverte, l'accès est relu jusqu'à ce que l'instance l'ait.
-  useEffect(() => {
-    if (!authorizing || oauthTries >= OAUTH_POLL_TRIES) return;
-    const timer = setTimeout(async () => {
-      const servers = await loadOauth();
-      const done = servers?.find((s) => s.id === authorizing);
-      if (done?.connected) {
-        toast.success(`Serveur ${done.name} autorisé`, { description: "Vos experts peuvent utiliser ses outils." });
-        setAuthorizing(null);
-        loadTools();
-      } else if (done && !done.pending && oauthTries > 3) setAuthorizing(null);
-      else setOauthTries((n) => n + 1);
-    }, OAUTH_POLL_MS);
-    return () => clearTimeout(timer);
-  }, [authorizing, oauthTries, loadOauth]);
+  // La fenêtre du fournisseur s'ouvre au clic (sinon bloquée), vide, puis reçoit son adresse sans lien vers cette page.
+  function openPopup(name: string) {
+    const w = window.open("about:blank", "mcp-oauth", "popup,width=600,height=750");
+    if (w) {
+      w.document.title = "Autorisation";
+      w.document.body.style.cssText = "font:14px system-ui,sans-serif;padding:24px;color:#444";
+      w.document.body.textContent = `Préparation de l’autorisation de ${name}…`;
+    }
+    popup.current = w;
+  }
+  const closePopup = useCallback(() => {
+    if (popup.current && !popup.current.closed) popup.current.close();
+    popup.current = null;
+  }, []);
+  useEffect(() => closePopup, [closePopup]);
 
-  async function authorize(server: McpServer) {
-    // La fenêtre s'ouvre au clic (sinon bloquée), puis reçoit l'adresse du fournisseur, sans lien vers cette page.
-    const popup = window.open("about:blank", "mcp-oauth", "popup,width=600,height=750");
-    setAuthorizing(server.id);
+  function openAccess() {
+    if (!flow?.url) return;
+    if (popup.current && !popup.current.closed) popup.current.focus();
+    else window.open(flow.url, "mcp-oauth", "popup,width=600,height=750,noopener");
+  }
+
+  async function startAuth(serverId: string, name: string) {
+    setFlow({ serverId, name, step: "authorizing", url: null });
     setOauthTries(0);
     try {
-      const { authorizationUrl } = await apiFetch<{ authorizationUrl: string }>(`/api/mcp/oauth/${encodeURIComponent(server.id)}`, { method: "POST" });
+      const { authorizationUrl } = await apiFetch<{ authorizationUrl: string }>(`/api/mcp/oauth/${encodeURIComponent(serverId)}`, { method: "POST" });
       if (!authorizationUrl.startsWith("https://")) throw new Error("Adresse d’autorisation refusée.");
-      if (popup) {
-        popup.opener = null;
-        popup.location.href = authorizationUrl;
-      } else window.location.assign(authorizationUrl);
+      setFlow((f) => (f?.serverId === serverId ? { ...f, url: authorizationUrl } : f));
+      const w = popup.current;
+      if (w && !w.closed) {
+        w.opener = null;
+        w.location.href = authorizationUrl;
+      }
     } catch (e) {
-      popup?.close();
-      setAuthorizing(null);
+      closePopup();
+      setFlow(null);
       toast.error((e as Error).message);
     }
   }
+
+  function authorize(server: McpServer) {
+    openPopup(server.name);
+    void startAuth(server.id, server.name);
+  }
+
+  function cancelFlow() {
+    if (flow?.step === "authorizing") void apiFetch("/api/mcp/oauth", { method: "DELETE" }).catch(() => undefined);
+    closePopup();
+    setFlow(null);
+  }
+
+  // Un serveur OAuth tout juste ajouté : l'autorisation part dès qu'il est posé sur les instances.
+  useEffect(() => {
+    if (flow?.step !== "installing" || !data) return;
+    const s = [...data.own, ...(data.client ?? [])].find((x) => x.id === flow.serverId);
+    if (s?.state === "applied") void startAuth(s.id, s.name);
+    else if (!s || s.state === "failed") {
+      closePopup();
+      setFlow(null);
+      if (s) toast.error("L’installation du serveur n’a pas abouti.", { description: "Supprimez-le puis ajoutez-le de nouveau." });
+    }
+  }, [data, flow]);
+
+  // Tant que la fenêtre du fournisseur est ouverte, l'accès est relu jusqu'à ce que l'instance l'ait.
+  useEffect(() => {
+    if (flow?.step !== "authorizing" || !flow.url) return;
+    const timer = setTimeout(async () => {
+      const servers = await loadOauth();
+      const done = servers?.find((s) => s.id === flow.serverId);
+      if (done?.connected) {
+        setFlow((f) => (f?.serverId === done.id ? { ...f, step: "success" } : f));
+        closePopup();
+        loadTools();
+      } else if ((done && !done.pending && oauthTries > 3) || oauthTries >= OAUTH_POLL_TRIES) {
+        closePopup();
+        setFlow(null);
+        toast.error("L’autorisation n’a pas abouti.", { description: "Relancez-la depuis la carte du serveur." });
+      } else setOauthTries((n) => n + 1);
+    }, OAUTH_POLL_MS);
+    return () => clearTimeout(timer);
+  }, [flow, oauthTries, loadOauth, loadTools, closePopup]);
 
   // Tant qu'une pose est en cours, l'état est relu : l'écran passe seul à « En service » ou à l'échec.
   useEffect(() => {
@@ -235,7 +290,7 @@ export function McpView() {
   const toolsOf = (s: McpServer) => report?.servers.find((t) => t.name === s.name);
   const labelOf = (s: McpServer) => data?.stdioCatalogue.find((c) => c.key === s.stdio)?.label;
   const accessOf = (s: McpServer): Access | undefined =>
-    s.auth === "oauth" && scope.kind !== "member" ? { connected: oauth[s.id]?.connected === true, busy: authorizing === s.id, onAuthorize: () => void authorize(s) } : undefined;
+    s.auth === "oauth" && scope.kind !== "member" ? { connected: oauth[s.id]?.connected === true, busy: flow?.serverId === s.id && flow.step !== "success", onAuthorize: () => authorize(s) } : undefined;
   // Un administrateur règle l'entreprise ou un membre ; un membre, seulement lui-même.
   useEffect(() => {
     if (data) setScope((s) => (admin ? (s.kind === "own" ? { kind: "client" } : s) : { kind: "own" }));
@@ -247,15 +302,27 @@ export function McpView() {
   const inherited = scope.kind === "member" ? (data?.client ?? []).filter((c) => !servers.some((s) => s.name === c.name)) : [];
   const scopeLabel = scope.kind === "client" ? "tous les experts de l’entreprise" : scope.kind === "member" ? `les experts de ${member?.name ?? member?.email ?? "ce membre"}` : "vos experts";
 
-  async function written(call: Promise<McpWritten>, done: string) {
+  async function written(call: Promise<McpWritten>, done: string): Promise<McpWritten> {
     const out = await call;
     setTries(0);
     await load();
     toast.success(done, { description: out.state === "pending" ? "L’installation sur les instances est en cours." : undefined });
+    return out;
   }
 
+  // OAuth sur l'entreprise ou sur soi : « Connecter » enchaîne sur l'autorisation de son propre compte.
+  const chains = scope.kind !== "member";
   async function add(draft: McpServerDraft) {
-    await written(apiFetch<McpWritten>(scopeUrl(scope), { method: "POST", body: JSON.stringify(draft) }), `Serveur ${draft.name} enregistré`);
+    const authorizeNext = draft.auth === "oauth" && chains;
+    if (authorizeNext) openPopup(draft.name);
+    try {
+      const out = await written(apiFetch<McpWritten>(scopeUrl(scope), { method: "POST", body: JSON.stringify(draft) }), `Serveur ${draft.name} enregistré`);
+      if (authorizeNext && out.server) setFlow({ serverId: out.server.id, name: out.server.name, step: "installing", url: null });
+      else closePopup();
+    } catch (e) {
+      closePopup();
+      throw e;
+    }
     setAdding(false);
   }
 
@@ -336,7 +403,20 @@ export function McpView() {
         )}
       </div>
 
-      <McpServerDialog open={adding} onOpenChange={setAdding} scopeLabel={scopeLabel} onSave={add} />
+      <McpServerDialog
+        open={adding}
+        onOpenChange={setAdding}
+        scopeLabel={scopeLabel}
+        onSave={add}
+        oauth={{
+          chains,
+          flow,
+          tools: (flow && tools?.own?.servers.find((t) => t.name === flow.name && t.state === "ok")?.tools) || [],
+          onOpenAccess: openAccess,
+          onCancel: cancelFlow,
+          onClose: () => setFlow(null),
+        }}
+      />
 
       <ConfirmDialog
         open={Boolean(removing)}

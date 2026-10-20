@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { McpAuth, McpServerDraft } from "@/lib/mcp-servers";
+import type { McpAuth, McpServerDraft, McpToolsReport } from "@/lib/mcp-servers";
 import { cn } from "@/lib/utils";
+import { McpOauthSteps, type McpOauthFlow } from "./McpOauthSteps";
 
 const AUTH_OPTIONS: { value: Exclude<McpAuth, "stdio">; label: string; description: string; icon: typeof Globe }[] = [
   { value: "none", label: "Aucune", description: "Serveur public, sans clé", icon: Globe },
@@ -16,9 +17,19 @@ const AUTH_OPTIONS: { value: Exclude<McpAuth, "stdio">; label: string; descripti
   { value: "oauth", label: "OAuth", description: "Connexion sur la page du fournisseur (Notion, Linear…)", icon: ShieldCheck },
 ];
 
-// Le dialogue d'ajout d'un serveur MCP. Il ne garde rien : le brouillon part au back-office, qui
-// contrôle le nom, l'adresse et le jeton, et dont le refus revient ici en une phrase.
-export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; scopeLabel: string; onSave: (draft: McpServerDraft) => Promise<void> }) {
+type OauthProps = {
+  /** True when « Connecter » goes on to authorize on the caller's own instance (not for another member's servers). */
+  chains: boolean;
+  flow: McpOauthFlow | null;
+  tools: McpToolsReport["servers"][number]["tools"];
+  onOpenAccess: () => void;
+  onCancel: () => void;
+  onClose: () => void;
+};
+
+// Le dialogue d'ajout d'un serveur MCP, puis, pour OAuth, le suivi de l'autorisation. Il ne garde rien :
+// le brouillon part au back-office, qui contrôle le nom, l'adresse et le jeton ; son refus revient en une phrase.
+export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth }: { open: boolean; onOpenChange: (open: boolean) => void; scopeLabel: string; onSave: (draft: McpServerDraft) => Promise<void>; oauth: OauthProps }) {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [auth, setAuth] = useState<Exclude<McpAuth, "stdio">>("none");
@@ -50,8 +61,11 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave }: { op
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
+    <Dialog open={open || Boolean(oauth.flow)} onOpenChange={(next) => (oauth.flow ? !next && (oauth.flow.step === "success" ? oauth.onClose() : oauth.onCancel()) : !busy && onOpenChange(next))}>
       <DialogContent className="sm:max-w-[580px]">
+        {oauth.flow ? (
+          <McpOauthSteps flow={oauth.flow} tools={oauth.tools} onOpenAccess={oauth.onOpenAccess} onCancel={oauth.onCancel} onClose={oauth.onClose} />
+        ) : (
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
             <DialogTitle>Connecter un serveur MCP</DialogTitle>
@@ -114,9 +128,16 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave }: { op
             )}
 
             {auth === "oauth" && (
-              <p className="rounded-xl bg-tint/60 px-3 py-2.5 text-xs leading-relaxed text-ink-2">
-                Rien à saisir ici. Une fois le serveur installé, chacun clique « Autoriser » et se connecte avec son propre compte chez le fournisseur ; l’accès reste sur son instance.
-              </p>
+              <div className="space-y-1 rounded-xl border border-brand/20 bg-tint/60 p-3 text-xs">
+                <p className="flex items-center gap-1.5 font-semibold text-brand">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Flux OAuth interactif sécurisé
+                </p>
+                <p className="leading-relaxed text-ink-2">
+                  {oauth.chains
+                    ? "En cliquant sur « Connecter », une fenêtre d’autorisation s’ouvrira directement sur le site du fournisseur pour vous connecter et valider l’accès. Chaque membre autorise ensuite son propre compte ; l’accès reste sur son instance."
+                    : "Rien à saisir ici. Une fois le serveur installé, ce membre clique « Autoriser » et se connecte avec son propre compte chez le fournisseur ; l’accès reste sur son instance."}
+                </p>
+              </div>
             )}
 
             <p className="rounded-xl bg-soft px-3 py-2.5 text-xs leading-relaxed text-ink-2">
@@ -130,10 +151,11 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave }: { op
             </Button>
             <Button type="submit" disabled={busy || !ready}>
               {busy ? <Loader2 className="animate-spin" /> : <Plus />}
-              {busy ? "Connexion…" : "Connecter"}
+              {busy ? (auth === "oauth" && oauth.chains ? "Initialisation…" : "Connexion…") : "Connecter"}
             </Button>
           </DialogFooter>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   );
