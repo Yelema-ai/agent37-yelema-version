@@ -53,6 +53,12 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
   const [sessionId, setSessionId] = useState<string | null>(() => readSession(companion));
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  // The field follows its text up to about five lines, then scrolls.
+  const grow = (el: HTMLTextAreaElement) => {
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
+  };
   const { messages, isStreaming, error, send } = useChat({
     agentId: companion.agentId,
     profile: companion.profileId,
@@ -72,6 +78,7 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
     if (!input.trim() || isStreaming) return;
     send(input);
     setInput("");
+    if (fieldRef.current) fieldRef.current.style.height = "auto";
   }
 
   function restart() {
@@ -87,17 +94,17 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
         <div className="flex items-center gap-3">
           <Portrait animated />
           <div>
-            <p className="text-sm font-bold text-ink">Yélé</p>
-            <p className="text-[11px] text-ink-3">Votre agent d’accompagnement&nbsp;: prise en main, conseils et support</p>
+            <p className="text-[15px] font-bold text-ink">Yélé</p>
+            <p className="text-[12.5px] leading-snug text-ink-3">Votre agent d’accompagnement&nbsp;: prise en main, conseils et support</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
           {shown.length > 0 && (
-            <button type="button" onClick={restart} title="Nouvelle discussion" aria-label="Nouvelle discussion" className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-soft hover:text-ink">
+            <button type="button" onClick={restart} title="Nouvelle discussion" aria-label="Nouvelle discussion" className="grid size-10 place-items-center rounded-lg text-ink-3 hover:bg-soft hover:text-ink">
               <RefreshCw className="size-3.5" />
             </button>
           )}
-          <button type="button" onClick={onClose} title="Réduire" aria-label="Réduire" className="grid size-8 place-items-center rounded-lg text-ink-3 hover:bg-soft hover:text-ink">
+          <button type="button" onClick={onClose} title="Réduire" aria-label="Réduire" className="grid size-10 place-items-center rounded-lg text-ink-3 hover:bg-soft hover:text-ink">
             <X className="size-4" />
           </button>
         </div>
@@ -108,16 +115,16 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
           <>
             <div className="flex items-start gap-2.5 rounded-2xl border border-brand/20 bg-tint/50 p-3.5">
               <Sparkles className="mt-0.5 size-5 shrink-0 text-brand" />
-              <p className="text-xs leading-relaxed text-ink-2">
+              <p className="text-[14px] leading-relaxed text-ink-2">
                 Bonjour, je suis <span className="font-bold text-brand">Yélé</span>. Je vous aide à tirer le meilleur de vos Experts, à brancher vos outils et à régler un blocage.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {SHORTCUTS.map(({ label, desc, prompt, icon: Icon }) => (
-                <button key={label} type="button" onClick={() => send(prompt)} disabled={isStreaming} className="flex flex-col items-start gap-1 rounded-xl border border-line bg-surface p-2.5 text-left transition-colors hover:border-brand/30 hover:bg-soft disabled:opacity-50">
+                <button key={label} type="button" onClick={() => send(prompt)} disabled={isStreaming} className="flex flex-col items-start gap-1 rounded-xl border border-line bg-surface p-3 text-left transition-colors hover:border-brand/30 hover:bg-soft disabled:opacity-50">
                   <Icon className="size-4 text-brand" />
-                  <span className="line-clamp-1 text-[12px] font-semibold text-ink">{label}</span>
-                  <span className="line-clamp-1 text-[10px] text-ink-3">{desc}</span>
+                  <span className="line-clamp-1 text-[13.5px] font-semibold text-ink">{label}</span>
+                  <span className="line-clamp-2 text-[12px] leading-snug text-ink-3">{desc}</span>
                 </button>
               ))}
             </div>
@@ -125,31 +132,46 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
         ) : (
           shown.map((m) => (
             <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
-              <div className={cn("max-w-[88%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed", m.role === "user" ? "rounded-br-sm bg-brand text-on-brand" : "rounded-bl-sm border border-line bg-soft text-ink")}>
+              <div className={cn("max-w-[88%] rounded-2xl px-3.5 py-2.5 text-[14px] leading-relaxed", m.role === "user" ? "rounded-br-sm bg-brand text-on-brand" : "rounded-bl-sm border border-line bg-soft text-ink")}>
                 {m.role === "user" ? <p className="whitespace-pre-wrap">{m.content}</p> : <Markdown content={m.content} agentId={companion.agentId} />}
               </div>
             </div>
           ))
         )}
         {isStreaming && (
-          <p className="flex items-center gap-2 pl-1 text-[11px] text-ink-3">
+          <p className="flex items-center gap-2 pl-1 text-[12.5px] text-ink-3">
             <Loader2 className="size-3.5 animate-spin text-brand" /> Yélé rédige sa réponse…
           </p>
         )}
-        {error && <p role="alert" className="rounded-xl bg-ko-pale p-2.5 text-xs text-ko">{error}</p>}
+        {error && <p role="alert" className="rounded-xl bg-ko-pale p-2.5 text-[13px] text-ko">{error}</p>}
       </div>
 
-      <form onSubmit={submit} className="flex items-center gap-1.5 border-t border-line p-3">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Posez une question à Yélé…"
-          aria-label="Votre question à Yélé"
-          className="w-full rounded-xl border border-line bg-soft/70 px-3.5 py-2 text-xs text-ink outline-none placeholder:text-ink-3 focus:border-brand/40 focus:bg-surface focus:ring-2 focus:ring-brand/15"
-        />
-        <button type="submit" disabled={!input.trim() || isStreaming} aria-label="Envoyer" className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand text-on-brand hover:opacity-90 disabled:pointer-events-none disabled:opacity-40">
-          <Send className="size-3.5" />
-        </button>
+      {/* The same writing area as an Expert's chat: a field that grows with the text (Entrée sends,
+          Maj + Entrée goes to the line), 16 px on a phone so iOS does not zoom, a 44 px send button. */}
+      <form onSubmit={submit} className="border-t border-line p-3">
+        <div className="flex items-end gap-2 rounded-[18px] border border-line bg-soft/70 p-1.5 pl-4 transition-colors focus-within:border-brand/40 focus-within:bg-surface focus-within:ring-2 focus-within:ring-brand/15">
+          <textarea
+            ref={fieldRef}
+            value={input}
+            rows={1}
+            onChange={(e) => {
+              setInput(e.target.value);
+              grow(e.target);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                e.currentTarget.form?.requestSubmit();
+              }
+            }}
+            placeholder="Posez une question à Yélé…"
+            aria-label="Votre question à Yélé"
+            className="max-h-[132px] min-h-[44px] w-full resize-none bg-transparent py-2.5 text-base leading-6 text-ink outline-none placeholder:text-ink-3 sm:text-[15px]"
+          />
+          <button type="submit" disabled={!input.trim() || isStreaming} aria-label="Envoyer" className="grid size-11 shrink-0 place-items-center rounded-full bg-brand text-on-brand hover:opacity-90 disabled:pointer-events-none disabled:opacity-40">
+            <Send className="size-[18px]" />
+          </button>
+        </div>
       </form>
     </div>
   );
