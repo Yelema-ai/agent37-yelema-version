@@ -174,7 +174,7 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
           <Portrait animated />
           <div>
             <p className="text-[15px] font-bold text-ink">Yélé</p>
-            <p className="text-[12.5px] leading-snug text-ink-3">Votre agent d’accompagnement&nbsp;: prise en main, conseils et support</p>
+            <p className="text-[12.5px] leading-snug text-ink-3">Prise en main, conseils et support</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
