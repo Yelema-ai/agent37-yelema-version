@@ -1,24 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Check,
+  CheckSquare,
+  ChevronDown,
   Copy,
-  Download,
   ExternalLink,
-  FileCode,
-  FileText,
   Globe,
   Lock,
   Mail,
   Plus,
-  Printer,
+  Search,
   Share2,
+  ShieldCheck,
+  Square,
   Users,
   X,
   Loader2,
-  ShieldCheck,
-  Send,
+  UserCheck,
 } from "lucide-react";
 import {
   Dialog,
@@ -40,14 +40,10 @@ export function ShareDashboardModal() {
   const {
     shareModalOpen,
     setShareModalOpen,
-    agentId,
-    profile,
     agentName,
     activeUrl,
     data,
     updateSharing,
-    downloadPdf,
-    downloadHtml,
   } = useDashboard();
 
   const workspaceCtx = useWorkspace();
@@ -55,8 +51,6 @@ export function ShareDashboardModal() {
 
   const [accesMode, setAccesMode] = useState<"public" | "workspace" | "emails">("public");
   const [emails, setEmails] = useState<string[]>([]);
-  const [newEmail, setNewEmail] = useState("");
-  const [emailError, setEmailError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -64,13 +58,18 @@ export function ShareDashboardModal() {
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
 
+  // Recherche & Dropdown pour "Personnes ciblées"
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   // Synchroniser avec les données actuelles quand la modale s'ouvre
   useEffect(() => {
     if (shareModalOpen && data) {
       setAccesMode(data.acces || "public");
       setEmails(data.allowedEmails || []);
-      setNewEmail("");
-      setEmailError(null);
+      setSearchQuery("");
+      setDropdownOpen(false);
     }
   }, [shareModalOpen, data]);
 
@@ -92,20 +91,30 @@ export function ShareDashboardModal() {
       });
   }, [shareModalOpen, currentWorkspace?.id]);
 
-  // URL de partage sécurisée de la plateforme (qui valide les droits d'accès)
-  const platformShareUrl =
-    typeof window !== "undefined" && agentId && profile
-      ? `${window.location.origin}/dashboards/view?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`
-      : activeUrl || "";
+  // Fermer le dropdown lors d'un clic en dehors
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    if (dropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [dropdownOpen]);
+
+  // Le vrai lien direct du tableau de bord (donné par l'agent / hébergé sur Render)
+  const actualLink = activeUrl || "";
 
   const handleCopy = () => {
-    if (!platformShareUrl) {
-      toast.error("Aucun lien disponible.");
+    if (!actualLink) {
+      toast.error("Aucun lien de tableau de bord disponible.");
       return;
     }
-    navigator.clipboard.writeText(platformShareUrl);
+    navigator.clipboard.writeText(actualLink);
     setCopied(true);
-    toast.success("Lien sécurisé copié dans le presse-papier !");
+    toast.success("Lien copié dans le presse-papier !");
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -129,24 +138,43 @@ export function ShareDashboardModal() {
     setEmails(emails.filter((e) => !memberEmails.has(e)));
   };
 
-  const handleAddEmail = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const email = newEmail.trim().toLowerCase();
+  const handleAddCustomEmail = (rawEmail: string) => {
+    const email = rawEmail.trim().toLowerCase();
     if (!email) return;
 
     if (!email.includes("@") || !email.includes(".")) {
-      setEmailError("Adresse e-mail invalide.");
+      toast.error("Veuillez saisir une adresse e-mail valide.");
       return;
     }
 
     if (emails.includes(email)) {
-      setEmailError("Cette adresse e-mail est déjà dans la liste.");
+      toast.info("Cette adresse est déjà sélectionnée.");
       return;
     }
 
     setEmails([...emails, email]);
-    setNewEmail("");
-    setEmailError(null);
+    setSearchQuery("");
+  };
+
+  const handleKeyDownSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return;
+
+      // Si correspond exactement à un membre, on le coche
+      const match = workspaceMembers.find(
+        (m) => m.email.toLowerCase().trim() === q || (m.name && m.name.toLowerCase().trim() === q)
+      );
+      if (match) {
+        toggleMemberEmail(match.email);
+        setSearchQuery("");
+      } else if (q.includes("@")) {
+        handleAddCustomEmail(q);
+      } else {
+        toast.error("Entrez une adresse e-mail complète ou choisissez un membre.");
+      }
+    }
   };
 
   const handleRemoveEmail = (emailToRemove: string) => {
@@ -165,26 +193,57 @@ export function ShareDashboardModal() {
     }
   };
 
+  // Calcul des destinataires pour l'envoi par email (mailto:)
+  const emailRecipients = (() => {
+    if (accesMode === "workspace") {
+      // Tous les emails du workspace
+      return workspaceMembers
+        .map((m) => m.email.trim())
+        .filter(Boolean)
+        .join(",");
+    }
+    if (accesMode === "emails") {
+      // Les emails spécifiquement sélectionnés
+      return emails.filter(Boolean).join(",");
+    }
+    // Mode public : vide pour laisser l'utilisateur choisir ses destinataires
+    return "";
+  })();
+
   const mailtoSubject = encodeURIComponent(`Tableau de bord ${agentName} — Mstudio`);
   const mailtoBody = encodeURIComponent(
-    `Bonjour,\n\nVoici le lien sécurisé pour consulter le tableau de bord de ${agentName} :\n${platformShareUrl}\n\nCordialement,\n${workspaceCtx?.userName || "L'équipe Mstudio"}`
+    `Bonjour,\n\nVoici le lien d'accès au tableau de bord de ${agentName} :\n${actualLink}\n\nCordialement,\n${workspaceCtx?.userName || "L'équipe Mstudio"}`
   );
-  const mailtoHref = `mailto:${accesMode === "emails" ? emails.join(",") : ""}?subject=${mailtoSubject}&body=${mailtoBody}`;
+  const mailtoHref = `mailto:${emailRecipients}?subject=${mailtoSubject}&body=${mailtoBody}`;
+
+  // Filtrage des membres dans le dropdown selon la recherche
+  const filteredMembers = workspaceMembers.filter((m) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    const nameMatch = m.name ? m.name.toLowerCase().includes(q) : false;
+    const emailMatch = m.email.toLowerCase().includes(q);
+    return nameMatch || emailMatch;
+  });
+
+  const isSearchQueryCustomEmail =
+    searchQuery.trim().includes("@") &&
+    searchQuery.trim().includes(".") &&
+    !workspaceMembers.some((m) => m.email.toLowerCase().trim() === searchQuery.trim().toLowerCase());
 
   return (
     <Dialog open={shareModalOpen} onOpenChange={setShareModalOpen}>
-      <DialogContent className="max-w-2xl overflow-hidden rounded-2xl border border-line bg-surface p-0 shadow-2xl">
+      <DialogContent className="max-w-xl overflow-hidden rounded-2xl border border-line bg-surface p-0 shadow-2xl">
         <DialogHeader className="border-b border-line px-6 py-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <div className="flex size-8 items-center justify-center rounded-lg bg-brand/10 text-brand">
               <Share2 className="size-4" />
             </div>
             <div>
               <DialogTitle className="text-base font-semibold text-ink">
-                Partager et exporter le tableau de bord
+                Partager le tableau de bord
               </DialogTitle>
               <DialogDescription className="text-xs text-ink-3">
-                Gérez la visibilité en ligne pour votre équipe et téléchargez les livrables officiels.
+                Définissez qui peut accéder au tableau de bord en ligne et transmettez le lien à votre équipe.
               </DialogDescription>
             </div>
           </div>
@@ -223,7 +282,7 @@ export function ShareDashboardModal() {
                 <div>
                   <p className="text-xs font-semibold text-ink">Public</p>
                   <p className="text-[11px] leading-snug text-ink-3">
-                    Toute personne ayant le lien peut consulter sans connexion.
+                    Accessible directement à toute personne ayant le lien.
                   </p>
                 </div>
               </button>
@@ -283,7 +342,7 @@ export function ShareDashboardModal() {
                 <div>
                   <p className="text-xs font-semibold text-ink">Personnes ciblées</p>
                   <p className="text-[11px] leading-snug text-ink-3">
-                    Sélection des membres ou ajout d'emails spécifiques.
+                    Sélection ciblée de membres ou adresses autorisées.
                   </p>
                 </div>
               </button>
@@ -294,7 +353,7 @@ export function ShareDashboardModal() {
               <div className="flex items-start gap-2.5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-xs text-blue-700 dark:text-blue-300">
                 <ShieldCheck className="size-4 shrink-0 mt-0.5 text-blue-500" />
                 <p className="leading-relaxed">
-                  <strong>Accès sécurisé réservé au workspace :</strong> Seuls les membres authentifiés de votre espace de travail Mstudio pourront ouvrir ce tableau de bord. Les personnes non connectées ou externes recevront un refus d'accès.
+                  <strong>Réservé à votre équipe :</strong> Tous les membres de votre espace Mstudio ({workspaceMembers.length} collaborateurs) peuvent consulter ce tableau. Les personnes extérieures recevront un refus d'accès.
                 </p>
               </div>
             )}
@@ -304,164 +363,203 @@ export function ShareDashboardModal() {
               <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-emerald-700 dark:text-emerald-300">
                 <Globe className="size-4 shrink-0 mt-0.5 text-emerald-500" />
                 <p className="leading-relaxed">
-                  <strong>Accès libre avec le lien :</strong> Pratique pour partager avec des clients, des investisseurs ou des partenaires externes sans qu'ils aient besoin de créer un compte Mstudio.
+                  <strong>Accès libre :</strong> Pratique pour partager avec des clients, partenaires ou investisseurs sans exiger de compte Mstudio.
                 </p>
               </div>
             )}
 
-            {/* Sélecteur de membres et champ d'email si "emails" est sélectionné */}
+            {/* Sélecteur intelligent (Dropdown / Combobox) pour "Personnes ciblées" */}
             {accesMode === "emails" && (
-              <div className="mt-3 space-y-3.5 rounded-xl border border-line bg-soft/40 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-ink">
-                      Sélectionner parmi les membres du workspace
-                    </p>
-                    <p className="text-[11px] text-ink-3">
-                      Cochez les collaborateurs autorisés à consulter ce tableau.
-                    </p>
-                  </div>
-                  {workspaceMembers.length > 0 && (
-                    <div className="flex items-center gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={selectAllWorkspaceMembers}
-                        className="font-medium text-brand hover:underline"
-                      >
-                        Tout cocher
-                      </button>
-                      <span className="text-ink-4">·</span>
-                      <button
-                        type="button"
-                        onClick={deselectAllWorkspaceMembers}
-                        className="text-ink-3 hover:underline"
-                      >
-                        Tout décocher
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Liste des membres du workspace */}
-                <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
-                  {loadingMembers ? (
-                    <div className="flex items-center justify-center py-4 text-xs text-ink-3">
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin text-brand" />
-                      Chargement des membres...
-                    </div>
-                  ) : workspaceMembers.length === 0 ? (
-                    <p className="py-2 text-xs text-ink-3">
-                      Aucun autre membre détecté dans l'espace de travail.
-                    </p>
-                  ) : (
-                    workspaceMembers.map((m) => {
-                      const cleanEmail = m.email.toLowerCase().trim();
-                      const isSelected = emails.includes(cleanEmail);
-                      return (
-                        <div
-                          key={m.user_id || m.email}
-                          onClick={() => toggleMemberEmail(m.email)}
-                          className={cn(
-                            "flex items-center justify-between rounded-lg border p-2 cursor-pointer transition-colors text-xs select-none",
-                            isSelected
-                              ? "border-brand/40 bg-surface shadow-xs font-medium"
-                              : "border-line bg-card hover:bg-soft"
-                          )}
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div
-                              className={cn(
-                                "flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold uppercase",
-                                isSelected ? "bg-brand text-white" : "bg-soft text-ink-2"
-                              )}
-                            >
-                              {m.name ? m.name.charAt(0) : m.email.charAt(0)}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-ink truncate leading-tight font-medium">
-                                {m.name || m.email}
-                              </p>
-                              <p className="text-[10.5px] text-ink-3 truncate leading-tight">
-                                {m.email}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="rounded bg-soft px-1.5 py-0.5 text-[9.5px] uppercase font-semibold text-ink-3">
-                              {m.role || "membre"}
-                            </span>
-                            <div
-                              className={cn(
-                                "flex size-4 items-center justify-center rounded border transition-colors",
-                                isSelected
-                                  ? "border-brand bg-brand text-white"
-                                  : "border-line bg-surface"
-                              )}
-                            >
-                              {isSelected && <Check className="size-3" />}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {/* Champ pour ajouter une autre adresse (externe) */}
-                <div className="pt-2 border-t border-line/70">
-                  <p className="text-xs font-semibold text-ink mb-1.5">
-                    Ajouter une autre adresse e-mail (collaborateur externe, client) :
+              <div className="mt-3 space-y-3 rounded-xl border border-line bg-soft/40 p-4">
+                <div>
+                  <label className="text-xs font-semibold text-ink block mb-1">
+                    Sélectionner les personnes autorisées
+                  </label>
+                  <p className="text-[11px] text-ink-3 mb-2">
+                    Recherchez parmi les membres du workspace ou saisissez une adresse externe.
                   </p>
-                  <form onSubmit={handleAddEmail} className="flex gap-2">
-                    <Input
-                      type="email"
-                      placeholder="exemple@entreprise.com"
-                      value={newEmail}
-                      onChange={(e) => {
-                        setNewEmail(e.target.value);
-                        setEmailError(null);
-                      }}
-                      className="h-8 text-xs flex-1"
-                    />
-                    <Button
-                      type="submit"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 px-3 text-xs"
-                    >
-                      <Plus className="mr-1 h-3.5 w-3.5" /> Ajouter
-                    </Button>
-                  </form>
-                  {emailError && (
-                    <p className="mt-1 text-xs text-rose-500">{emailError}</p>
-                  )}
                 </div>
 
-                {/* Liste des personnes autorisées */}
-                {emails.length > 0 && (
-                  <div className="pt-2">
-                    <p className="text-[11px] font-semibold text-ink-3 mb-1.5">
-                      {emails.length} adresse{emails.length > 1 ? "s" : ""} autorisée{emails.length > 1 ? "s" : ""} :
-                    </p>
-                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                      {emails.map((e) => (
-                        <span
-                          key={e}
-                          className="inline-flex items-center gap-1 rounded-md bg-surface border border-line px-2 py-0.5 text-xs text-ink shadow-xs"
-                        >
-                          <span className="truncate max-w-[220px]">{e}</span>
+                {/* Combobox avec recherche & dropdown flottant */}
+                <div ref={dropdownRef} className="relative">
+                  <div className="relative flex items-center">
+                    <Search className="absolute left-3 size-3.5 text-ink-4 pointer-events-none" />
+                    <Input
+                      type="text"
+                      placeholder="Rechercher un membre par nom ou email (ex: Leslie, aude@mstudio.vc)..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setDropdownOpen(true);
+                      }}
+                      onFocus={() => setDropdownOpen(true)}
+                      onKeyDown={handleKeyDownSearch}
+                      className="h-9 pl-9 pr-8 text-xs bg-surface border-line"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setDropdownOpen(!dropdownOpen)}
+                      className="absolute right-2.5 text-ink-4 hover:text-ink"
+                      title="Afficher la liste"
+                    >
+                      <ChevronDown className={cn("size-3.5 transition-transform", dropdownOpen && "rotate-180")} />
+                    </button>
+                  </div>
+
+                  {/* Panneau déroulant (Dropdown) */}
+                  {dropdownOpen && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1.5 overflow-hidden rounded-xl border border-line bg-surface shadow-xl animate-in fade-in-0 zoom-in-95">
+                      {/* Barre d'action rapide */}
+                      <div className="flex items-center justify-between border-b border-line bg-soft/60 px-3 py-1.5 text-[11px]">
+                        <span className="font-medium text-ink-3">
+                          {filteredMembers.length} membre{filteredMembers.length > 1 ? "s" : ""} Mstudio
+                        </span>
+                        <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => handleRemoveEmail(e)}
-                            className="text-ink-4 hover:text-rose-500 transition-colors"
-                            title={`Retirer ${e}`}
+                            onClick={selectAllWorkspaceMembers}
+                            className="font-medium text-brand hover:underline"
                           >
-                            <X className="size-3" />
+                            Tout cocher
                           </button>
-                        </span>
-                      ))}
+                          <span className="text-ink-4">·</span>
+                          <button
+                            type="button"
+                            onClick={deselectAllWorkspaceMembers}
+                            className="text-ink-3 hover:underline"
+                          >
+                            Tout décocher
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Option pour ajouter une adresse e-mail personnalisée si tapée */}
+                      {isSearchQueryCustomEmail && (
+                        <div
+                          onClick={() => handleAddCustomEmail(searchQuery)}
+                          className="flex items-center gap-2 border-b border-line bg-brand/5 px-3 py-2 text-xs font-medium text-brand cursor-pointer hover:bg-brand/10 transition-colors"
+                        >
+                          <Plus className="size-3.5" />
+                          <span>Ajouter l'invité externe : <strong>{searchQuery.trim()}</strong></span>
+                        </div>
+                      )}
+
+                      {/* Liste scrollable des membres */}
+                      <div className="max-h-56 overflow-y-auto divide-y divide-line/40">
+                        {loadingMembers ? (
+                          <div className="flex items-center justify-center py-6 text-xs text-ink-3">
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin text-brand" />
+                            Chargement des membres...
+                          </div>
+                        ) : filteredMembers.length === 0 && !isSearchQueryCustomEmail ? (
+                          <div className="p-4 text-center text-xs text-ink-3">
+                            Aucun membre ne correspond à « {searchQuery} »
+                            <p className="mt-1 text-[11px] text-ink-4">
+                              Appuyez sur Entrée pour ajouter une adresse e-mail externe.
+                            </p>
+                          </div>
+                        ) : (
+                          filteredMembers.map((m) => {
+                            const cleanEmail = m.email.toLowerCase().trim();
+                            const isSelected = emails.includes(cleanEmail);
+                            return (
+                              <div
+                                key={m.user_id || m.email}
+                                onClick={() => toggleMemberEmail(m.email)}
+                                className={cn(
+                                  "flex items-center justify-between px-3 py-2 cursor-pointer transition-colors text-xs select-none hover:bg-soft",
+                                  isSelected && "bg-brand/5 font-medium"
+                                )}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div
+                                    className={cn(
+                                      "flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold uppercase",
+                                      isSelected ? "bg-brand text-white" : "bg-soft text-ink-2"
+                                    )}
+                                  >
+                                    {m.name ? m.name.charAt(0) : m.email.charAt(0)}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-ink truncate leading-tight">
+                                      {m.name || m.email}
+                                    </p>
+                                    <p className="text-[10.5px] text-ink-3 truncate leading-tight">
+                                      {m.email}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="rounded bg-soft px-1.5 py-0.5 text-[9.5px] uppercase font-semibold text-ink-4">
+                                    {m.role || "membre"}
+                                  </span>
+                                  <div
+                                    className={cn(
+                                      "flex size-4 items-center justify-center rounded border transition-colors",
+                                      isSelected
+                                        ? "border-brand bg-brand text-white"
+                                        : "border-line bg-surface"
+                                    )}
+                                  >
+                                    {isSelected && <Check className="size-3" />}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+
+                      <div className="border-t border-line bg-soft/30 px-3 py-1.5 text-[10.5px] text-ink-4 text-center">
+                        Tapez un nom ou un email pour filtrer • Entrée pour ajouter une adresse externe
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Badges des personnes sélectionnées */}
+                {emails.length > 0 ? (
+                  <div className="pt-1">
+                    <div className="flex items-center justify-between mb-1.5 text-[11px] text-ink-3">
+                      <span>{emails.length} personne{emails.length > 1 ? "s" : ""} autorisée{emails.length > 1 ? "s" : ""} :</span>
+                      <button
+                        type="button"
+                        onClick={() => setEmails([])}
+                        className="text-ink-4 hover:text-rose-500 transition-colors"
+                      >
+                        Tout effacer
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                      {emails.map((e) => {
+                        const member = workspaceMembers.find(
+                          (m) => m.email.toLowerCase().trim() === e.toLowerCase().trim()
+                        );
+                        return (
+                          <span
+                            key={e}
+                            className="inline-flex items-center gap-1 rounded-md bg-surface border border-line px-2 py-0.5 text-xs text-ink shadow-xs"
+                          >
+                            <span className="truncate max-w-[200px]">
+                              {member?.name ? `${member.name} (${e})` : e}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveEmail(e)}
+                              className="text-ink-4 hover:text-rose-500 transition-colors ml-0.5"
+                              title={`Retirer ${e}`}
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
+                ) : (
+                  <p className="text-[11px] text-ink-4 italic">
+                    Aucun membre ou email sélectionné pour le moment.
+                  </p>
                 )}
               </div>
             )}
@@ -487,20 +585,20 @@ export function ShareDashboardModal() {
           </div>
 
           {/* Section 2 : Lien de partage & transmission */}
-          <div className="space-y-3 pt-2 border-t border-line">
+          <div className="space-y-3 pt-3 border-t border-line">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3">
-                2. Lien d’accès sécurisé
+                2. Lien direct d'accès
               </h3>
               <p className="text-[11px] text-ink-3">
-                Transmission manuelle ou par e-mail
+                Lien généré par l'expert
               </p>
             </div>
 
             <div className="flex items-center gap-2">
               <Input
                 readOnly
-                value={platformShareUrl || "Aucun tableau de bord généré"}
+                value={actualLink || "Aucun tableau de bord généré pour le moment"}
                 className="h-9 font-mono text-xs text-ink bg-soft/50 select-all"
               />
               <Button
@@ -508,7 +606,7 @@ export function ShareDashboardModal() {
                 variant="outline"
                 size="sm"
                 onClick={handleCopy}
-                disabled={!platformShareUrl}
+                disabled={!actualLink}
                 className="h-9 px-3 text-xs gap-1.5 shrink-0"
               >
                 {copied ? (
@@ -524,93 +622,61 @@ export function ShareDashboardModal() {
                 )}
               </Button>
 
-              <a
-                href={mailtoHref}
-                className={cn(
-                  "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-line bg-card px-3 text-xs text-ink transition-colors hover:bg-soft shrink-0",
-                  !platformShareUrl && "pointer-events-none opacity-50"
-                )}
-                title="Ouvrir votre messagerie avec le lien pré-rempli"
-              >
-                <Mail className="size-3.5 text-brand" />
-                <span className="hidden sm:inline">Partager par e-mail</span>
-              </a>
-
-              {platformShareUrl && (
+              {actualLink && (
                 <a
-                  href={platformShareUrl}
+                  href={actualLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-card text-ink transition-colors hover:bg-soft shrink-0"
-                  title="Tester le lien dans un nouvel onglet"
+                  title="Ouvrir dans un nouvel onglet"
                 >
                   <ExternalLink className="size-3.5" />
                 </a>
               )}
             </div>
 
-            <p className="text-[11px] text-ink-3 leading-relaxed">
-              💡 <strong>Comment ça se passe ?</strong> Le lien n'est pas envoyé automatiquement à tout le monde sans votre action. Vous copiez ce lien ou cliquez sur « Partager par e-mail » pour le transmettre dans Slack, WhatsApp, Teams ou par courriel aux personnes concernées. Seules les personnes respectant vos règles de visibilité ci-dessus pourront l'ouvrir.
-            </p>
-          </div>
-
-          {/* Section 3 : Téléchargement et export officiel */}
-          <div className="space-y-3 pt-2 border-t border-line">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3">
-              3. Télécharger &amp; Exporter
-            </h3>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {/* Carte Export PDF */}
-              <div className="flex flex-col justify-between rounded-xl border border-line bg-card p-3.5 shadow-xs">
-                <div className="space-y-1 mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="flex size-7 items-center justify-center rounded-lg bg-orange-500/10 text-orange-600">
-                      <FileText className="size-4" />
-                    </div>
-                    <span className="text-xs font-semibold text-ink">
-                      Document PDF officiel
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-ink-3 leading-relaxed">
-                    Format A4 paysage haute résolution, idéal pour l'impression, l'archivage et les réunions de direction.
-                  </p>
+            {/* Bouton Partager par e-mail avec affichage clair des destinataires */}
+            <div className="rounded-xl border border-line bg-card p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Mail className="size-4 text-brand" />
+                  <span className="text-xs font-semibold text-ink">
+                    Transmettre par e-mail
+                  </span>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={downloadPdf}
-                  className="w-full text-xs gap-1.5 border-line hover:bg-soft"
+                <a
+                  href={mailtoHref}
+                  className={cn(
+                    "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-medium text-white transition-colors hover:bg-brand/90 shrink-0",
+                    !actualLink && "pointer-events-none opacity-50"
+                  )}
+                  title="Ouvrir votre logiciel de messagerie avec les destinataires pré-remplis"
                 >
-                  <Download className="size-3.5 text-orange-600" />
-                  Télécharger en PDF
-                </Button>
+                  <Mail className="size-3.5" />
+                  <span>Envoyer un e-mail</span>
+                </a>
               </div>
 
-              {/* Carte Export HTML */}
-              <div className="flex flex-col justify-between rounded-xl border border-line bg-card p-3.5 shadow-xs">
-                <div className="space-y-1 mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="flex size-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600">
-                      <FileCode className="size-4" />
-                    </div>
-                    <span className="text-xs font-semibold text-ink">
-                      Application HTML autonome
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-ink-3 leading-relaxed">
-                    Fichier interactif complet avec graphiques et filtres, consultable hors-ligne dans tout navigateur.
+              <div className="text-[11.5px] text-ink-3 leading-relaxed">
+                {accesMode === "workspace" && (
+                  <p>
+                    Destinataires pré-remplis : <strong>Tous les membres du workspace</strong> ({workspaceMembers.length} adresses : {workspaceMembers.map((m) => m.email).slice(0, 3).join(", ")}{workspaceMembers.length > 3 ? "…" : ""}).
                   </p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={downloadHtml}
-                  className="w-full text-xs gap-1.5 border-line hover:bg-soft"
-                >
-                  <Download className="size-3.5 text-blue-600" />
-                  Télécharger en HTML
-                </Button>
+                )}
+                {accesMode === "emails" && (
+                  <p>
+                    Destinataires pré-remplis : {emails.length > 0 ? (
+                      <strong>{emails.length} adresse{emails.length > 1 ? "s" : ""} sélectionnée{emails.length > 1 ? "s" : ""} ({emails.slice(0, 3).join(", ")}{emails.length > 3 ? "…" : ""})</strong>
+                    ) : (
+                      <span className="text-amber-600 dark:text-amber-400">Aucun destinataire sélectionné ci-dessus.</span>
+                    )}
+                  </p>
+                )}
+                {accesMode === "public" && (
+                  <p>
+                    Destinataires : libre (à saisir dans votre client email).
+                  </p>
+                )}
               </div>
             </div>
           </div>

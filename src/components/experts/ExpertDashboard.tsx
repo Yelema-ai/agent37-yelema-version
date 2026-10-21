@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, LayoutDashboard, Loader2, Maximize2, RefreshCw, Share2, Sparkles, X } from "lucide-react";
+import { Download, ExternalLink, FileCode, FileText, LayoutDashboard, Loader2, Maximize2, RefreshCw, Share2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useDashboard } from "./DashboardProvider";
 import { useComputer } from "./ComputerProvider";
@@ -77,7 +78,19 @@ function DashboardHeaderControls({
   onMaximize?: () => void;
   onClose?: () => void;
 }) {
-  const { activeUrl, refresh, loading, isGenerating, triggerGeneration, data, activeTab, setActiveTab, setShareModalOpen } = useDashboard();
+  const {
+    activeUrl,
+    refresh,
+    loading,
+    isGenerating,
+    triggerGeneration,
+    data,
+    activeTab,
+    setActiveTab,
+    setShareModalOpen,
+    downloadPdf,
+    downloadHtml,
+  } = useDashboard();
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
@@ -131,14 +144,59 @@ function DashboardHeaderControls({
         <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
       </Button>
 
-      {/* Bouton Partager & Exporter */}
+      {/* Bouton Exporter / Télécharger dédié (séparé du partage) */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-ink-3 hover:text-ink"
+            title="Télécharger / Exporter le tableau de bord"
+            aria-label="Télécharger"
+          >
+            <Download className="h-3.5 w-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-60 p-1.5 shadow-lg border-line bg-surface z-50">
+          <div className="px-2 py-1.5 text-xs font-semibold text-ink">
+            Exporter le tableau de bord
+          </div>
+          <DropdownMenuItem
+            onClick={downloadPdf}
+            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs cursor-pointer hover:bg-soft focus:bg-soft text-ink"
+          >
+            <div className="flex size-7 items-center justify-center rounded-md bg-orange-500/10 text-orange-600">
+              <FileText className="size-4" />
+            </div>
+            <div>
+              <p className="font-medium text-ink">Télécharger en PDF</p>
+              <p className="text-[10.5px] text-ink-3">Livrable officiel A4 paysage</p>
+            </div>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            onClick={downloadHtml}
+            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs cursor-pointer hover:bg-soft focus:bg-soft text-ink"
+          >
+            <div className="flex size-7 items-center justify-center rounded-md bg-blue-500/10 text-blue-600">
+              <FileCode className="size-4" />
+            </div>
+            <div>
+              <p className="font-medium text-ink">Télécharger en HTML</p>
+              <p className="text-[10.5px] text-ink-3">Page web autonome complète</p>
+            </div>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Bouton Partager (dédié à la visibilité et au partage du lien) */}
       <Button
         variant="ghost"
         size="icon"
         className="h-8 w-8 text-ink-3 hover:text-ink"
         onClick={() => setShareModalOpen(true)}
-        title="Partager et exporter le tableau de bord"
-        aria-label="Partager et exporter"
+        title="Partager le tableau de bord"
+        aria-label="Partager"
       >
         <Share2 className="h-3.5 w-3.5" />
       </Button>
@@ -175,7 +233,7 @@ function DashboardHeaderControls({
           size="icon"
           className="h-8 w-8 text-ink-3 hover:text-ink"
           onClick={onClose}
-          title="Fermer le panneau"
+          title="Fermer"
           aria-label="Fermer"
         >
           <X className="h-3.5 w-3.5" />
@@ -185,144 +243,132 @@ function DashboardHeaderControls({
   );
 }
 
-function DashboardEmptyState({
-  agentName,
-  isGenerating,
-  onGenerate,
+function DashboardHeader({
+  onMaximize,
+  onClose,
 }: {
-  agentName: string;
-  isGenerating: boolean;
-  onGenerate: () => void;
+  onMaximize?: () => void;
+  onClose?: () => void;
 }) {
-  if (isGenerating) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-        <div className="relative mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-tint text-brand shadow-inner">
-          <LayoutDashboard className="h-7 w-7 animate-pulse" />
-          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-brand"></span>
-          </span>
+  const { agentName, data, activeTab } = useDashboard();
+  const isEquipeTab = activeTab === "equipe" && data?.isDjeneba;
+  const title = isEquipeTab
+    ? "Tableaux de bord de l'équipe"
+    : (data?.title || `Tableau de bord — ${agentName}`);
+  const description = isEquipeTab
+    ? "Vue consolidée des 13 experts sous la supervision de Djénéba"
+    : (data?.role || null);
+  const majFormatted = formatMajDate(data?.maj);
+
+  return (
+    <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
+      <div className="min-w-0 pr-2">
+        <h2 className="truncate text-sm font-semibold text-ink">{title}</h2>
+        <div className="flex items-center gap-2 text-xs text-ink-3">
+          {description && <span className="truncate">{description}</span>}
+          {description && majFormatted && <span>•</span>}
+          {majFormatted && <span className="shrink-0">{majFormatted}</span>}
         </div>
-        <span className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-tint px-3 py-1 text-xs font-semibold text-brand">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Génération en cours…
-        </span>
-        <h3 className="text-base font-semibold text-ink">Création de votre tableau de bord</h3>
-        <p className="mt-1.5 max-w-sm text-xs text-ink-3 leading-relaxed">
-          {agentName} prépare vos indicateurs métier et publie votre page sur Render. L’affichage apparaîtra automatiquement dès sa mise en ligne.
+      </div>
+      <DashboardHeaderControls onMaximize={onMaximize} onClose={onClose} />
+    </div>
+  );
+}
+
+function DashboardContent() {
+  const { embedUrl, loading, isGenerating, triggerGeneration, data } = useDashboard();
+
+  if (loading && !embedUrl) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+        <Loader2 className="mb-2 h-8 w-8 animate-spin text-brand" />
+        <p className="text-xs text-ink-3">Chargement du tableau de bord…</p>
+      </div>
+    );
+  }
+
+  if (!embedUrl) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+        <div className="mb-3 flex size-12 items-center justify-center rounded-2xl bg-soft text-ink-3">
+          <LayoutDashboard className="size-6 text-brand" />
+        </div>
+        <h3 className="mb-1 text-sm font-semibold text-ink">
+          {data?.title || "Tableau de bord non disponible"}
+        </h3>
+        <p className="mb-4 max-w-xs text-xs text-ink-3">
+          {data?.role || "Aucun tableau de bord n'a encore été généré pour cet expert."}
         </p>
+        <Button
+          size="sm"
+          onClick={() => void triggerGeneration()}
+          disabled={isGenerating}
+          className="gap-2"
+        >
+          {isGenerating ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Génération en cours…
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" />
+              Générer le tableau de bord (/tableau)
+            </>
+          )}
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-tint text-brand mb-3">
-        <LayoutDashboard className="h-6 w-6" />
+    <div className="flex flex-1 flex-col overflow-hidden bg-background">
+      <div className="relative flex-1 overflow-hidden bg-surface">
+        <iframe
+          src={embedUrl}
+          title="Tableau de bord"
+          className="h-full w-full border-0 bg-transparent"
+          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+        />
       </div>
-      <h3 className="text-base font-semibold text-ink">Tableau de bord en attente</h3>
-      <p className="mt-1 mb-4 max-w-sm text-xs text-ink-3 leading-relaxed">
-        Déclenchez la génération de votre tableau de bord avec les données de l’entreprise en un clic.
-      </p>
-      <Button
-        type="button"
-        onClick={onGenerate}
-        className="inline-flex items-center gap-2 rounded-xl bg-brand text-white px-4 py-2 text-xs font-semibold shadow-sm hover:bg-brand/90 transition-all"
-      >
-        <LayoutDashboard className="h-4 w-4" />
-        Générer mon tableau de bord
-      </Button>
     </div>
   );
 }
 
 export function DashboardPanel() {
-  const { panelOpen, setPanelOpen, setDialogOpen, agentName, activeUrl, embedUrl, data, activeTab, isGenerating, triggerGeneration } = useDashboard();
-  const frameSrc = embedUrl || activeUrl;
-  if (!panelOpen) return null;
-
-  const title =
-    data?.isDjeneba && activeTab === "equipe"
-      ? "Tableaux de bord de l'équipe"
-      : `Tableau de bord — ${agentName}`;
+  const { profile, panelOpen, setPanelOpen, setDialogOpen } = useDashboard();
+  if (!profile || !panelOpen) return null;
 
   return (
-    <aside className="hidden max-w-[950px] shrink basis-[60%] flex-col border-l border-line bg-card wide:flex">
-      <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-line px-4">
-        <div className="min-w-0">
-          <p className="flex items-center gap-2 text-sm font-semibold text-ink">
-            <LayoutDashboard className="h-4 w-4 text-brand shrink-0" />
-            <span className="truncate">{title}</span>
-          </p>
-          <p className="truncate text-xs text-ink-3">
-            {formatMajDate(data?.maj) ?? "Généré à partir des chiffres réels de l'entreprise"}
-          </p>
-        </div>
-        <DashboardHeaderControls onMaximize={() => setDialogOpen(true)} onClose={() => setPanelOpen(false)} />
-      </div>
-
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background p-2 sm:p-3">
-        {frameSrc ? (
-          <iframe
-            src={frameSrc}
-            title={title}
-            className="h-full w-full rounded-xl border border-line bg-white shadow-sm"
-            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-          />
-        ) : (
-          <DashboardEmptyState
-            agentName={agentName}
-            isGenerating={isGenerating}
-            onGenerate={() => void triggerGeneration()}
-          />
-        )}
-      </div>
+    <aside
+      aria-label="Tableau de bord métier"
+      className="hidden wide:flex fixed inset-y-0 right-0 z-40 w-[640px] flex-col border-l border-line bg-card shadow-xl transition-all"
+    >
+      <DashboardHeader
+        onMaximize={() => {
+          setPanelOpen(false);
+          setDialogOpen(true);
+        }}
+        onClose={() => setPanelOpen(false)}
+      />
+      <DashboardContent />
     </aside>
   );
 }
 
 export function DashboardDialog() {
-  const { dialogOpen, setDialogOpen, agentName, activeUrl, embedUrl, data, activeTab, isGenerating, triggerGeneration } = useDashboard();
-  const frameSrc = embedUrl || activeUrl;
-
-  const title =
-    data?.isDjeneba && activeTab === "equipe"
-      ? "Tableaux de bord de l'équipe"
-      : `Tableau de bord de ${agentName}`;
+  const { profile, dialogOpen, setDialogOpen } = useDashboard();
+  if (!profile) return null;
 
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <DialogContent className="max-w-[1250px] h-[92vh] flex flex-col gap-0 p-0 overflow-hidden">
-        <DialogHeader className="flex flex-row items-center justify-between border-b border-line px-5 py-3.5 text-left space-y-0">
-          <div className="min-w-0 pr-4">
-            <DialogTitle className="flex items-center gap-2 font-display text-[18px] font-bold tracking-tight text-ink">
-              <LayoutDashboard className="h-5 w-5 text-brand shrink-0" />
-              <span className="truncate">{title}</span>
-            </DialogTitle>
-            <DialogDescription className="truncate text-xs text-ink-3 mt-0.5">
-              {formatMajDate(data?.maj) ?? "Généré et personnalisé avec les données de l'entreprise"}
-            </DialogDescription>
-          </div>
-          <DashboardHeaderControls onClose={() => setDialogOpen(false)} />
+      <DialogContent className="flex h-[90vh] w-[95vw] max-w-[1400px] flex-col overflow-hidden p-0">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Tableau de bord métier</DialogTitle>
+          <DialogDescription>Visualisation du tableau de bord de l'expert</DialogDescription>
         </DialogHeader>
-
-        <div className="relative flex-1 min-h-0 bg-background p-2 sm:p-4">
-          {frameSrc ? (
-            <iframe
-              src={frameSrc}
-              title={title}
-              className="h-full w-full rounded-xl border border-line bg-white shadow-sm"
-              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-            />
-          ) : (
-            <DashboardEmptyState
-              agentName={agentName}
-              isGenerating={isGenerating}
-              onGenerate={() => void triggerGeneration()}
-            />
-          )}
-        </div>
+        <DashboardHeader onClose={() => setDialogOpen(false)} />
+        <DashboardContent />
       </DialogContent>
     </Dialog>
   );
