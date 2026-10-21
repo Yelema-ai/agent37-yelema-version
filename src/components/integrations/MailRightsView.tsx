@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import type { MailRights, MailRightsPatch } from "@/lib/mail";
@@ -9,6 +9,7 @@ import { expertDisplayName } from "@/lib/experts";
 import { useCatalogue } from "@/components/experts/useCatalogue";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 // Who may have each expert write e-mails. One inbox per expert for the whole workspace, and three
 // settings that add up: the expert may send at all, only some members may ask it to, and it may
@@ -84,38 +85,93 @@ export function MailRightsView() {
                 />
               </div>
 
-              <fieldset className="mt-5" disabled={locked}>
-                <legend className="text-[13px] font-semibold text-ink-3">Membres autorisés à le faire écrire et à lire sa boîte</legend>
-                {inbox.eligible.length === 0 ? (
-                  <p className="mt-2 text-sm text-ink-3">Aucun membre n’a cet expert dans son équipe.</p>
-                ) : (
-                  <>
-                    <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
-                      {inbox.eligible.map((email) => (
-                        <li key={email}>
-                          <label className="flex items-center gap-2 text-sm text-ink">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 accent-[var(--brand)]"
-                              checked={inbox.senders.includes(email)}
-                              onChange={(e) => void save(inbox, { senders: e.target.checked ? [...inbox.senders, email] : inbox.senders.filter((s) => s !== email) })}
-                            />
-                            <span className="truncate">{email}</span>
-                          </label>
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="mt-2 text-xs text-ink-3">
-                      {inbox.senders.length === 0 ? "Aucun membre coché : tous ceux qui ont cet expert y ont accès." : "Seuls les membres cochés y ont accès."}
-                    </p>
-                  </>
-                )}
-              </fieldset>
+              <MemberAccess inbox={inbox} name={nameOf(inbox.expert)} locked={locked} onSave={(senders) => void save(inbox, { senders })} />
             </section>
           );
         })}
       </div>
     </div>
+  );
+}
+
+// Who may have the expert write and read its inbox: every member who has it (no list: the back office
+// reads an empty one so, and members added later are in too), or some of them, picked in a list that
+// stays usable with many members (search, scroll, count). « Certains » needs at least one name: an
+// empty list would mean everyone again, so the last checked member cannot be unchecked.
+function MemberAccess({ inbox, name, locked, onSave }: { inbox: MailRights; name: string; locked: boolean; onSave: (senders: string[]) => void }) {
+  const [some, setSome] = useState(inbox.senders.length > 0);
+  const [query, setQuery] = useState("");
+  useEffect(() => setSome(inbox.senders.length > 0 || some), [inbox.senders.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? inbox.eligible.filter((e) => e.toLowerCase().includes(q)) : inbox.eligible;
+  }, [inbox.eligible, query]);
+  if (inbox.eligible.length === 0)
+    return (
+      <div className="mt-5">
+        <p className="text-[13px] font-semibold text-ink-3">Qui peut le faire écrire et lire sa boîte</p>
+        <p className="mt-2 text-sm text-ink-3">Aucun membre n’a cet expert dans son équipe.</p>
+      </div>
+    );
+  const choice = (on: boolean, label: string, hint: string, pick: () => void) => (
+    <label className={cn("flex flex-1 cursor-pointer items-start gap-3 rounded-2xl border p-3.5 transition-colors", on ? "border-brand/40 bg-tint/60" : "border-line hover:bg-soft")}>
+      <input type="radio" name={`acces-${inbox.expert}`} className="mt-1 h-4 w-4 accent-[var(--brand)]" checked={on} disabled={locked} onChange={pick} />
+      <span>
+        <span className="block text-sm font-semibold text-ink">{label}</span>
+        <span className="block text-xs text-ink-3">{hint}</span>
+      </span>
+    </label>
+  );
+  return (
+    <fieldset className="mt-5" disabled={locked}>
+      <legend className="text-[13px] font-semibold text-ink-3">Qui peut le faire écrire et lire sa boîte</legend>
+      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+        {choice(!some, `Tous les membres qui ont ${name}`, `${inbox.eligible.length} aujourd’hui, et ceux qui l’auront plus tard`, () => {
+          setSome(false);
+          if (inbox.senders.length > 0) onSave([]);
+        })}
+        {choice(some, "Certains membres", some ? `${inbox.senders.length} sur ${inbox.eligible.length}` : "Vous les choisissez un par un", () => setSome(true))}
+      </div>
+      {some && (
+        <div className="mt-3 rounded-2xl border border-line">
+          {inbox.eligible.length > 6 && (
+            <label className="relative block border-b border-line">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" aria-hidden />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Chercher un membre"
+                aria-label="Chercher un membre"
+                className="h-11 w-full rounded-t-2xl bg-transparent pl-10 pr-3 text-sm text-ink outline-none placeholder:text-ink-3"
+              />
+            </label>
+          )}
+          <ul className="max-h-64 overflow-y-auto p-1.5">
+            {shown.map((email) => {
+              const checked = inbox.senders.includes(email);
+              const last = checked && inbox.senders.length === 1;
+              return (
+                <li key={email}>
+                  <label className="flex min-h-11 items-center gap-3 rounded-xl px-2.5 text-sm text-ink hover:bg-soft" title={last ? "Au moins un membre reste coché" : undefined}>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[var(--brand)]"
+                      checked={checked}
+                      disabled={last}
+                      onChange={(e) => onSave(e.target.checked ? [...inbox.senders, email] : inbox.senders.filter((x) => x !== email))}
+                    />
+                    <span className="truncate">{email}</span>
+                  </label>
+                </li>
+              );
+            })}
+            {shown.length === 0 && <li className="px-2.5 py-3 text-sm text-ink-3">Aucun membre ne correspond.</li>}
+          </ul>
+          {inbox.senders.length === 0 && <p className="border-t border-line px-4 py-2.5 text-xs text-ink-3">Cochez au moins un membre : en attendant, tous y ont accès.</p>}
+        </div>
+      )}
+    </fieldset>
   );
 }
 
