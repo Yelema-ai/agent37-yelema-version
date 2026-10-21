@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
-  CheckSquare,
   ChevronDown,
   Copy,
   ExternalLink,
@@ -14,11 +13,9 @@ import {
   Search,
   Share2,
   ShieldCheck,
-  Square,
   Users,
   X,
   Loader2,
-  UserCheck,
 } from "lucide-react";
 import {
   Dialog,
@@ -51,8 +48,9 @@ export function ShareDashboardModal() {
 
   const [accesMode, setAccesMode] = useState<"public" | "workspace" | "emails">("public");
   const [emails, setEmails] = useState<string[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [copied, setCopied] = useState(false);
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Membres de l'espace de travail
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
@@ -70,6 +68,7 @@ export function ShareDashboardModal() {
       setEmails(data.allowedEmails || []);
       setSearchQuery("");
       setDropdownOpen(false);
+      setSaveStatus("idle");
     }
   }, [shareModalOpen, data]);
 
@@ -104,7 +103,28 @@ export function ShareDashboardModal() {
     }
   }, [dropdownOpen]);
 
-  // Le vrai lien direct du tableau de bord (donné par l'agent / hébergé sur Render)
+  // Enregistrement automatique et transparent en arrière-plan
+  const persistSharing = async (mode: "public" | "workspace" | "emails", list: string[]) => {
+    setSaveStatus("saving");
+    const ok = await updateSharing(mode, list);
+    if (ok) {
+      setSaveStatus("saved");
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        setSaveStatus("idle");
+      }, 2000);
+    } else {
+      setSaveStatus("idle");
+    }
+  };
+
+  // Changement de mode de visibilité (enregistré immédiatement)
+  const handleModeChange = (mode: "public" | "workspace" | "emails") => {
+    setAccesMode(mode);
+    void persistSharing(mode, emails);
+  };
+
+  // Le vrai lien direct du tableau de bord (généré par l'expert / hébergé sur Render)
   const actualLink = activeUrl || "";
 
   const handleCopy = () => {
@@ -120,22 +140,25 @@ export function ShareDashboardModal() {
 
   const toggleMemberEmail = (memberEmail: string) => {
     const clean = memberEmail.toLowerCase().trim();
-    if (emails.includes(clean)) {
-      setEmails(emails.filter((e) => e !== clean));
-    } else {
-      setEmails([...emails, clean]);
-    }
+    const updated = emails.includes(clean)
+      ? emails.filter((e) => e !== clean)
+      : [...emails, clean];
+    setEmails(updated);
+    void persistSharing(accesMode, updated);
   };
 
   const selectAllWorkspaceMembers = () => {
     const memberEmails = workspaceMembers.map((m) => m.email.toLowerCase().trim());
     const union = Array.from(new Set([...emails, ...memberEmails]));
     setEmails(union);
+    void persistSharing(accesMode, union);
   };
 
   const deselectAllWorkspaceMembers = () => {
     const memberEmails = new Set(workspaceMembers.map((m) => m.email.toLowerCase().trim()));
-    setEmails(emails.filter((e) => !memberEmails.has(e)));
+    const remaining = emails.filter((e) => !memberEmails.has(e));
+    setEmails(remaining);
+    void persistSharing(accesMode, remaining);
   };
 
   const handleAddCustomEmail = (rawEmail: string) => {
@@ -152,8 +175,10 @@ export function ShareDashboardModal() {
       return;
     }
 
-    setEmails([...emails, email]);
+    const updated = [...emails, email];
+    setEmails(updated);
     setSearchQuery("");
+    void persistSharing(accesMode, updated);
   };
 
   const handleKeyDownSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -162,7 +187,6 @@ export function ShareDashboardModal() {
       const q = searchQuery.trim().toLowerCase();
       if (!q) return;
 
-      // Si correspond exactement à un membre, on le coche
       const match = workspaceMembers.find(
         (m) => m.email.toLowerCase().trim() === q || (m.name && m.name.toLowerCase().trim() === q)
       );
@@ -178,35 +202,22 @@ export function ShareDashboardModal() {
   };
 
   const handleRemoveEmail = (emailToRemove: string) => {
-    setEmails(emails.filter((e) => e !== emailToRemove));
-  };
-
-  const handleSaveSharing = async () => {
-    setIsSaving(true);
-    try {
-      const ok = await updateSharing(accesMode, emails);
-      if (ok) {
-        setShareModalOpen(false);
-      }
-    } finally {
-      setIsSaving(false);
-    }
+    const updated = emails.filter((e) => e !== emailToRemove);
+    setEmails(updated);
+    void persistSharing(accesMode, updated);
   };
 
   // Calcul des destinataires pour l'envoi par email (mailto:)
   const emailRecipients = (() => {
     if (accesMode === "workspace") {
-      // Tous les emails du workspace
       return workspaceMembers
         .map((m) => m.email.trim())
         .filter(Boolean)
         .join(",");
     }
     if (accesMode === "emails") {
-      // Les emails spécifiquement sélectionnés
       return emails.filter(Boolean).join(",");
     }
-    // Mode public : vide pour laisser l'utilisateur choisir ses destinataires
     return "";
   })();
 
@@ -216,7 +227,7 @@ export function ShareDashboardModal() {
   );
   const mailtoHref = `mailto:${emailRecipients}?subject=${mailtoSubject}&body=${mailtoBody}`;
 
-  // Filtrage des membres dans le dropdown selon la recherche
+  // Filtrage des membres dans le dropdown
   const filteredMembers = workspaceMembers.filter((m) => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
@@ -250,17 +261,33 @@ export function ShareDashboardModal() {
         </DialogHeader>
 
         <div className="max-h-[75vh] overflow-y-auto px-6 py-5 space-y-6">
-          {/* Section 1 : Droits d'accès et visibilité */}
+          {/* Section 1 : Droits d'accès et visibilité (Enregistrement automatique) */}
           <div className="space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3">
-              1. Visibilité &amp; Droits d’accès
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3">
+                1. Visibilité &amp; Droits d’accès
+              </h3>
+              <div className="flex items-center gap-1.5 text-[11px]">
+                {saveStatus === "saving" && (
+                  <span className="flex items-center gap-1 text-ink-3">
+                    <Loader2 className="size-3 animate-spin text-brand" />
+                    Enregistrement…
+                  </span>
+                )}
+                {saveStatus === "saved" && (
+                  <span className="flex items-center gap-1 text-emerald-600 font-medium animate-in fade-in-0">
+                    <Check className="size-3" />
+                    Enregistré automatiquement
+                  </span>
+                )}
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
               {/* Option Public */}
               <button
                 type="button"
-                onClick={() => setAccesMode("public")}
+                onClick={() => handleModeChange("public")}
                 className={cn(
                   "flex flex-col items-start gap-1.5 rounded-xl border p-3.5 text-left transition-all",
                   accesMode === "public"
@@ -290,7 +317,7 @@ export function ShareDashboardModal() {
               {/* Option Workspace */}
               <button
                 type="button"
-                onClick={() => setAccesMode("workspace")}
+                onClick={() => handleModeChange("workspace")}
                 className={cn(
                   "flex flex-col items-start gap-1.5 rounded-xl border p-3.5 text-left transition-all",
                   accesMode === "workspace"
@@ -320,7 +347,7 @@ export function ShareDashboardModal() {
               {/* Option Emails spécifiques */}
               <button
                 type="button"
-                onClick={() => setAccesMode("emails")}
+                onClick={() => handleModeChange("emails")}
                 className={cn(
                   "flex flex-col items-start gap-1.5 rounded-xl border p-3.5 text-left transition-all",
                   accesMode === "emails"
@@ -524,7 +551,10 @@ export function ShareDashboardModal() {
                       <span>{emails.length} personne{emails.length > 1 ? "s" : ""} autorisée{emails.length > 1 ? "s" : ""} :</span>
                       <button
                         type="button"
-                        onClick={() => setEmails([])}
+                        onClick={() => {
+                          setEmails([]);
+                          void persistSharing(accesMode, []);
+                        }}
                         className="text-ink-4 hover:text-rose-500 transition-colors"
                       >
                         Tout effacer
@@ -563,25 +593,6 @@ export function ShareDashboardModal() {
                 )}
               </div>
             )}
-
-            {/* Bouton d'enregistrement des droits */}
-            <div className="flex justify-end pt-1">
-              <Button
-                size="sm"
-                onClick={handleSaveSharing}
-                disabled={isSaving}
-                className="bg-brand text-white hover:bg-brand/90 text-xs px-4"
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    Enregistrement…
-                  </>
-                ) : (
-                  "Enregistrer les droits d'accès"
-                )}
-              </Button>
-            </div>
           </div>
 
           {/* Section 2 : Lien de partage & transmission */}

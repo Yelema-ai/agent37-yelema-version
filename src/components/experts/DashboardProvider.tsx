@@ -233,7 +233,7 @@ export function DashboardProvider({
   }, [activeUrl]);
 
   const updateSharing = useCallback(
-    async (acces: "public" | "workspace" | "emails", allowedEmails: string[] = []): Promise<boolean> => {
+    async (acces: "public" | "workspace" | "emails", allowedEmails: string[] = [], showToast = false): Promise<boolean> => {
       if (!agentId || !profile) return false;
       try {
         const res = await apiFetch<{ ok: boolean; acces: "public" | "workspace" | "emails"; allowedEmails: string[] }>(
@@ -244,7 +244,7 @@ export function DashboardProvider({
           }
         );
         setData((prev) => (prev ? { ...prev, acces: res.acces, allowedEmails: res.allowedEmails } : null));
-        toast.success("Droits d'acces enregistres avec succes !");
+        if (showToast) toast.success("Droits d'accès enregistrés !");
         return true;
       } catch (err) {
         toast.error("Erreur lors de l'enregistrement des acces.");
