@@ -91,7 +91,7 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
               drawerOpen ? "translate-x-0" : "-translate-x-full"
             )}
           >
-            <Sidebar collapsed={collapsed && !drawerOpen} onToggle={toggle} />
+            <Sidebar collapsed={collapsed && !drawerOpen} onToggle={toggle} onNavigate={() => setDrawerOpen(false)} />
           </div>
           {/* Le <main> est la zone qui défile : la hauteur est bornée à l'écran pour que le chat et les
               fichiers gardent leur barre de saisie en bas, les pages longues défilant à l'intérieur. */}

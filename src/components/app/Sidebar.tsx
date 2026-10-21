@@ -19,7 +19,7 @@ const NAV = [
   { href: "/integrations", label: "Intégrations", icon: Blocks, exact: false },
 ] as const;
 
-export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolean; onToggle: () => void; onNavigate?: () => void }) {
   const pathname = usePathname();
   const { current } = useWorkspace();
   // The company's main logo first (« Entreprise »), then the deployment's, then the initial.
@@ -95,6 +95,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           expert={e}
           active={pathname === `/experts/${e.agentId}/${e.profileId}` || pathname.startsWith(`/experts/${e.agentId}/${e.profileId}/`)}
           compact={collapsed}
+          onNavigate={onNavigate}
         />
       ))}
 
