@@ -17,7 +17,10 @@ export interface DashboardData {
   lien?: string | null;
   hebergeur?: string;
   maj?: string | null;
-  acces?: "public" | "protege";
+  acces?: "public" | "workspace" | "emails";
+  allowedEmails?: string[];
+  pdfPath?: string | null;
+  htmlPath?: string | null;
   previewUrl?: string;
   isDjeneba?: boolean;
   teamViewLien?: string | null;
@@ -43,6 +46,11 @@ interface DashboardContextValue {
   embedUrl: string | null;
   copyShareLink: () => void;
   refresh: () => Promise<void>;
+  shareModalOpen: boolean;
+  setShareModalOpen: (open: boolean) => void;
+  updateSharing: (acces: "public" | "workspace" | "emails", allowedEmails?: string[]) => Promise<boolean>;
+  downloadPdf: () => void;
+  downloadHtml: () => void;
 }
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -99,6 +107,7 @@ export function DashboardProvider({
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"metier" | "equipe">("metier");
   const [data, setData] = useState<DashboardData | null>(null);
   const [customUrl, setCustomUrl] = useState<string | null>(null);
@@ -203,6 +212,7 @@ export function DashboardProvider({
   useEffect(() => {
     setPanelOpen(false);
     setDialogOpen(false);
+    setShareModalOpen(false);
     setData(null);
     setCustomUrl(null);
     setIsGenerating(false);
@@ -221,6 +231,78 @@ export function DashboardProvider({
     navigator.clipboard.writeText(fullUrl);
     toast.success("Lien du tableau de bord copie dans le presse-papier !");
   }, [activeUrl]);
+
+  const updateSharing = useCallback(
+    async (acces: "public" | "workspace" | "emails", allowedEmails: string[] = []): Promise<boolean> => {
+      if (!agentId || !profile) return false;
+      try {
+        const res = await apiFetch<{ ok: boolean; acces: "public" | "workspace" | "emails"; allowedEmails: string[] }>(
+          `/api/agents/${agentId}/experts/${encodeURIComponent(profile)}/dashboard`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ acces, allowedEmails }),
+          }
+        );
+        setData((prev) => (prev ? { ...prev, acces: res.acces, allowedEmails: res.allowedEmails } : null));
+        toast.success("Droits d'acces enregistres avec succes !");
+        return true;
+      } catch (err) {
+        toast.error("Erreur lors de l'enregistrement des acces.");
+        return false;
+      }
+    },
+    [agentId, profile]
+  );
+
+  const downloadPdf = useCallback(() => {
+    if (data?.pdfPath) {
+      const url = `/api/agents/${agentId}/files/content?path=${encodeURIComponent(data.pdfPath)}&disposition=attachment`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = data.pdfPath.split("/").pop() || `tableau-de-bord-${profile || "expert"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success("Telechargement du PDF demarre !");
+    } else {
+      toast.info("Impression / Enregistrement PDF en cours...");
+      window.print();
+    }
+  }, [agentId, data?.pdfPath, profile]);
+
+  const downloadHtml = useCallback(async () => {
+    if (data?.htmlPath) {
+      const url = `/api/agents/${agentId}/files/content?path=${encodeURIComponent(data.htmlPath)}&disposition=attachment`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = data.htmlPath.split("/").pop() || `tableau-de-bord-${profile || "expert"}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success("Telechargement du HTML demarre !");
+    } else if (embedUrl) {
+      try {
+        toast.info("Preparation du fichier HTML...");
+        const res = await fetch(embedUrl);
+        if (!res.ok) throw new Error("Erreur de recuperation");
+        const html = await res.text();
+        const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = `tableau-de-bord-${profile || "expert"}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+        toast.success("Fichier HTML telecharge !");
+      } catch {
+        toast.error("Echec du telechargement HTML.");
+      }
+    } else {
+      toast.error("Aucun contenu disponible pour le telechargement.");
+    }
+  }, [agentId, data?.htmlPath, embedUrl, profile]);
 
   return (
     <DashboardContext.Provider
@@ -244,6 +326,11 @@ export function DashboardProvider({
         embedUrl,
         copyShareLink,
         refresh: fetchDashboard,
+        shareModalOpen,
+        setShareModalOpen,
+        updateSharing,
+        downloadPdf,
+        downloadHtml,
       }}
     >
       {children}

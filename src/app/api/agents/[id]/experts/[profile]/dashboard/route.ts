@@ -1,7 +1,7 @@
 import { agent37, instanceFetch } from "@/lib/agent37";
 import { requireAgentAccess } from "@/lib/auth";
 import { getDashboardMeta } from "@/lib/dashboards";
-import { handleError, json } from "@/lib/http";
+import { handleError, json, readJson } from "@/lib/http";
 
 type Ctx = { params: Promise<{ id: string; profile: string }> };
 
@@ -24,7 +24,10 @@ export async function GET(request: Request, { params }: Ctx) {
       lien: null as string | null,
       hebergeur: "render",
       maj: null as string | null,
-      acces: "public" as "public" | "protege",
+      acces: "public" as "public" | "workspace" | "emails",
+      allowedEmails: [] as string[],
+      pdfPath: null as string | null,
+      htmlPath: null as string | null,
     };
 
     const capitalizedProfile = profile ? profile.charAt(0).toUpperCase() + profile.slice(1).toLowerCase() : "";
@@ -36,6 +39,8 @@ export async function GET(request: Request, { params }: Ctx) {
       `.hermes/profiles/${profile}/memory/state/tableau-de-bord-metier.json`,
     ];
 
+    let foundFichiersFolder: string | null = null;
+
     for (const p of candidatePaths) {
       try {
         const res = await instanceFetch(id, `/v1/files/content?path=${encodeURIComponent(p)}`);
@@ -43,18 +48,83 @@ export async function GET(request: Request, { params }: Ctx) {
           const text = await res.text();
           const parsed = JSON.parse(text);
           if (parsed && typeof parsed === "object" && typeof parsed.lien === "string" && parsed.lien) {
+            let parsedAcces: "public" | "workspace" | "emails" = "public";
+            if (parsed.acces === "workspace" || parsed.acces === "protege") {
+              parsedAcces = "workspace";
+            } else if (parsed.acces === "emails") {
+              parsedAcces = "emails";
+            } else if (typeof parsed.acces === "string" && parsed.acces.toLowerCase().includes("public")) {
+              parsedAcces = "public";
+            }
+
+            const parsedEmails = Array.isArray(parsed.allowed_emails)
+              ? parsed.allowed_emails.filter((x: unknown): x is string => typeof x === "string")
+              : [];
+
             state = {
               lien: parsed.lien,
               hebergeur: typeof parsed.hebergeur === "string" ? parsed.hebergeur : "render",
               maj: typeof parsed.maj === "string" ? parsed.maj : null,
-              acces: parsed.acces === "protege" ? "protege" : "public",
+              acces: parsedAcces,
+              allowedEmails: parsedEmails,
+              pdfPath: null,
+              htmlPath: null,
             };
+
+            if (typeof parsed.fichiers === "string" && parsed.fichiers.trim()) {
+              foundFichiersFolder = parsed.fichiers.trim();
+            }
             break;
           }
         }
       } catch {
         // try next candidate path
       }
+    }
+
+    // Recherche des fichiers PDF et HTML de livrable
+    try {
+      const searchDirs: string[] = [];
+      if (foundFichiersFolder) {
+        searchDirs.push(`Livrables/${capitalizedProfile}/${foundFichiersFolder}`.replace(/\/+$/, ""));
+        searchDirs.push(`Livrables/${profile}/${foundFichiersFolder}`.replace(/\/+$/, ""));
+      }
+      searchDirs.push(`Livrables/${capitalizedProfile}/Tableau-de-bord`);
+      searchDirs.push(`Livrables/${profile}/Tableau-de-bord`);
+
+      for (const dir of searchDirs) {
+        try {
+          const listRes = await agent37.listFiles(id, dir);
+          const entries = listRes.entries || [];
+          
+          // Vérifier si des sous-dossiers de date existent (ex: 2026-10-21)
+          for (const entry of entries) {
+            if (entry.type === "directory" && entry.name !== "archives" && !state.pdfPath) {
+              try {
+                const subRes = await agent37.listFiles(id, `${dir}/${entry.name}`);
+                for (const sub of subRes.entries || []) {
+                  if (!state.pdfPath && sub.name.toLowerCase().endsWith(".pdf")) {
+                    state.pdfPath = sub.path;
+                  }
+                  if (!state.htmlPath && sub.name.toLowerCase().endsWith(".html")) {
+                    state.htmlPath = sub.path;
+                  }
+                }
+              } catch {}
+            } else if (entry.type === "file") {
+              if (!state.pdfPath && entry.name.toLowerCase().endsWith(".pdf")) {
+                state.pdfPath = entry.path;
+              }
+              if (!state.htmlPath && entry.name.toLowerCase().endsWith(".html")) {
+                state.htmlPath = entry.path;
+              }
+            }
+          }
+          if (state.pdfPath && state.htmlPath) break;
+        } catch {}
+      }
+    } catch {
+      // Ignorer les erreurs d'énumération des fichiers
     }
 
     let teamLien: string | null = null;
@@ -121,9 +191,76 @@ export async function GET(request: Request, { params }: Ctx) {
       hebergeur: state.hebergeur || "render",
       maj: state.maj,
       acces: state.acces,
+      allowedEmails: state.allowedEmails,
+      pdfPath: state.pdfPath,
+      htmlPath: state.htmlPath,
       previewUrl,
       isDjeneba,
       teamViewLien: teamLien,
+    });
+  } catch (e) {
+    return handleError(e);
+  }
+}
+
+export async function PATCH(request: Request, { params }: Ctx) {
+  try {
+    const { id, profile } = await params;
+    await requireAgentAccess(id);
+
+    const body = await readJson<{ acces?: string; allowedEmails?: string[] }>(request);
+    const acces = body.acces === "workspace" || body.acces === "emails" ? body.acces : "public";
+    const allowedEmails = Array.isArray(body.allowedEmails)
+      ? body.allowedEmails.map((e) => String(e).trim().toLowerCase()).filter(Boolean)
+      : [];
+
+    const capitalizedProfile = profile ? profile.charAt(0).toUpperCase() + profile.slice(1).toLowerCase() : "";
+    const candidatePaths = [
+      `Livrables/${capitalizedProfile}/_memoire/state/tableau-de-bord-metier.json`,
+      `Livrables/${profile}/_memoire/state/tableau-de-bord-metier.json`,
+      `memory/state/tableau-de-bord-metier.json`,
+      `memory/state/${profile}/tableau-de-bord-metier.json`,
+    ];
+
+    let targetPath = candidatePaths[0];
+    let existingContent: Record<string, unknown> = {};
+
+    for (const p of candidatePaths) {
+      try {
+        const res = await instanceFetch(id, `/v1/files/content?path=${encodeURIComponent(p)}`);
+        if (res.ok) {
+          const text = await res.text();
+          const parsed = JSON.parse(text);
+          if (parsed && typeof parsed === "object") {
+            targetPath = p;
+            existingContent = parsed;
+            break;
+          }
+        }
+      } catch {}
+    }
+
+    existingContent.acces = acces;
+    existingContent.allowed_emails = allowedEmails;
+
+    const putRes = await instanceFetch(
+      id,
+      `/v1/files/content?path=${encodeURIComponent(targetPath)}&overwrite=true`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(existingContent, null, 1),
+      }
+    );
+
+    if (!putRes.ok) {
+      return json({ error: "Impossible d'enregistrer les droits de partage sur l'instance." }, 502);
+    }
+
+    return json({
+      ok: true,
+      acces,
+      allowedEmails,
     });
   } catch (e) {
     return handleError(e);

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { ComputerButton, ComputerDialog, ComputerPanel } from "@/components/experts/ExpertComputer";
 import { DashboardProvider } from "@/components/experts/DashboardProvider";
-import { DashboardButton, DashboardPanel, DashboardDialog } from "@/components/experts/ExpertDashboard";
+import { DashboardButton, DashboardPanel, DashboardDialog, ShareDashboardModal } from "@/components/experts/ExpertDashboard";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { expertDisplayName } from "@/lib/experts";
@@ -228,6 +228,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
         <>
           <DashboardPanel />
           <DashboardDialog />
+          <ShareDashboardModal />
         </>
       )}
     </div>

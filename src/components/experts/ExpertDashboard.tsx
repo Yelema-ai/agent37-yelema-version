@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, LayoutDashboard, Loader2, Maximize2, RefreshCw, Share2, Sparkles, X, Check } from "lucide-react";
+import { ExternalLink, LayoutDashboard, Loader2, Maximize2, RefreshCw, Share2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useDashboard } from "./DashboardProvider";
 import { useComputer } from "./ComputerProvider";
+import { ShareDashboardModal } from "./ShareDashboardModal";
+
+export { ShareDashboardModal };
 
 const WIDE = "(min-width: 85rem)";
 
@@ -74,14 +77,7 @@ function DashboardHeaderControls({
   onMaximize?: () => void;
   onClose?: () => void;
 }) {
-  const { activeUrl, copyShareLink, refresh, loading, isGenerating, triggerGeneration, data, activeTab, setActiveTab } = useDashboard();
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    copyShareLink();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const { activeUrl, refresh, loading, isGenerating, triggerGeneration, data, activeTab, setActiveTab, setShareModalOpen } = useDashboard();
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
@@ -135,15 +131,16 @@ function DashboardHeaderControls({
         <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
       </Button>
 
+      {/* Bouton Partager & Exporter */}
       <Button
         variant="ghost"
         size="icon"
         className="h-8 w-8 text-ink-3 hover:text-ink"
-        onClick={handleCopy}
-        title="Copier le lien de partage"
-        aria-label="Copier le lien"
+        onClick={() => setShareModalOpen(true)}
+        title="Partager et exporter le tableau de bord"
+        aria-label="Partager et exporter"
       >
-        {copied ? <Check className="h-3.5 w-3.5 text-brand" /> : <Share2 className="h-3.5 w-3.5" />}
+        <Share2 className="h-3.5 w-3.5" />
       </Button>
 
       {activeUrl && (
