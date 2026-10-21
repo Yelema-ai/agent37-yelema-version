@@ -364,13 +364,23 @@ export function AgentWorkspace({
           </div>
           {/* Chat owns its full height and stays MOUNTED (just hidden) across tab switches. */}
           {chatOpened && (
-            <div className={cn("flex min-h-0 flex-1", !isChat && "hidden")}>
+            <div className={cn("relative flex min-h-0 flex-1", !isChat && "hidden")}>
               {/* The conversations open in their own column beside the chat from « Conversations » under
-                  Discussion, and close to give the chat its whole width (phones and tablets: a panel). */}
+                  Discussion, and close to give the chat its whole width (phones and tablets: a panel).
+                  Under 1280 px a column would leave the chat a strip: it floats over the chat instead,
+                  like the phone's panel, and closes once a conversation is picked. */}
               {railOpen && (
-                <div className="hidden w-[288px] shrink-0 flex-col border-r border-line bg-surface px-2.5 py-3 lg:flex">
-                  <ChatSidebar />
-                </div>
+                <>
+                  <button
+                    type="button"
+                    aria-label="Fermer les conversations"
+                    onClick={() => setRailOpen(false)}
+                    className="absolute inset-0 z-20 hidden bg-ink/20 lg:block xl:hidden"
+                  />
+                  <div className="absolute inset-y-0 left-0 z-30 hidden w-[320px] flex-col border-r border-line bg-surface px-2.5 py-3 shadow-[8px_0_30px_rgba(0,0,0,0.12)] lg:flex xl:static xl:z-auto xl:w-[288px] xl:shrink-0 xl:shadow-none">
+                    <ChatSidebar onNavigate={() => !matchMedia("(min-width: 1280px)").matches && setRailOpen(false)} />
+                  </div>
+                </>
               )}
               <div className="min-w-0 flex-1">
                 <ChatView initialMessage={initialMessage} driveFolder={driveFolder ?? (profileId ? `${DRIVE_ROOT}/${expertName}` : DRIVE_ROOT)} />
