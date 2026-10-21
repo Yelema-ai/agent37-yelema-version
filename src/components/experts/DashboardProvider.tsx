@@ -4,6 +4,8 @@ import { createContext, useContext, useEffect, useState, useCallback, useMemo, t
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 
+const WIDE = "(min-width: 85rem)";
+
 export interface DashboardData {
   available: boolean;
   modelFile?: string;
@@ -28,10 +30,13 @@ interface DashboardContextValue {
   setPanelOpen: (open: boolean) => void;
   dialogOpen: boolean;
   setDialogOpen: (open: boolean) => void;
+  openDashboard: () => void;
   activeTab: "metier" | "equipe";
   setActiveTab: (tab: "metier" | "equipe") => void;
   data: DashboardData | null;
   loading: boolean;
+  isGenerating: boolean;
+  triggerGeneration: () => Promise<void>;
   activeUrl: string | null;
   copyShareLink: () => void;
   refresh: () => Promise<void>;
@@ -53,11 +58,15 @@ export function DashboardProvider({
   agentId,
   profile,
   agentName,
+  onTriggerTableau,
+  isStreaming = false,
   children,
 }: {
   agentId: string;
   profile: string | null;
   agentName: string;
+  onTriggerTableau?: () => void;
+  isStreaming?: boolean;
   children: ReactNode;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
@@ -65,6 +74,7 @@ export function DashboardProvider({
   const [activeTab, setActiveTab] = useState<"metier" | "equipe">("metier");
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const fetchDashboard = useCallback(async () => {
     if (!agentId || !profile) {
@@ -75,15 +85,58 @@ export function DashboardProvider({
     try {
       const res = await apiFetch<DashboardData>(`/api/agents/${agentId}/experts/${encodeURIComponent(profile)}/dashboard`);
       setData(res);
-      if (res.isDjeneba && activeTab === "metier" && !res.lien && res.teamViewLien) {
-        // Pour Djénéba, si elle consulte d'abord la vue équipe
-      }
     } catch (err) {
       console.warn("Erreur chargement dashboard:", err);
     } finally {
       setLoading(false);
     }
-  }, [agentId, profile, activeTab]);
+  }, [agentId, profile]);
+
+  const openDashboard = useCallback(() => {
+    if (typeof window !== "undefined" && window.matchMedia(WIDE).matches) {
+      setPanelOpen(true);
+    } else {
+      setDialogOpen(true);
+    }
+  }, []);
+
+  const triggerGeneration = useCallback(async () => {
+    if (isGenerating || isStreaming) return;
+    setIsGenerating(true);
+    openDashboard();
+    if (onTriggerTableau) {
+      onTriggerTableau();
+    }
+  }, [isGenerating, isStreaming, openDashboard, onTriggerTableau]);
+
+  // Polling pendant la génération pour récupérer le lien dès qu'il est écrit sur l'instance
+  useEffect(() => {
+    if (!isGenerating) return;
+    const interval = setInterval(() => {
+      void fetchDashboard();
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [isGenerating, fetchDashboard]);
+
+  // Quand le lien arrive alors qu'on générait
+  useEffect(() => {
+    if (isGenerating && data?.lien) {
+      setIsGenerating(false);
+      toast.success("Tableau de bord généré et mis en ligne sur Render !");
+    }
+  }, [isGenerating, data?.lien]);
+
+  // Si le streaming du chat se termine alors qu'on était en attente
+  useEffect(() => {
+    if (isGenerating && !isStreaming) {
+      const timer = setTimeout(() => {
+        void fetchDashboard().finally(() => {
+          setIsGenerating(false);
+        });
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [isStreaming, isGenerating, fetchDashboard]);
 
   useEffect(() => {
     if (panelOpen || dialogOpen) {
@@ -96,15 +149,16 @@ export function DashboardProvider({
     setPanelOpen(false);
     setDialogOpen(false);
     setData(null);
+    setIsGenerating(false);
     setActiveTab("metier");
   }, [profile]);
 
   const activeUrl = useMemo(() => {
     if (!data) return null;
     if (activeTab === "equipe" && data.isDjeneba) {
-      return data.teamViewLien || "/modeles/index-equipe.html";
+      return data.teamViewLien || null;
     }
-    return data.lien || data.previewUrl || null;
+    return data.lien || null;
   }, [data, activeTab]);
 
   const copyShareLink = useCallback(() => {
@@ -130,10 +184,13 @@ export function DashboardProvider({
         setPanelOpen,
         dialogOpen,
         setDialogOpen,
+        openDashboard,
         activeTab,
         setActiveTab,
         data,
         loading,
+        isGenerating,
+        triggerGeneration,
         activeUrl,
         copyShareLink,
         refresh: fetchDashboard,

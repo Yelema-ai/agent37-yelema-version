@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, LayoutDashboard, Maximize2, RefreshCw, Share2, X, Check } from "lucide-react";
+import { ExternalLink, LayoutDashboard, Loader2, Maximize2, RefreshCw, Share2, Sparkles, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -11,7 +11,7 @@ import { useComputer } from "./ComputerProvider";
 const WIDE = "(min-width: 85rem)";
 
 export function DashboardButton() {
-  const { profile, agentName, panelOpen, setPanelOpen, setDialogOpen, data } = useDashboard();
+  const { profile, panelOpen, setPanelOpen, setDialogOpen, data, triggerGeneration, isGenerating } = useDashboard();
   const comp = useComputer();
   if (!profile) return null;
 
@@ -19,18 +19,39 @@ export function DashboardButton() {
   const label = isDjeneba ? "Tableaux de l’équipe" : "Tableau de bord";
   const isAnyPanelOpen = panelOpen || Boolean(comp?.panelOpen);
 
+  const handleClick = () => {
+    const isWide = typeof window !== "undefined" && window.matchMedia(WIDE).matches;
+    if (isWide) {
+      setPanelOpen(true);
+    } else {
+      setDialogOpen(true);
+    }
+
+    // Déclenchement en un clic : si le tableau n'est pas encore généré sur Render,
+    // on lance directement la génération via l'expert
+    if (!data?.lien && !isGenerating) {
+      void triggerGeneration();
+    }
+  };
+
   return (
     <button
       type="button"
       title={label}
-      onClick={() => (window.matchMedia(WIDE).matches ? setPanelOpen(!panelOpen) : setDialogOpen(true))}
+      onClick={handleClick}
       className={cn(
         "inline-flex h-8 items-center gap-1.5 rounded-full border bg-card px-2.5 text-xs font-medium text-ink transition-colors hover:bg-soft",
-        panelOpen && "wide:border-brand/40 wide:bg-soft-2 wide:text-brand"
+        (panelOpen || isGenerating) && "wide:border-brand/40 wide:bg-soft-2 wide:text-brand"
       )}
     >
-      <LayoutDashboard className="h-3.5 w-3.5 text-brand" />
-      <span className={cn("hidden sm:inline", isAnyPanelOpen && "wide:hidden")}>{label}</span>
+      {isGenerating ? (
+        <Loader2 className="h-3.5 w-3.5 text-brand animate-spin" />
+      ) : (
+        <LayoutDashboard className="h-3.5 w-3.5 text-brand" />
+      )}
+      <span className={cn("hidden sm:inline", isAnyPanelOpen && "wide:hidden")}>
+        {isGenerating ? "Génération…" : label}
+      </span>
     </button>
   );
 }
@@ -42,7 +63,7 @@ function DashboardHeaderControls({
   onMaximize?: () => void;
   onClose?: () => void;
 }) {
-  const { activeUrl, copyShareLink, refresh, loading, data, activeTab, setActiveTab } = useDashboard();
+  const { activeUrl, copyShareLink, refresh, loading, isGenerating, triggerGeneration, data, activeTab, setActiveTab } = useDashboard();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -50,8 +71,6 @@ function DashboardHeaderControls({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  const isRender = (data?.hebergeur ?? "").toLowerCase() === "render";
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
@@ -81,18 +100,28 @@ function DashboardHeaderControls({
       )}
 
       {/* Cloud hosting badge */}
-      <span
-        title={data?.lien ? `Hébergé sur ${data.hebergeur || "le cloud"}` : "Gabarit Yelema prêt à être branché"}
-        className={cn(
-          "mr-1 hidden items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold md:inline-flex",
-          data?.lien
-            ? "bg-tint text-brand-ink border border-brand/20"
-            : "bg-soft-2 text-ink-3 border border-line"
-        )}
+      {data?.lien && (
+        <span
+          title={`Hébergé sur ${data.hebergeur || "Render"}`}
+          className="mr-1 hidden items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold md:inline-flex bg-tint text-brand-ink border border-brand/20"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-brand animate-pulse" />
+          {data.hebergeur ? data.hebergeur.toUpperCase() : "RENDER"}
+        </span>
+      )}
+
+      {/* Bouton pour régénérer / actualiser les chiffres auprès de l'expert */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-ink-3 hover:text-ink"
+        onClick={() => void triggerGeneration()}
+        disabled={isGenerating || loading}
+        title="Actualiser les chiffres auprès de l’expert (/tableau)"
+        aria-label="Actualiser les chiffres"
       >
-        <span className={cn("h-1.5 w-1.5 rounded-full", data?.lien ? "bg-brand animate-pulse" : "bg-ink-3")} />
-        {data?.lien ? (data?.hebergeur ? data.hebergeur.toUpperCase() : "RENDER") : "APERÇU"}
-      </span>
+        <Sparkles className={cn("h-3.5 w-3.5 text-brand", isGenerating && "animate-spin")} />
+      </Button>
 
       <Button
         variant="ghost"
@@ -100,8 +129,8 @@ function DashboardHeaderControls({
         className="h-8 w-8 text-ink-3 hover:text-ink"
         onClick={() => void refresh()}
         disabled={loading}
-        title="Actualiser"
-        aria-label="Actualiser"
+        title="Recharger l'affichage"
+        aria-label="Recharger"
       >
         <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
       </Button>
@@ -159,8 +188,60 @@ function DashboardHeaderControls({
   );
 }
 
+function DashboardEmptyState({
+  agentName,
+  isGenerating,
+  onGenerate,
+}: {
+  agentName: string;
+  isGenerating: boolean;
+  onGenerate: () => void;
+}) {
+  if (isGenerating) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center p-6 text-center">
+        <div className="relative mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-tint text-brand shadow-inner">
+          <LayoutDashboard className="h-7 w-7 animate-pulse" />
+          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-brand"></span>
+          </span>
+        </div>
+        <span className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-tint px-3 py-1 text-xs font-semibold text-brand">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Génération en cours…
+        </span>
+        <h3 className="text-base font-semibold text-ink">Création de votre tableau de bord</h3>
+        <p className="mt-1.5 max-w-sm text-xs text-ink-3 leading-relaxed">
+          {agentName} prépare vos indicateurs métier et publie votre page sur Render. L’affichage apparaîtra automatiquement dès sa mise en ligne.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center p-6 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-tint text-brand mb-3">
+        <LayoutDashboard className="h-6 w-6" />
+      </div>
+      <h3 className="text-base font-semibold text-ink">Tableau de bord en attente</h3>
+      <p className="mt-1 mb-4 max-w-sm text-xs text-ink-3 leading-relaxed">
+        Déclenchez la génération de votre tableau de bord avec les données de l’entreprise en un clic.
+      </p>
+      <Button
+        type="button"
+        onClick={onGenerate}
+        className="inline-flex items-center gap-2 rounded-xl bg-brand text-white px-4 py-2 text-xs font-semibold shadow-sm hover:bg-brand/90 transition-all"
+      >
+        <LayoutDashboard className="h-4 w-4" />
+        Générer mon tableau de bord
+      </Button>
+    </div>
+  );
+}
+
 export function DashboardPanel() {
-  const { panelOpen, setPanelOpen, setDialogOpen, agentName, activeUrl, data, activeTab } = useDashboard();
+  const { panelOpen, setPanelOpen, setDialogOpen, agentName, activeUrl, data, activeTab, isGenerating, triggerGeneration } = useDashboard();
   if (!panelOpen) return null;
 
   const title =
@@ -192,15 +273,11 @@ export function DashboardPanel() {
             sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
           />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-tint text-brand mb-3">
-              <LayoutDashboard className="h-6 w-6" />
-            </div>
-            <h3 className="text-base font-semibold text-ink">Tableau de bord en attente</h3>
-            <p className="mt-1 max-w-sm text-xs text-ink-3 leading-relaxed">
-              Demandez à {agentName} de préparer son tableau de bord avec vos chiffres réels en lui écrivant « fais mon tableau de bord » ou en utilisant la commande /tableau.
-            </p>
-          </div>
+          <DashboardEmptyState
+            agentName={agentName}
+            isGenerating={isGenerating}
+            onGenerate={() => void triggerGeneration()}
+          />
         )}
       </div>
     </aside>
@@ -208,7 +285,7 @@ export function DashboardPanel() {
 }
 
 export function DashboardDialog() {
-  const { dialogOpen, setDialogOpen, agentName, activeUrl, data, activeTab } = useDashboard();
+  const { dialogOpen, setDialogOpen, agentName, activeUrl, data, activeTab, isGenerating, triggerGeneration } = useDashboard();
 
   const title =
     data?.isDjeneba && activeTab === "equipe"
@@ -240,15 +317,11 @@ export function DashboardDialog() {
               sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
             />
           ) : (
-            <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-tint text-brand mb-3">
-                <LayoutDashboard className="h-6 w-6" />
-              </div>
-              <h3 className="text-base font-semibold text-ink">Tableau de bord en attente</h3>
-              <p className="mt-1 max-w-sm text-xs text-ink-3">
-                Écrivez à {agentName} pour générer le tableau de bord avec les chiffres de l’entreprise.
-              </p>
-            </div>
+            <DashboardEmptyState
+              agentName={agentName}
+              isGenerating={isGenerating}
+              onGenerate={() => void triggerGeneration()}
+            />
           )}
         </div>
       </DialogContent>

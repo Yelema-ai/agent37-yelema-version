@@ -1,5 +1,7 @@
 "use client";
 
+import { useSafeDashboard } from "@/components/experts/DashboardProvider";
+
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, CornerDownLeft, FileText, Image as ImageIcon, Loader2, PhoneCall, Repeat } from "lucide-react";
 import { turnDocs, turnWindow } from "@/lib/drive-links";
@@ -123,8 +125,27 @@ export function ChatMessages({
   const oldest = windows.reduce<number | null>((min, w) => (w && (min == null || w.start < min) ? w.start : min), null);
   const since = oldest == null ? null : Math.floor(oldest / 60_000) * 60_000;
   const listing = useDriveListing(agentId, isStreaming ? null : driveFolder, since, String(messages.length));
+      const dashboard = useSafeDashboard();
+
+  const handleContainerClick = (e: React.MouseEvent) => {
+    const target = (e.target as HTMLElement).closest("a");
+    if (!target) return;
+    const href = target.getAttribute("href") || "";
+    const text = (target.textContent || "").toLowerCase();
+    if (
+      href.includes("yelema-dashboards.onrender.com") ||
+      text.includes("ouvrir le tableau de bord") ||
+      (href.includes("/modeles/") && text.includes("tableau"))
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      void dashboard?.refresh();
+      dashboard?.openDashboard();
+    }
+  };
+
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6 sm:px-6">
+    <div onClick={handleContainerClick} className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6 sm:px-6">
       {messages.map((m, i) => {
         if (m.role === "user" && isCallTranscript(m.content)) {
           return (

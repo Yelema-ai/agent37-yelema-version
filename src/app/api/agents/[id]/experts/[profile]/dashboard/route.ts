@@ -63,8 +63,8 @@ export async function GET(request: Request, { params }: Ctx) {
       }
     }
 
-    const liveLien = state.lien || `${renderBase}/${meta.modelFile}`;
-    const liveTeamLien = teamLien || (isDjeneba ? `${renderBase}/index-equipe.html` : null);
+    
+    
 
     return json({
       available: true,
@@ -73,13 +73,12 @@ export async function GET(request: Request, { params }: Ctx) {
       role: meta.role,
       reader: meta.reader,
       kpis: meta.kpis,
-      lien: liveLien,
+      lien: state.lien,
       hebergeur: state.hebergeur || "render",
       maj: state.maj,
       acces: state.acces,
-      previewUrl: `/modeles/${meta.modelFile}`,
-      isDjeneba,
-      teamViewLien: liveTeamLien,
+            isDjeneba,
+      teamViewLien: teamLien,
     });
   } catch (e) {
     return handleError(e);
