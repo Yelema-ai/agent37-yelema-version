@@ -10,26 +10,37 @@ import { useComputer } from "./ComputerProvider";
 
 const WIDE = "(min-width: 85rem)";
 
+function formatMajDate(dateStr?: string | null): string | null {
+  if (!dateStr) return null;
+  try {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return `Mis à jour le ${d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
+    }
+  } catch {}
+  return `Mis à jour : ${dateStr}`;
+}
+
 export function DashboardButton() {
-  const { profile, panelOpen, setPanelOpen, setDialogOpen, data, triggerGeneration, isGenerating } = useDashboard();
+  const { profile, panelOpen, setPanelOpen, dialogOpen, setDialogOpen, activeUrl, triggerGeneration, isGenerating } = useDashboard();
   const comp = useComputer();
   if (!profile) return null;
 
   const isDjeneba = profile.toLowerCase().includes("djeneba");
-  const label = isDjeneba ? "Tableaux de l’équipe" : "Tableau de bord";
+  const label = isDjeneba ? "Tableaux de l'équipe" : "Tableau de bord";
   const isAnyPanelOpen = panelOpen || Boolean(comp?.panelOpen);
 
   const handleClick = () => {
     const isWide = typeof window !== "undefined" && window.matchMedia(WIDE).matches;
     if (isWide) {
-      setPanelOpen(true);
+      setPanelOpen(!panelOpen);
     } else {
-      setDialogOpen(true);
+      setDialogOpen(!dialogOpen);
     }
 
-    // Déclenchement en un clic : si le tableau n'est pas encore généré sur Render,
-    // on lance directement la génération via l'expert
-    if (!data?.lien && !isGenerating) {
+    // Ne déclencher la génération QUE si le tableau n'a JAMAIS été généré (aucun lien disponible)
+    // et qu'on ouvre le panneau. Si un tableau existe déjà, on ouvre juste le panneau sans envoyer /tableau.
+    if (!panelOpen && !activeUrl && !isGenerating) {
       void triggerGeneration();
     }
   };
@@ -97,17 +108,6 @@ function DashboardHeaderControls({
             Direction
           </button>
         </div>
-      )}
-
-      {/* Cloud hosting badge */}
-      {data?.lien && (
-        <span
-          title={`Hébergé sur ${data.hebergeur || "Render"}`}
-          className="mr-1 hidden items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold md:inline-flex bg-tint text-brand-ink border border-brand/20"
-        >
-          <span className="h-1.5 w-1.5 rounded-full bg-brand animate-pulse" />
-          {data.hebergeur ? data.hebergeur.toUpperCase() : "RENDER"}
-        </span>
       )}
 
       {/* Bouton pour régénérer / actualiser les chiffres auprès de l'expert */}
@@ -259,7 +259,7 @@ export function DashboardPanel() {
             <span className="truncate">{title}</span>
           </p>
           <p className="truncate text-xs text-ink-3">
-            {data?.maj ? `Mis à jour le ${data.maj}` : "Généré à partir des chiffres réels de l’entreprise"}
+            {formatMajDate(data?.maj) ?? "Généré à partir des chiffres réels de l'entreprise"}
           </p>
         </div>
         <DashboardHeaderControls onMaximize={() => setDialogOpen(true)} onClose={() => setPanelOpen(false)} />
@@ -304,7 +304,7 @@ export function DashboardDialog() {
               <span className="truncate">{title}</span>
             </DialogTitle>
             <DialogDescription className="truncate text-xs text-ink-3 mt-0.5">
-              {data?.maj ? `Mis à jour le ${data.maj}` : "Généré et personnalisé avec les données de l’entreprise"}
+              {formatMajDate(data?.maj) ?? "Généré et personnalisé avec les données de l'entreprise"}
             </DialogDescription>
           </div>
           <DashboardHeaderControls onClose={() => setDialogOpen(false)} />
