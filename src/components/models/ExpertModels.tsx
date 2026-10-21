@@ -83,7 +83,7 @@ export function ExpertModels({ scope, setup, yelema, models, groupName, onChange
       <Row label="Tous les experts">
         <ModelPicker label="Modèle de tous les experts" groups={withAccounts ? accountOptions : yelemaOptions} value={allValue} nullLabel={withAccounts ? undefined : defaultLabel} disabled={busy} onChange={pickAll} />
       </Row>
-      {withAccounts && <p className="text-[11px] text-ink-3">Un modèle d’un autre fournisseur fait passer ce fournisseur en compte principal.</p>}
+      {withAccounts && <p className="text-[11px] max-sm:text-[12px] text-ink-3">Un modèle d’un autre fournisseur fait passer ce fournisseur en compte principal.</p>}
 
       {experts.length > 0 && (
         <div className="border-t border-line pt-3">

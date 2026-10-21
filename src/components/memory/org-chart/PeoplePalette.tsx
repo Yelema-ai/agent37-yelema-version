@@ -37,7 +37,7 @@ export function PeoplePalette({ org }: { org: Org }) {
                 <span className="grid size-7 shrink-0 place-items-center rounded-full bg-tint text-[10.5px] font-bold text-brand-ink">{initials(name)}</span>
                 <span className="min-w-0 grow">
                   <span className={cn("block truncate text-[13px] font-semibold", n ? "text-ink" : "text-ink-3")}>{name}</span>
-                  <span className="block text-[11px] text-ink-3">{n ? count(n, "département") : "Sans département"}</span>
+                  <span className="block text-[12px] text-ink-3">{n ? count(n, "département") : "Sans département"}</span>
                 </span>
               </div>
               {m.experts.length > 0 && (

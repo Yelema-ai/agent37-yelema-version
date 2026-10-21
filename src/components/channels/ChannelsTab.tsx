@@ -113,7 +113,7 @@ export function ChannelsTab({
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <Header />
-        <Button variant="ghost" size="sm" disabled={loading} onClick={() => load()} aria-label="Actualiser les canaux">
+        <Button variant="ghost" size="sm" disabled={loading} onClick={() => load()} aria-label="Actualiser les canaux" className="max-sm:size-10">
           <RefreshCw className={loading ? "animate-spin" : undefined} />
         </Button>
       </div>
@@ -219,7 +219,7 @@ function ChannelRow({
           {error || channel.description || channelStateLabel(channel)}
         </p>
       </div>
-      <Button variant="outline" size="sm" disabled={!canManage} onClick={onOpen}>
+      <Button variant="outline" size="sm" disabled={!canManage} onClick={onOpen} className="max-sm:h-10">
         {connected ? "Gérer" : isFeaturedChannel(channel.id) ? `Connecter ${channel.name}` : "Connecter"}
       </Button>
     </div>

@@ -59,7 +59,7 @@ function FilterChip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex h-[30px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-[11px] text-[13px] font-semibold transition-colors",
+        "inline-flex h-[30px] max-sm:h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-[11px] text-[13px] font-semibold transition-colors",
         active ? "border-transparent bg-tint text-brand-ink" : "border-line bg-surface text-ink-2 hover:bg-soft"
       )}
     >

@@ -306,7 +306,7 @@ function ToolTile({
                 type="button"
                 aria-label={`Options pour ${toolkit.name}`}
                 disabled={disconnecting || waiting}
-                className="grid h-8 w-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink disabled:opacity-60"
+                className="grid h-8 w-8 max-sm:size-10 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink disabled:opacity-60"
               >
                 {disconnecting || waiting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

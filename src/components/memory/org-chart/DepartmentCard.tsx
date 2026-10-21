@@ -25,7 +25,7 @@ const ROLE_LABEL: Record<OrgRole, string> = { head: "Responsable", member: "Memb
 /** A role as a pill that opens a small menu (never the browser's own list): Responsable stands out. */
 function RolePill({ role, label, onChange }: { role: OrgRole; label: string; onChange: ((role: OrgRole) => void) | null }) {
   const pill = cn(
-    "inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-[12.5px] font-semibold",
+    "inline-flex h-8 max-sm:h-10 shrink-0 items-center gap-1 rounded-full px-2.5 text-[12.5px] font-semibold",
     role === "head" ? "bg-tint text-brand-ink" : "bg-soft text-ink-2"
   );
   if (!onChange) return role === "head" ? <span className={pill}>{ROLE_LABEL.head}</span> : null;
@@ -128,7 +128,7 @@ export function DepartmentCard({
       <header className="flex items-start gap-2">
         <div className="min-w-0 grow">
           {parent && (
-            <p className="mb-1 inline-flex max-w-full items-center gap-1 rounded-full bg-soft px-2 py-0.5 text-[11.5px] font-semibold text-ink-2">
+            <p className="mb-1 inline-flex max-w-full items-center gap-1 rounded-full bg-soft px-2 py-0.5 text-[12px] font-semibold text-ink-2">
               <CornerDownRight className="size-3 shrink-0" /> <span className="truncate">{parent}</span>
             </p>
           )}
@@ -267,7 +267,7 @@ export function UnplacedCard({ org, documents }: { org: Org; documents: number }
                   onDragStart={(e) => org.dragStart(e, { kind: "member", member: m.id })}
                   className={cn("flex items-center gap-2", editable && "cursor-grab")}
                 >
-                  <span className="grid size-7 place-items-center rounded-full bg-tint text-[11px] font-bold text-brand-ink">{initials(name)}</span>
+                  <span className="grid size-7 place-items-center rounded-full bg-tint text-[12px] font-bold text-brand-ink">{initials(name)}</span>
                   <span className="text-sm font-semibold text-ink">{name}</span>
                 </span>
                 {editable && chart.units.length > 0 && (
