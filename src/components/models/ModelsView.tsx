@@ -19,7 +19,8 @@ const POLL_TRIES = 45;
 const EMPTY: LlmSetup = { groups: [], state: "applied" };
 
 // Intégrations · Modèles : les comptes de l'instance, le modèle des experts, le moteur Yelema. Un compte
-// ne sert qu'une instance : rien n'est partagé avec l'entreprise. L'écran affiche ce que le back-office
+// sert une instance ; son propriétaire peut le partager, et les autres membres l'ajoutent alors à la leur
+// sans sa clé. L'écran affiche ce que le back-office
 // sert et lui demande d'écrire ; il ne garde aucun secret.
 export function ModelsView() {
   const [data, setData] = useState<LlmOverview | null>(null);
@@ -99,6 +100,7 @@ export function ModelsView() {
         scopeLabel={scopeLabel}
         {...catalogues}
         customEndpoints={data.customEndpoints === true}
+        shared={data.shared}
         models={models}
         onChanged={() => changed()}
       />

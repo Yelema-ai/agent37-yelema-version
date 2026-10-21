@@ -16,7 +16,7 @@ import { LiveStep, StepsList } from "./ChatSteps";
 import type { ChatMessage, MessageAttachment } from "./types";
 
 // Files that rode along with a user turn, shown as compact chips above the message bubble.
-function MessageAttachments({ attachments }: { attachments: MessageAttachment[] }) {
+export function MessageAttachments({ attachments }: { attachments: MessageAttachment[] }) {
   return (
     <div className="flex flex-wrap justify-end gap-1.5">
       {attachments.map((a, k) => (

@@ -4,7 +4,7 @@
 // into the sentences a member reads. Contract: yelema-platform docs/specs/client-api-v1/app.md,
 // "Clés de modèle du client".
 
-import { ACCOUNT_REFUSALS, type LlmSetup } from "./llm-accounts.ts";
+import { ACCOUNT_REFUSALS, type LlmSetup, type SharedAccount } from "./llm-accounts.ts";
 
 /** `refused`: the provider no longer accepts the key; the experts do not answer until it is replaced or removed. */
 export type LlmState = "applied" | "pending" | "failed" | "refused";
@@ -78,6 +78,8 @@ export interface LlmOverview {
   members?: LlmMember[];
   /** The accounts of the caller's own instance, grouped by provider; absent from an older back office. */
   setup?: LlmSetup;
+  /** Accounts other members offer to the company, added without their key; absent from an older back office. */
+  shared?: SharedAccount[];
 }
 
 /** The models Yelema offers to all its clients (its default first), and what the caller picked. */

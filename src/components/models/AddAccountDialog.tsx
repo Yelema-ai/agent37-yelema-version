@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Eye, EyeOff, Loader2, Search, Server } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2, Search, Server, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
 import { CUSTOM_PROVIDER, type LlmLogin, type LlmProvider } from "@/lib/llm";
-import { scopeParam, type AccountDraft, type InstanceScope, type LlmAccount } from "@/lib/llm-accounts";
+import { scopeParam, type AccountDraft, type InstanceScope, type LlmAccount, type SharedAccount } from "@/lib/llm-accounts";
 import { LoginCode } from "./LoginCode";
 import { ModelPicker } from "./ModelPicker";
 import { ProviderLogo } from "./ProviderLogo";
@@ -16,19 +16,21 @@ import { useModelGroups } from "./useModelGroups";
 
 const SAVE_WARNING = "Tous vos experts passeront par ce compte, routines et messages reçus par Telegram ou WhatsApp compris, de jour comme de nuit. La conversation en cours sera interrompue.";
 
-type Choice = { kind: "key"; provider: LlmProvider } | { kind: "login"; provider: LlmLogin } | { kind: "custom" };
+type Choice = { kind: "key"; provider: LlmProvider } | { kind: "login"; provider: LlmLogin } | { kind: "custom" } | { kind: "shared"; account: SharedAccount };
 
 // « Ajouter un compte » : toutes les possibilités (clé ou jeton collé, connexion par navigateur,
 // endpoint privé), autant de fois qu'on veut, y compris plusieurs fois le même fournisseur. Le compte
 // rejoint son fournisseur en dernier ; le modèle, laissé vide, reprend celui du fournisseur. Le compte
-// ne sert que l'instance visée : jamais celle d'un autre membre.
-export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, customEndpoints, onAdded, onClose }: {
+// ne sert que l'instance visée : jamais celle d'un autre membre. Un compte partagé par un collègue
+// s'ajoute en un clic, sans sa clé, qui reste au back-office.
+export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, customEndpoints, shared = [], onAdded, onClose }: {
   open: boolean;
   scope: InstanceScope;
   scopeLabel: string;
   catalogue: LlmProvider[];
   logins: LlmLogin[];
   customEndpoints: boolean;
+  shared?: SharedAccount[];
   onAdded: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -39,7 +41,7 @@ export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, c
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<LlmAccount | null>(null);
-  const listed = choice && choice.kind !== "custom" ? choice.provider.id : undefined;
+  const listed = choice && (choice.kind === "key" || choice.kind === "login") ? choice.provider.id : undefined;
   const models = useModelGroups(listed ? (scopeParam(scope) ?? "own") : null, listed);
 
   useEffect(() => {
@@ -69,10 +71,11 @@ export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, c
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!choice) return;
-    const draft: AccountDraft = { provider: choice.kind === "custom" ? CUSTOM_PROVIDER : choice.provider.id };
+    const draft: AccountDraft =
+      choice.kind === "shared" ? { provider: choice.account.provider, reuse: choice.account.id } : { provider: choice.kind === "custom" ? CUSTOM_PROVIDER : choice.provider.id };
     if (choice.kind === "key" && !form.secret.trim()) return setError("Collez la clé ou le jeton de ce compte.");
     if (choice.kind === "custom" && (!form.name.trim() || !form.baseUrl.trim() || !form.model.trim())) return setError("Indiquez le nom, l’adresse et le modèle du serveur.");
-    for (const k of ["secret", "model", "label", "name", "baseUrl"] as const) if (form[k].trim()) draft[k] = form[k].trim();
+    if (choice.kind !== "shared") for (const k of ["secret", "model", "label", "name", "baseUrl"] as const) if (form[k].trim()) draft[k] = form[k].trim();
     setBusy(true);
     setError(null);
     try {
@@ -89,7 +92,13 @@ export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, c
     }
   }
 
-  const title = pending ? "Approuvez la connexion" : choice ? `Ajouter : ${choice.kind === "custom" ? "serveur privé" : choice.provider.label}` : "Ajouter un compte";
+  const title = pending
+    ? "Approuvez la connexion"
+    : choice
+      ? `Ajouter : ${choice.kind === "custom" ? "serveur privé" : choice.kind === "shared" ? choice.account.label : choice.provider.label}`
+      : "Ajouter un compte";
+  const q = query.trim().toLowerCase();
+  const team = q ? shared.filter((a) => [a.label, a.owner, a.provider].some((v) => v.toLowerCase().includes(q))) : shared;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && !busy && onClose()}>
@@ -114,7 +123,25 @@ export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, c
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
               <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher (Claude, Gemini, Codex…)" className="h-9 rounded-full pl-9 text-xs" autoFocus />
             </div>
-            <div className="grid max-h-[50vh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+            <div className="max-h-[50vh] space-y-3 overflow-y-auto pr-1">
+            {team.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-ink-3">Partagés par l’équipe</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {team.map((a) => (
+                    <button key={a.id} type="button" title={a.label} onClick={() => setChoice({ kind: "shared", account: a })} className="flex items-center gap-2.5 rounded-2xl border border-brand/25 bg-tint/40 p-2.5 text-left transition-colors hover:border-brand/50 hover:bg-tint">
+                      <ProviderLogo family={familyOf(a.provider, catalogue, logins)} name={a.label} />
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13px] font-semibold text-ink">{a.label}</span>
+                        <span className="flex items-center gap-1 truncate text-[11px] text-ink-3"><Users className="h-3 w-3 shrink-0" /> De {a.owner}, sans ressaisir la clé</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {team.length > 0 && options.length > 0 && <p className="text-[11px] font-bold uppercase tracking-wide text-ink-3">Nouveau compte</p>}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {options.map((o) => (
                 <button key={`${o.choice.kind}:${o.label}`} type="button" title={o.label} onClick={() => setChoice(o.choice)} className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface p-2.5 text-left transition-colors hover:border-brand/40 hover:bg-soft/60">
                   {o.choice.kind === "custom" ? <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-soft text-ink-3"><Server className="h-4 w-4" /></span> : <ProviderLogo family={o.family} name={o.label} />}
@@ -124,11 +151,18 @@ export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, c
                   </span>
                 </button>
               ))}
-              {options.length === 0 && <p className="col-span-full py-6 text-center text-xs text-ink-3">Aucune possibilité ne correspond.</p>}
+              {options.length === 0 && team.length === 0 && <p className="col-span-full py-6 text-center text-xs text-ink-3">Aucune possibilité ne correspond.</p>}
+            </div>
             </div>
           </div>
         ) : (
           <form onSubmit={submit} className="space-y-3 py-2">
+            {choice.kind === "shared" ? (
+              <p className="rounded-xl border border-line bg-soft/50 p-3 text-xs text-ink-2">
+                Le compte de {choice.account.owner} s’ajoute à {scopeLabel}, sans clé à saisir. Il reste le sien : s’il arrête de le partager, vos experts passent au compte suivant.
+              </p>
+            ) : (
+            <>
             {choice.kind === "custom" && (
               <>
                 <Field id="acc-name" label="Nom du serveur" value={form.name} onChange={set("name")} placeholder="vllm-prod" />
@@ -164,6 +198,8 @@ export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, c
               </div>
             )}
             <Field id="acc-label" label="Nom du compte (facultatif)" value={form.label} onChange={set("label")} placeholder="Compta, Abonnement de Selim…" />
+            </>
+            )}
             <p className="text-[11px] leading-relaxed text-ink-3">{SAVE_WARNING}</p>
             {error && <p role="alert" className="rounded-xl bg-ko-pale px-3 py-2 text-xs text-ko">{error}</p>}
             <DialogFooter className="gap-2 sm:gap-0">
@@ -177,6 +213,11 @@ export function AddAccountDialog({ open, scope, scopeLabel, catalogue, logins, c
       </DialogContent>
     </Dialog>
   );
+}
+
+/** La marque d'un compte partagé, lue au catalogue (clé) ou aux connexions (abonnement). */
+function familyOf(provider: string, catalogue: LlmProvider[], logins: LlmLogin[]): string {
+  return catalogue.find((p) => p.id === provider)?.family ?? logins.find((l) => l.id === provider)?.family ?? "custom";
 }
 
 function Field({ id, label, value, onChange, placeholder, mono }: { id: string; label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string; mono?: boolean }) {

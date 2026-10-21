@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { ChevronRight, Menu } from "lucide-react";
 import { NotificationBell } from "@/components/app/NotificationBell";
 import { ThemeMenu } from "@/components/app/ThemeMenu";
+import { YeleTopButton } from "@/components/yele/YeleBubble";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { parseAgentRoute } from "@/lib/expert-tabs";
 import type { Expert } from "@/lib/types";
@@ -52,13 +53,15 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
       </button>
       <div className="flex min-w-0 items-center gap-1.5 text-sm text-ink-3">
         {trail.map((c, i) => (
-          <span key={i} className="flex min-w-0 items-center gap-1.5">
-            {i > 0 && <ChevronRight className="size-4 shrink-0" />}
+          // On a phone only the page's own name: the trail would be cut to a few letters each.
+          <span key={i} className={cn("flex min-w-0 items-center gap-1.5", i < trail.length - 1 && "max-sm:hidden")}>
+            {i > 0 && <ChevronRight className="size-4 shrink-0 max-sm:hidden" />}
             <span className={cn("truncate", i === trail.length - 1 && "font-semibold text-ink")}>{c}</span>
           </span>
         ))}
       </div>
       <ThemeMenu />
+      <YeleTopButton />
       <NotificationBell />
     </header>
   );

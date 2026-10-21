@@ -205,7 +205,7 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 /** While dictating: duration and level, then cancel or keep (which transcribes into the message). */
-function DictationBar({ dictation }: { dictation: ReturnType<typeof useDictation> }) {
+export function DictationBar({ dictation }: { dictation: ReturnType<typeof useDictation> }) {
   const transcribing = dictation.state === "transcribing";
   return (
     <div className="flex items-center gap-3 px-3 pb-3">

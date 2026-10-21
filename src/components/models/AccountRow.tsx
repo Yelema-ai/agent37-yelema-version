@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Key, Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { GripVertical, Key, Loader2, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
@@ -18,13 +18,23 @@ import { LoginCode } from "./LoginCode";
 const TONE: Record<LlmAccount["state"], string> = { active: "bg-ok-pale text-ok", pending: "bg-tint text-brand-ink", failed: "bg-ko-pale text-ko", refused: "bg-ko-pale text-ko" };
 
 // Un compte dans son fournisseur : la poignée le déplace (souris, toucher ou clavier), le menu le
-// renomme, change sa clé ou le retire. Une connexion en attente montre son code jusqu'à l'approbation.
+// renomme, change sa clé, le partage avec l'équipe ou le retire. Une connexion en attente montre son code jusqu'à l'approbation.
 export function AccountRow({ account, rank, kind, isLogin, onChanged }: { account: LlmAccount; rank: number; kind: string; isLogin: boolean; onChanged: () => Promise<void> }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `a:${account.id}` });
   const [editing, setEditing] = useState<"label" | "secret" | null>(null);
   const [removing, setRemoving] = useState(false);
   // Sans nom choisi : la nature et la fin de la clé, qui ne changent pas quand on déplace le compte.
   const name = account.label || [kind, account.name ?? account.hint].filter(Boolean).join(" ");
+  // Partager : les autres membres l'ajoutent à leur instance sans sa clé. Offert seulement quand le back-office le gère.
+  const share = async (shareable: boolean) => {
+    try {
+      await apiFetch(`/api/llm/accounts/${account.id}`, { method: "PATCH", body: JSON.stringify({ shareable }) });
+      await onChanged();
+      toast.success(shareable ? "Compte partagé avec l’équipe" : "Compte retiré du partage");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
 
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface px-2 py-2", isDragging && "relative z-10 shadow-lg")}>
@@ -35,6 +45,11 @@ export function AccountRow({ account, rank, kind, isLogin, onChanged }: { accoun
       <div className="min-w-0 flex-1">
         <p className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-ink">
           <span className="truncate">{name}</span>
+          {account.shareable && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-tint px-1.5 py-0.5 text-[10px] font-semibold text-brand-ink">
+              <Users className="h-3 w-3" /> Partagé
+            </span>
+          )}
         </p>
         <p className="truncate font-mono text-[11px] text-ink-3">{account.name && account.baseUrl ? `${account.baseUrl}` : account.hint || (isLogin ? "Connexion par compte" : "")}</p>
       </div>
@@ -48,6 +63,12 @@ export function AccountRow({ account, rank, kind, isLogin, onChanged }: { accoun
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuItem onClick={() => setEditing("label")} className="gap-2 text-xs"><Pencil className="h-3.5 w-3.5" />Renommer</DropdownMenuItem>
           {!isLogin && <DropdownMenuItem onClick={() => setEditing("secret")} className="gap-2 text-xs"><Key className="h-3.5 w-3.5" />Changer la clé</DropdownMenuItem>}
+          {account.shareable !== undefined && (
+            <DropdownMenuItem onClick={() => void share(!account.shareable)} className="gap-2 text-xs">
+              <Users className="h-3.5 w-3.5" />
+              {account.shareable ? "Ne plus partager" : "Partager avec l’équipe"}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={() => setRemoving(true)} className="gap-2 text-xs text-ko focus:text-ko"><Trash2 className="h-3.5 w-3.5" />Retirer</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

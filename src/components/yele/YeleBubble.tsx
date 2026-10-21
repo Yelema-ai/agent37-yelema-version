@@ -3,10 +3,18 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUpRight, Bug, ChevronLeft, History, KeyRound, Loader2, Plug, Receipt, Repeat, Send, Sparkles, SquarePen, Users, X, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, Bug, ChevronLeft, History, KeyRound, Loader2, Mic, Plug, Receipt, Repeat, Send, Sparkles, SquarePen, Users, X, type LucideIcon } from "lucide-react";
+import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { profileQuery } from "@/lib/profile-id";
 import { useChat } from "@/components/chat/useChat";
+import { AttachButton, AttachmentTray } from "@/components/chat/Attachments";
+import { DictationBar } from "@/components/chat/ChatComposer";
+import { MessageAttachments } from "@/components/chat/ChatMessages";
+import { DropOverlay } from "@/components/DropOverlay";
+import { useChatAttachments } from "@/components/chat/useChatAttachments";
+import { useDictation } from "@/components/chat/useDictation";
+import { useVoices } from "@/components/voice/useVoices";
 import { Markdown } from "@/components/chat/Markdown";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { useCallState } from "@/components/voice/CallProvider";
@@ -116,6 +124,23 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
   };
+  // Like an Expert's chat: files ride along (paper clip, drop, paste) and the microphone dictates.
+  const att = useChatAttachments(companion.agentId, () => fieldRef.current?.focus());
+  const canDictate = useVoices().length > 0;
+  const dictation = useDictation({
+    expert: null,
+    onText: (said) => {
+      setInput((prev) => (prev.trim() ? `${prev.trim()} ${said}` : said));
+      requestAnimationFrame(() => {
+        if (!fieldRef.current) return;
+        grow(fieldRef.current);
+        fieldRef.current.focus();
+      });
+    },
+    onError: (message) => toast.error(message),
+  });
+  const dictating = dictation.state !== "idle";
+  const { active: onCall } = useCallState();
   const { messages, isStreaming, error, send } = useChat({
     agentId: companion.agentId,
     profile: companion.profileId,
@@ -125,6 +150,12 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
       keepSession(companion, id);
     },
   });
+
+  const canSend = (input.trim().length > 0 || att.hasFiles) && !att.blocksSend && !dictating && !isStreaming;
+  // A call already holds the microphone: a dictation under way gives way.
+  useEffect(() => {
+    if (onCall && dictation.state !== "idle") dictation.cancel();
+  }, [onCall, dictation]);
 
   useEffect(() => {
     apiFetch<{ sessions: PastSession[] }>(`/api/agents/${companion.agentId}/chat/sessions${profileQuery(companion.profileId)}`)
@@ -144,8 +175,9 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (!input.trim() || isStreaming) return;
-    send(input);
+    if (!canSend) return;
+    const attachments = att.takeAttachments();
+    send(input, { files: attachments.map((a) => a.path), attachments });
     setInput("");
     if (fieldRef.current) fieldRef.current.style.height = "auto";
   }
@@ -183,7 +215,8 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
         "fixed inset-0 z-[60] flex h-dvh flex-col overflow-hidden bg-surface pt-[env(safe-area-inset-top)] sm:inset-auto sm:right-6 sm:z-50 sm:h-[580px] sm:w-[420px] sm:rounded-[26px] sm:border sm:border-line sm:pt-0 sm:shadow-[0_20px_50px_rgba(0,0,0,0.22)]",
         // Low in its corner like any chat, over the bubble it replaces (a folded call keeps its place).
         folded ? "sm:bottom-48 sm:max-h-[calc(100dvh-14rem)]" : "sm:bottom-6 sm:max-h-[calc(100dvh-3rem)]"
-      )}>
+      )} {...att.dragHandlers}>
+      {att.dragOver && <DropOverlay label="Déposez vos fichiers pour Yélé" />}
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <div className="flex items-center gap-3">
           <Portrait animated />
@@ -271,7 +304,8 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
           shown.map((m) => (
             <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
               <div className={cn("max-w-[88%] rounded-2xl px-3.5 py-2.5 text-[14px] leading-relaxed", m.role === "user" ? "rounded-br-sm bg-brand text-on-brand" : "rounded-bl-sm border border-line bg-soft text-ink")}>
-                {m.role === "user" ? <p className="whitespace-pre-wrap">{m.content}</p> : <Markdown content={m.content} agentId={companion.agentId} />}
+                {m.role === "user" && m.attachments?.length ? <div className="mb-1.5"><MessageAttachments attachments={m.attachments} /></div> : null}
+                {m.role === "user" ? m.content && <p className="whitespace-pre-wrap">{m.content}</p> : <Markdown content={m.content} agentId={companion.agentId} />}
                 {m.role === "assistant" && !(isStreaming && m === shown[shown.length - 1]) && pagesIn(m.content, path).length > 0 && (
                   <div className="mt-2.5 flex flex-wrap gap-1.5">
                     {pagesIn(m.content, path).map((p) => (
@@ -306,28 +340,54 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
             ))}
           </div>
         )}
-        <div className="flex items-end gap-2 rounded-[18px] border border-line bg-soft/70 p-1.5 pl-4 transition-colors focus-within:border-brand/40 focus-within:bg-surface focus-within:ring-2 focus-within:ring-brand/15">
-          <textarea
-            ref={fieldRef}
-            value={input}
-            rows={1}
-            onChange={(e) => {
-              setInput(e.target.value);
-              grow(e.target);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                e.currentTarget.form?.requestSubmit();
-              }
-            }}
-            placeholder="Posez une question à Yélé…"
-            aria-label="Votre question à Yélé"
-            className="max-h-[132px] min-h-[44px] w-full resize-none bg-transparent py-2.5 text-base leading-6 text-ink outline-none placeholder:text-ink-3 sm:text-[15px]"
-          />
-          <button type="submit" disabled={!input.trim() || isStreaming} aria-label="Envoyer" className="grid size-11 shrink-0 place-items-center rounded-full bg-brand text-on-brand hover:opacity-90 disabled:pointer-events-none disabled:opacity-40">
-            <Send className="size-[18px]" />
-          </button>
+        <div className="rounded-[18px] border border-line bg-soft/70 transition-colors focus-within:border-brand/40 focus-within:bg-surface focus-within:ring-2 focus-within:ring-brand/15">
+          <div className="pt-2 empty:hidden [&>div]:px-2 [&>div]:pb-1">
+            <AttachmentTray files={att.files} onRemove={att.removeFile} onRetry={att.retryFile} />
+          </div>
+          {dictating ? (
+            <div className="pt-3 [&>div]:pb-1.5">
+              <DictationBar dictation={dictation} />
+            </div>
+          ) : (
+            <div className="flex items-end gap-1 p-1.5">
+              <AttachButton onFiles={att.addFiles} />
+              <textarea
+                ref={fieldRef}
+                value={input}
+                rows={1}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  grow(e.target);
+                }}
+                onPaste={att.handlePaste}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    e.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                placeholder="Posez une question à Yélé…"
+                aria-label="Votre question à Yélé"
+                className="max-h-[132px] min-h-[44px] w-full resize-none bg-transparent px-1 py-2.5 text-base leading-6 text-ink outline-none placeholder:text-ink-3 sm:text-[15px]"
+              />
+              {/* ONE round button: the microphone while the message is empty, then Envoyer. */}
+              {canDictate && !canSend && !isStreaming ? (
+                <button
+                  type="button"
+                  onClick={() => void dictation.start()}
+                  disabled={onCall}
+                  aria-label={onCall ? "Pendant l’appel, écrivez au clavier" : "Dicter un message"}
+                  className="grid size-11 shrink-0 place-items-center rounded-full bg-brand text-on-brand hover:opacity-90 disabled:opacity-40"
+                >
+                  <Mic className="size-[18px]" />
+                </button>
+              ) : (
+                <button type="submit" disabled={!canSend} aria-label="Envoyer" className="grid size-11 shrink-0 place-items-center rounded-full bg-brand text-on-brand hover:opacity-90 disabled:pointer-events-none disabled:opacity-40">
+                  {att.uploading ? <Loader2 className="size-[18px] animate-spin" /> : <Send className="size-[18px]" />}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </form>
     </div>
@@ -336,12 +396,37 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
 
 // Yélé's bubble, on every screen of the app — only where her profile is installed on the user's
 // instance: without it there is no bubble, never a fallback on another profile.
+// On a phone, an expert's page has no free corner (the composer fills the width, centred or docked):
+// Yélé sits in the top bar instead, and this event opens her.
+const OPEN_EVENT = "yelema:open-yele";
+
+export function YeleTopButton() {
+  const { companion } = useExpertsContext();
+  const onExpert = usePathname()?.startsWith("/experts/") ?? false;
+  if (!companion || !onExpert) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => window.dispatchEvent(new Event(OPEN_EVENT))}
+      aria-label="Ouvrir Yélé, accompagnement"
+      className="grid size-11 shrink-0 place-items-center rounded-full sm:hidden"
+    >
+      <Portrait />
+    </button>
+  );
+}
+
 export function YeleBubble() {
   const { companion } = useExpertsContext();
   const [open, setOpen] = useState(false);
   // An expert's workspace keeps its chat composer at the bottom: the bubble sits clear above it (and
-  // so above a folded call too), never on the composer's Envoyer button.
+  // so above a folded call too), never on the composer's Envoyer button. On a phone it moves to the top bar.
   const raised = usePathname()?.startsWith("/experts/") ?? false;
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener(OPEN_EVENT, show);
+    return () => window.removeEventListener(OPEN_EVENT, show);
+  }, []);
   // A folded call floats in the same corner on a computer (on a phone it is a strip at the top).
   const { folded } = useCallState();
   if (!companion) return null;
@@ -352,7 +437,7 @@ export function YeleBubble() {
         onClick={() => setOpen((o) => !o)}
         aria-label={open ? "Fermer Yélé" : "Ouvrir Yélé, accompagnement"}
         aria-expanded={open}
-        className={cn("fixed right-6 z-50 flex items-center gap-2.5 rounded-full border border-line bg-surface p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.16)] transition-transform hover:scale-105", raised ? "bottom-36" : cn("bottom-6", folded && "sm:bottom-32"), open && "hidden")}
+        className={cn("fixed right-6 z-50 flex items-center gap-2.5 rounded-full border border-line bg-surface p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.16)] transition-transform hover:scale-105", raised ? "max-sm:hidden bottom-36" : cn("bottom-6", folded && "sm:bottom-32"), open && "hidden")}
       >
         <Portrait animated={open} />
         {!open && <span className="hidden pr-3 text-xs font-semibold text-ink sm:inline">Yélé</span>}

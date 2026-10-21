@@ -426,7 +426,7 @@ export const backoffice = {
   addLlmAccount: (token: string, scope: string, draft: AccountDraft) =>
     call<{ ok: true; state: "pending" | "applied"; account: LlmAccount }>(`/app/llm/accounts?scope=${encodeURIComponent(scope)}`, { method: "POST", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS * 2 }),
   llmAccount: (token: string, id: string) => call<LlmAccount>(`/app/llm/accounts/${id}`, { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
-  patchLlmAccount: (token: string, id: string, patch: { label?: string; secret?: string }) =>
+  patchLlmAccount: (token: string, id: string, patch: { label?: string; secret?: string; shareable?: boolean }) =>
     call<LlmWritten>(`/app/llm/accounts/${id}`, { method: "PATCH", token, body: patch, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   removeLlmAccount: (token: string, id: string) => call<LlmWritten>(`/app/llm/accounts/${id}`, { method: "DELETE", token }),
   llmModels: (token: string, scope: string, provider?: string) =>
