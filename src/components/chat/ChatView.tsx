@@ -133,6 +133,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
       agentName={agentName}
       onTriggerTableau={handleTriggerTableau}
       isStreaming={isStreaming}
+      messages={messages}
     >
     <div className="flex h-full min-h-0">
     <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col wide:min-w-[400px]" {...att.dragHandlers}>

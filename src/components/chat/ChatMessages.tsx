@@ -133,15 +133,22 @@ export function ChatMessages({
     if (!target) return;
     const href = target.getAttribute("href") || "";
     const text = (target.textContent || "").toLowerCase();
-    if (
-      href.includes("yelema-dashboards.onrender.com") ||
+    const isDashboardLink =
+      href.includes("onrender.com") ||
+      href.includes("/share/frame/") ||
       text.includes("ouvrir le tableau de bord") ||
-      (href.includes("/modeles/") && text.includes("tableau"))
-    ) {
+      text.includes("tableau de bord") ||
+      (href.includes("/modeles/") && text.includes("tableau"));
+
+    if (isDashboardLink) {
       e.preventDefault();
       e.stopPropagation();
+      if (href && (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("/"))) {
+        dashboard?.openDashboard(href);
+      } else {
+        dashboard?.openDashboard();
+      }
       void dashboard?.refresh();
-      dashboard?.openDashboard();
     }
   };
 

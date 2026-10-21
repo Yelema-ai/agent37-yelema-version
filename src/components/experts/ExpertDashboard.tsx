@@ -241,7 +241,8 @@ function DashboardEmptyState({
 }
 
 export function DashboardPanel() {
-  const { panelOpen, setPanelOpen, setDialogOpen, agentName, activeUrl, data, activeTab, isGenerating, triggerGeneration } = useDashboard();
+  const { panelOpen, setPanelOpen, setDialogOpen, agentName, activeUrl, embedUrl, data, activeTab, isGenerating, triggerGeneration } = useDashboard();
+  const frameSrc = embedUrl || activeUrl;
   if (!panelOpen) return null;
 
   const title =
@@ -265,9 +266,9 @@ export function DashboardPanel() {
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background p-2 sm:p-3">
-        {activeUrl ? (
+        {frameSrc ? (
           <iframe
-            src={activeUrl}
+            src={frameSrc}
             title={title}
             className="h-full w-full rounded-xl border border-line bg-white shadow-sm"
             sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
@@ -285,7 +286,8 @@ export function DashboardPanel() {
 }
 
 export function DashboardDialog() {
-  const { dialogOpen, setDialogOpen, agentName, activeUrl, data, activeTab, isGenerating, triggerGeneration } = useDashboard();
+  const { dialogOpen, setDialogOpen, agentName, activeUrl, embedUrl, data, activeTab, isGenerating, triggerGeneration } = useDashboard();
+  const frameSrc = embedUrl || activeUrl;
 
   const title =
     data?.isDjeneba && activeTab === "equipe"
@@ -309,9 +311,9 @@ export function DashboardDialog() {
         </DialogHeader>
 
         <div className="relative flex-1 min-h-0 bg-background p-2 sm:p-4">
-          {activeUrl ? (
+          {frameSrc ? (
             <iframe
-              src={activeUrl}
+              src={frameSrc}
               title={title}
               className="h-full w-full rounded-xl border border-line bg-white shadow-sm"
               sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
