@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { toast } from "sonner";
-import { AudioLines, ChevronRight, FolderOpen, Mail, MessageSquare, MoreHorizontal, Pencil, Repeat, Phone, Wrench } from "lucide-react";
+import { AudioLines, ChevronDown, ChevronRight, FolderOpen, Mail, MessageSquare, MoreHorizontal, Pencil, Repeat, Phone, Wrench } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { agentTabPath, parseAgentRoute, type AgentTab } from "@/lib/expert-tabs";
 import { useWorkspace } from "@/components/WorkspaceProvider";
@@ -67,6 +67,22 @@ export function AgentWorkspace({
 }) {
   const pathname = usePathname();
   const railOpen = useRailOpen();
+  // A small arrow on Discussion shows or hides « Conversations » under it, folded until asked for
+  // (unfolded when the column is already open), then remembered per browser.
+  const [discussionOpen, setDiscussionOpen] = useState(false);
+  useEffect(() => {
+    try {
+      const kept = localStorage.getItem("yelema.discussion-unfolded");
+      setDiscussionOpen(kept ? kept === "1" : localStorage.getItem("yelema.conversations-open") === "1");
+    } catch {}
+  }, []);
+  const toggleDiscussion = () =>
+    setDiscussionOpen((o) => {
+      try {
+        localStorage.setItem("yelema.discussion-unfolded", o ? "0" : "1");
+      } catch {}
+      return !o;
+    });
   const { setCurrentId } = useWorkspace();
 
   // Deep-linking to an agent scopes the WorkspaceProvider to its workspace, so the fleet/switcher
@@ -228,7 +244,23 @@ export function AgentWorkspace({
               const Icon = t.icon;
               const isActive = currentTab === t.id;
               return [
-                <button
+                t.id === "chat" ? (
+                  <div key={t.id} className={cn("flex min-h-10 items-center rounded-[11px] transition-colors", isActive ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft")}>
+                    <button type="button" onClick={() => selectTab(t.id)} aria-current={isActive ? "page" : undefined} className="flex min-h-10 flex-1 items-center gap-2.5 px-2.5 text-left text-sm font-semibold">
+                      <Icon className="h-[18px] w-[18px]" />
+                      {t.label}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={toggleDiscussion}
+                      aria-expanded={discussionOpen}
+                      aria-label={discussionOpen ? "Replier les conversations" : "Déplier les conversations"}
+                      className="mr-1 grid size-9 place-items-center rounded-lg text-ink-3 hover:bg-soft-2 hover:text-ink"
+                    >
+                      <ChevronDown className={cn("size-4 transition-transform", discussionOpen && "rotate-180")} />
+                    </button>
+                  </div>
+                ) : <button
                   key={t.id}
                   type="button"
                   onClick={() => selectTab(t.id)}
@@ -243,7 +275,7 @@ export function AgentWorkspace({
                 </button>,
                 // Under Discussion, on a computer: opens and closes the column of conversations beside
                 // the chat (from another tab, it goes back to the chat with the column open).
-                t.id === "chat" ? (
+                t.id === "chat" && discussionOpen ? (
                   <button
                     key="conversations"
                     type="button"
