@@ -54,7 +54,9 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/login") ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/reset-password") ||
-    pathname.startsWith("/invite");
+    pathname.startsWith("/invite") ||
+    pathname.startsWith("/dashboards") ||
+    pathname.startsWith("/api/dashboards");
 
   if (!user && !isPublic) {
     if (pathname.startsWith("/api/")) {
@@ -103,7 +105,9 @@ function isPublicPath(pathname: string): boolean {
     pathname.startsWith("/reset-password") ||
     pathname.startsWith("/invite") ||
     pathname.startsWith("/espace-") ||
-    pathname.startsWith("/api/auth")
+    pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/dashboards") ||
+    pathname.startsWith("/api/dashboards")
   );
 }
 
