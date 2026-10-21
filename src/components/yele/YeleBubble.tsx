@@ -305,7 +305,7 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
             <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
               <div className={cn("max-w-[88%] rounded-2xl px-3.5 py-2.5 text-[14px] leading-relaxed", m.role === "user" ? "rounded-br-sm bg-brand text-on-brand" : "rounded-bl-sm border border-line bg-soft text-ink")}>
                 {m.role === "user" && m.attachments?.length ? <div className="mb-1.5"><MessageAttachments attachments={m.attachments} /></div> : null}
-                {m.role === "user" ? m.content && <p className="whitespace-pre-wrap">{m.content}</p> : <Markdown content={m.content} agentId={companion.agentId} />}
+                {m.role === "user" ? m.content && <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{m.content}</p> : <Markdown content={m.content} agentId={companion.agentId} />}
                 {m.role === "assistant" && !(isStreaming && m === shown[shown.length - 1]) && pagesIn(m.content, path).length > 0 && (
                   <div className="mt-2.5 flex flex-wrap gap-1.5">
                     {pagesIn(m.content, path).map((p) => (

@@ -177,7 +177,11 @@
   }
 }
 
-/* Assistant replies (Streamdown). Keep them readable at chat width. */
+/* Assistant replies (Streamdown). Keep them readable at chat width: a long link or word without a
+   space goes to the line instead of widening the reply past the column beside it. */
+.chat-markdown {
+  overflow-wrap: anywhere;
+}
 .chat-markdown p + p {
   margin-top: 0.6em;
 }

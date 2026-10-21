@@ -149,10 +149,10 @@ export function ChatMessages({
           const attachments = m.attachments ?? [];
           return (
             <div key={m.id} className="flex justify-end">
-              <div className="flex max-w-[85%] flex-col items-end gap-1.5">
+              <div className="flex min-w-0 max-w-[85%] flex-col items-end gap-1.5">
                 {attachments.length > 0 && <MessageAttachments attachments={attachments} />}
                 {m.content && (
-                  <div className={cn("whitespace-pre-wrap break-words rounded-[18px] rounded-br-md bg-brand px-4 py-2.5 text-[15px] text-on-brand", m.queued && "opacity-60", m.steered && !m.queued && "bg-brand/80")}>
+                  <div className={cn("max-w-full whitespace-pre-wrap rounded-[18px] rounded-br-md bg-brand [overflow-wrap:anywhere] px-4 py-2.5 text-[15px] text-on-brand", m.queued && "opacity-60", m.steered && !m.queued && "bg-brand/80")}>
                     {m.content}
                   </div>
                 )}
