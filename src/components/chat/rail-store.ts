@@ -2,14 +2,15 @@
 
 import { useSyncExternalStore } from "react";
 
-// Whether an expert's conversations column is open beside the chat on a computer. Closed until the
-// member opens it, then remembered per browser.
+// Whether an expert's conversations column is open beside the chat. Open by default on a computer
+// (mouse, wide screen), closed on a phone or tablet browser; the member's choice is then remembered.
 const KEY = "yelema.conversations-open";
 const listeners = new Set<() => void>();
 
 function read(): boolean {
   try {
-    return localStorage.getItem(KEY) === "1";
+    const kept = localStorage.getItem(KEY);
+    return kept ? kept === "1" : matchMedia("(pointer: fine) and (min-width: 1024px)").matches;
   } catch {
     return false;
   }
