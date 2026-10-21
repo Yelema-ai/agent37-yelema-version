@@ -37,6 +37,8 @@ export function ShareDashboardModal() {
   const {
     shareModalOpen,
     setShareModalOpen,
+    agentId,
+    profile,
     agentName,
     activeUrl,
     data,
@@ -124,17 +126,27 @@ export function ShareDashboardModal() {
     void persistSharing(mode, emails);
   };
 
-  // Le vrai lien direct du tableau de bord (généré par l'expert / hébergé sur Render)
-  const actualLink = activeUrl || "";
+  // Lien protégé via Mstudio : indispensable pour imposer la vérification d'authentification et de workspace
+  const platformProtectedLink =
+    typeof window !== "undefined" && agentId && profile
+      ? `${window.location.origin}/dashboards/view?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`
+      : "";
+
+  // En mode Workspace ou Emails spécifiques : obligatoirement le lien protégé Mstudio qui bloque les personnes non connectées
+  // En mode Public : le lien direct Render ou le lien plateforme
+  const effectiveShareLink =
+    accesMode === "public"
+      ? (activeUrl || platformProtectedLink)
+      : (platformProtectedLink || activeUrl || "");
 
   const handleCopy = () => {
-    if (!actualLink) {
+    if (!effectiveShareLink) {
       toast.error("Aucun lien de tableau de bord disponible.");
       return;
     }
-    navigator.clipboard.writeText(actualLink);
+    navigator.clipboard.writeText(effectiveShareLink);
     setCopied(true);
-    toast.success("Lien copié dans le presse-papier !");
+    toast.success("Lien sécurisé copié dans le presse-papier !");
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -223,7 +235,7 @@ export function ShareDashboardModal() {
 
   const mailtoSubject = encodeURIComponent(`Tableau de bord ${agentName} — Mstudio`);
   const mailtoBody = encodeURIComponent(
-    `Bonjour,\n\nVoici le lien d'accès au tableau de bord de ${agentName} :\n${actualLink}\n\nCordialement,\n${workspaceCtx?.userName || "L'équipe Mstudio"}`
+    `Bonjour,\n\nVoici le lien d'accès au tableau de bord de ${agentName} :\n${effectiveShareLink}\n\nCordialement,\n${workspaceCtx?.userName || "L'équipe Mstudio"}`
   );
   const mailtoHref = `mailto:${emailRecipients}?subject=${mailtoSubject}&body=${mailtoBody}`;
 
@@ -339,7 +351,7 @@ export function ShareDashboardModal() {
                 <div>
                   <p className="text-xs font-semibold text-ink">Espace Mstudio</p>
                   <p className="text-[11px] leading-snug text-ink-3">
-                    Réservé aux membres connectés du workspace Mstudio.
+                    Protégé : seuls les membres connectés Mstudio peuvent ouvrir.
                   </p>
                 </div>
               </button>
@@ -369,7 +381,7 @@ export function ShareDashboardModal() {
                 <div>
                   <p className="text-xs font-semibold text-ink">Personnes ciblées</p>
                   <p className="text-[11px] leading-snug text-ink-3">
-                    Sélection ciblée de membres ou adresses autorisées.
+                    Protégé : réservé aux adresses e-mails autorisées.
                   </p>
                 </div>
               </button>
@@ -380,7 +392,7 @@ export function ShareDashboardModal() {
               <div className="flex items-start gap-2.5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-xs text-blue-700 dark:text-blue-300">
                 <ShieldCheck className="size-4 shrink-0 mt-0.5 text-blue-500" />
                 <p className="leading-relaxed">
-                  <strong>Réservé à votre équipe :</strong> Tous les membres de votre espace Mstudio ({workspaceMembers.length} collaborateurs) peuvent consulter ce tableau. Les personnes extérieures recevront un refus d'accès.
+                  <strong>Accès sécurisé réservé au workspace :</strong> Seuls les membres authentifiés de votre espace de travail Mstudio ({workspaceMembers.length} collaborateurs) pourront ouvrir ce lien. Les personnes non connectées ou externes verront un écran de connexion ou un refus d'accès.
                 </p>
               </div>
             )}
@@ -599,17 +611,22 @@ export function ShareDashboardModal() {
           <div className="space-y-3 pt-3 border-t border-line">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3">
-                2. Lien direct d'accès
+                2. Lien de partage {accesMode !== "public" ? "sécurisé" : "direct"}
               </h3>
-              <p className="text-[11px] text-ink-3">
-                Lien généré par l'expert
-              </p>
+              <span className={cn(
+                "rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide",
+                accesMode === "public"
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+              )}>
+                {accesMode === "public" ? "Accès libre" : "Contrôle d'accès actif"}
+              </span>
             </div>
 
             <div className="flex items-center gap-2">
               <Input
                 readOnly
-                value={actualLink || "Aucun tableau de bord généré pour le moment"}
+                value={effectiveShareLink || "Aucun tableau de bord généré pour le moment"}
                 className="h-9 font-mono text-xs text-ink bg-soft/50 select-all"
               />
               <Button
@@ -617,7 +634,7 @@ export function ShareDashboardModal() {
                 variant="outline"
                 size="sm"
                 onClick={handleCopy}
-                disabled={!actualLink}
+                disabled={!effectiveShareLink}
                 className="h-9 px-3 text-xs gap-1.5 shrink-0"
               >
                 {copied ? (
@@ -633,18 +650,24 @@ export function ShareDashboardModal() {
                 )}
               </Button>
 
-              {actualLink && (
+              {effectiveShareLink && (
                 <a
-                  href={actualLink}
+                  href={effectiveShareLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-card text-ink transition-colors hover:bg-soft shrink-0"
-                  title="Ouvrir dans un nouvel onglet"
+                  title="Ouvrir dans un nouvel onglet pour tester"
                 >
                   <ExternalLink className="size-3.5" />
                 </a>
               )}
             </div>
+
+            {accesMode !== "public" && (
+              <p className="text-[11px] text-ink-3 leading-relaxed">
+                🛡️ <strong>Protection active :</strong> Ce lien passe par la plateforme Mstudio. Si une personne non connectée ou non autorisée tente d'ouvrir ce lien, l'accès lui sera bloqué avec un écran de connexion.
+              </p>
+            )}
 
             {/* Bouton Partager par e-mail avec affichage clair des destinataires */}
             <div className="rounded-xl border border-line bg-card p-3 space-y-2">
@@ -659,7 +682,7 @@ export function ShareDashboardModal() {
                   href={mailtoHref}
                   className={cn(
                     "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-medium text-white transition-colors hover:bg-brand/90 shrink-0",
-                    !actualLink && "pointer-events-none opacity-50"
+                    !effectiveShareLink && "pointer-events-none opacity-50"
                   )}
                   title="Ouvrir votre logiciel de messagerie avec les destinataires pré-remplis"
                 >
