@@ -131,10 +131,34 @@ const REGIONS = new Intl.DisplayNames(["fr"], { type: "region" });
 export const countryName = (code: string): string => REGIONS.of(code) ?? code;
 export const countryFlag = (code: string): string => String.fromCodePoint(...[...code.toUpperCase()].map((c) => 0x1f1a5 + c.charCodeAt(0)));
 
-/** The voice a call takes: the one chosen for the language, else its default, else its first. */
-export function chosenVoice(voices: VoiceOption[], prefs: VoicePrefs): VoiceOption | null {
+// The French voices Aethex added for Yelema on 20/10, spread across the Experts so they do not all
+// speak alike: a woman's voice for an Experte, a man's for an Expert (Leslie, 21/10). Louise is left
+// out (a noise in its first seconds). Matched on the name the voice list gives.
+const SPREAD: Record<"elle" | "il", string[]> = { elle: ["Adèle", "Emma", "Céline"], il: ["Léo", "Raphaël", "Clément"] };
+const plain = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+
+/** The voice an Expert takes by default in French: always the same one for the same Expert; null when unknown. */
+export type VoiceExpert = { key: string; pronoun: "elle" | "il" | null; /** Its place among the catalogue's Experts of the same gender: they take the voices in turn. */ rank?: number };
+
+export function expertDefaultVoice(voices: VoiceOption[], language: VoiceLanguage, expert?: VoiceExpert): VoiceOption | null {
+  if (language !== "fr" || !expert?.pronoun) return null;
+  const pool = SPREAD[expert.pronoun].flatMap((name) => voices.filter((v) => v.language === "fr" && plain(v.label) === plain(name)).slice(0, 1));
+  if (!pool.length) return null;
+  let h = expert.rank ?? 0;
+  if (expert.rank === undefined) for (const c of expert.key) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return pool[h % pool.length];
+}
+
+/** The voice a call takes: the one chosen for the language, else the Expert's own default, else the language's, else its first. */
+export function chosenVoice(voices: VoiceOption[], prefs: VoicePrefs, expert?: VoiceExpert): VoiceOption | null {
   const ofLanguage = voices.filter((v) => v.language === prefs.language);
-  return ofLanguage.find((v) => v.key === prefs.voices[prefs.language]) ?? ofLanguage.find((v) => v.default) ?? ofLanguage[0] ?? null;
+  return (
+    ofLanguage.find((v) => v.key === prefs.voices[prefs.language]) ??
+    expertDefaultVoice(voices, prefs.language, expert) ??
+    ofLanguage.find((v) => v.default) ??
+    ofLanguage[0] ??
+    null
+  );
 }
 
 // ---- Call history -----------------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { HALO_RGB, haloOf } from "@/lib/call-turns";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { chosenVoice, type VoiceOption } from "@/lib/voice";
+import { useVoiceExpert } from "./useVoiceExpert";
 import { loadVoicePrefs } from "@/lib/voice-prefs";
 import { cn } from "@/lib/utils";
 import { CallView, inCallPhase } from "./CallDialog";
@@ -75,6 +76,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const voicesRef = useRef<VoiceOption[]>([]);
   const router = useRouter();
   const { experts } = useExpertsContext();
+  const voiceExpert = useVoiceExpert();
   const inCall = inCallPhase(live.phase);
   useRingback(view !== null && live.phase === "connecting");
 
@@ -83,10 +85,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       const demoOn = demoCallEnabled();
       setUseDemo(demoOn);
       const prefs = await loadVoicePrefs(who.key);
-      voice.current = chosenVoice(voicesRef.current, prefs);
+      voice.current = chosenVoice(voicesRef.current, prefs, voiceExpert(who.key));
       (demoOn ? demo : real).start({ expert: who.key, language: prefs.language, voice: voice.current?.key ?? null });
     },
-    [demo, real]
+    [demo, real, voiceExpert]
   );
 
   const call = useCallback<CallContextValue["call"]>(

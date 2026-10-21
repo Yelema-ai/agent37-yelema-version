@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Loader2, Server } from "lucide-react";
 import { channelBrand } from "@/components/channels/BrandIcons";
 import { apiFetch } from "@/lib/api";
 import type { ChannelsResponse } from "@/lib/channels";
@@ -45,6 +45,23 @@ function Stack({ items, max = 4 }: { items: OverviewItem[]; max?: number }) {
       {more > 0 && (
         <span className="-ml-2 grid h-8 min-w-8 place-items-center rounded-full bg-soft-2 px-1.5 text-[12px] font-bold text-ink-2 ring-2 ring-surface">+{more}</span>
       )}
+    </span>
+  );
+}
+
+/** MCP servers have no logo of their own: each by its name, in a pill (an initial alone reads as nothing). */
+function Pills({ items, max = 3 }: { items: OverviewItem[]; max?: number }) {
+  const shown = items.slice(0, max);
+  const more = items.length - shown.length;
+  return (
+    <span className="flex flex-wrap gap-1.5">
+      {shown.map((i) => (
+        <span key={i.key} className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink-2">
+          <Server className="size-3.5 shrink-0 text-brand" />
+          <span className="truncate">{i.name}</span>
+        </span>
+      ))}
+      {more > 0 && <span className="inline-flex h-8 items-center rounded-full bg-soft-2 px-2.5 text-[12px] font-bold text-ink-2">+{more}</span>}
     </span>
   );
 }
@@ -108,7 +125,7 @@ export function IntegrationsOverview({ agentId }: { agentId: string }) {
                 <span className="font-display text-[28px] font-bold text-ink">{c.value}</span>
                 {c.note && <span className="text-xs text-ink-3">{c.note}</span>}
               </span>
-              <span className="mt-auto pt-3 sm:min-h-[52px]">{on.length ? <Stack items={on} /> : <span className="text-[13px] text-ink-3">Aucun</span>}</span>
+              <span className="mt-auto pt-3 sm:min-h-[52px]">{on.length ? c.key === "mcp" ? <Pills items={on} /> : <Stack items={on} /> : <span className="text-[13px] text-ink-3">Aucun</span>}</span>
             </Link>
           );
         })}

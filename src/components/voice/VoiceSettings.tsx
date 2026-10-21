@@ -10,6 +10,7 @@ import {
   filterVoices,
   voiceFacets,
   VOICE_LANGUAGES,
+  type VoiceExpert,
   type VoiceFilter,
   type VoiceOption,
   type VoicePrefs,
@@ -19,9 +20,20 @@ const ALL: VoiceFilter = { gender: null, country: null };
 const GENDER_LABEL = { female: "Femme", male: "Homme", neutral: "Neutre" } as const;
 
 /** Language and voice of the user's calls, chosen ahead so "Appeler" calls at once. */
-export function VoiceSettings({ voices, prefs, onChange }: { voices: VoiceOption[]; prefs: VoicePrefs; onChange: (prefs: VoicePrefs) => void }) {
+export function VoiceSettings({
+  voices,
+  prefs,
+  onChange,
+  expert,
+}: {
+  voices: VoiceOption[];
+  prefs: VoicePrefs;
+  onChange: (prefs: VoicePrefs) => void;
+  /** The Expert whose own default voice is shown chosen until another is picked. */
+  expert?: VoiceExpert;
+}) {
   const [filter, setFilter] = useState<VoiceFilter>(ALL);
-  const chosen = chosenVoice(voices, prefs);
+  const chosen = chosenVoice(voices, prefs, expert);
   const ofLanguage = voices.filter((v) => v.language === prefs.language);
   const facets = voiceFacets(ofLanguage, filter);
   return (

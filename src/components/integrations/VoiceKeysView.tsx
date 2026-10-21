@@ -76,8 +76,8 @@ export function VoiceKeysView() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Voix</h2>
-        <p className="mt-1 max-w-xl text-sm text-ink-3">Votre clé de transcription pour la dictée et les notes vocales (Telegram, WhatsApp…). Les appels vocaux ne changent pas.</p>
+        <h3 className="font-display text-[18px] font-bold tracking-tight text-ink">Clé de transcription</h3>
+        <p className="mt-1 max-w-xl text-sm text-ink-3">Pour la dictée et les notes vocales (Telegram, WhatsApp…). Les appels vocaux ne changent pas.</p>
       </div>
 
       {admin && data?.members && <ScopePicker members={data.members} value={scope} onChange={setScope} />}
