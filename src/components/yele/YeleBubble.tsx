@@ -14,6 +14,7 @@ import type { Companion } from "@/lib/companion";
 import { cn } from "@/lib/utils";
 
 type Shortcut = { label: string; desc: string; prompt: string; icon: LucideIcon };
+type PastSession = { session_id: string; title: string | null; last_active: number };
 
 const SHORTCUTS: Shortcut[] = [
   { label: "Recruter un Expert", desc: "Trouver le bon profil", prompt: "Je voudrais recruter un nouvel Expert.", icon: Users },
@@ -102,8 +103,8 @@ function Portrait({ animated = false }: { animated?: boolean }) {
 function Panel({ companion, raised, folded, onClose }: { companion: Companion; raised: boolean; folded: boolean; onClose: () => void }) {
   const [sessionId, setSessionId] = useState<string | null>(() => readSession(companion));
   const [input, setInput] = useState("");
-  // « Anciennes discussions »: Yélé's past discussions, read from the instance.
-  const [past, setPast] = useState<{ session_id: string; title: string | null; last_active: number }[] | null>(null);
+  // « Anciennes discussions »: Yélé's past discussions, read from the instance (null = list closed).
+  const [past, setPast] = useState<PastSession[] | "loading" | null>(null);
   const path = usePathname() ?? "";
   const shortcuts = [...pageShortcuts(path), ...SHORTCUTS];
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -127,6 +128,12 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, isStreaming]);
 
+  // A remembered discussion that no longer opens (deleted, instance reset) would leave the panel on an
+  // error with no way out: start a new one instead.
+  useEffect(() => {
+    if (error && sessionId && messages.length === 0 && !isStreaming) restart();
+  }, [error]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function submit(e: FormEvent) {
     e.preventDefault();
     if (!input.trim() || isStreaming) return;
@@ -142,12 +149,11 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
   }
 
   function openPast() {
-    setPast([]);
-    apiFetch<{ sessions: { session_id: string; title: string | null; last_active: number }[] }>(
-      `/api/agents/${companion.agentId}/chat/sessions${profileQuery(companion.profileId)}`
-    )
-      .then((r) => setPast([...r.sessions].sort((a, b) => b.last_active - a.last_active)))
-      .catch(() => setPast(null));
+    setPast("loading");
+    // A list closed while it loads stays closed.
+    apiFetch<{ sessions: PastSession[] }>(`/api/agents/${companion.agentId}/chat/sessions${profileQuery(companion.profileId)}`)
+      .then((r) => setPast((p) => (p === "loading" ? [...r.sessions].sort((a, b) => b.last_active - a.last_active) : p)))
+      .catch(() => setPast((p) => (p === "loading" ? null : p)));
   }
 
   function reopen(id: string) {
@@ -198,10 +204,12 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
             <button type="button" onClick={() => setPast(null)} className="flex min-h-10 items-center gap-1 text-[13px] font-semibold text-ink-2 hover:text-ink">
               <ChevronLeft className="size-4" /> Anciennes discussions
             </button>
-            {past.length === 0 ? (
+            {past === "loading" ? (
               <p className="flex items-center gap-2 text-[13px] text-ink-3">
                 <Loader2 className="size-3.5 animate-spin" /> Chargement…
               </p>
+            ) : past.length === 0 ? (
+              <p className="text-[13px] text-ink-3">Aucune discussion pour l’instant.</p>
             ) : (
               <nav className="flex flex-col gap-0.5">
                 {past.map((p) => (
