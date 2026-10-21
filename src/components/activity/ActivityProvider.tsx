@@ -61,11 +61,13 @@ export interface ActivityNotifications {
   /** Opens the conversation (a routine run is one) and reads it. */
   open: (item: NotificationItem) => void;
   markAllRead: () => void;
+  /** Reads these conversations only (« Tout marquer comme lu » of one expert's list). */
+  markRead: (keys: string[]) => void;
 }
 
 const ActionsContext = createContext<ActivityActions | null>(null);
 const StateContext = createContext<ActivityState>(EMPTY_ACTIVITY);
-const NotificationsContext = createContext<ActivityNotifications>({ items: [], open: () => undefined, markAllRead: () => undefined });
+const NotificationsContext = createContext<ActivityNotifications>({ items: [], open: () => undefined, markAllRead: () => undefined, markRead: () => undefined });
 
 export const useActivityActions = () => useContext(ActionsContext);
 export const useActivityState = () => useContext(StateContext);
@@ -210,6 +212,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
         openConversation(item.agentId, item.profile, item.sessionId);
       },
       markAllRead: () => commit(markRead(stateRef.current, null)),
+      markRead: (keys) => commit(markRead(stateRef.current, keys)),
     }),
     [state, commit, openConversation]
   );
