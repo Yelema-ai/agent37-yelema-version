@@ -100,11 +100,13 @@ function Portrait({ animated = false }: { animated?: boolean }) {
   );
 }
 
-function Panel({ companion, raised, folded, onClose }: { companion: Companion; raised: boolean; folded: boolean; onClose: () => void }) {
+function Panel({ companion, folded, onClose }: { companion: Companion; folded: boolean; onClose: () => void }) {
   const [sessionId, setSessionId] = useState<string | null>(() => readSession(companion));
   const [input, setInput] = useState("");
   // « Anciennes discussions »: Yélé's past discussions, read from the instance (null = list closed).
   const [past, setPast] = useState<PastSession[] | "loading" | null>(null);
+  // The last discussions, offered on Yélé's home view so they are found without looking for them.
+  const [recent, setRecent] = useState<PastSession[]>([]);
   const path = usePathname() ?? "";
   const shortcuts = [...pageShortcuts(path), ...SHORTCUTS];
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -123,6 +125,12 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
       keepSession(companion, id);
     },
   });
+
+  useEffect(() => {
+    apiFetch<{ sessions: PastSession[] }>(`/api/agents/${companion.agentId}/chat/sessions${profileQuery(companion.profileId)}`)
+      .then((r) => setRecent([...r.sessions].sort((a, b) => b.last_active - a.last_active)))
+      .catch(() => setRecent([]));
+  }, [companion.agentId, companion.profileId, sessionId]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -173,7 +181,8 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
     <div role="dialog" aria-label="Yélé, accompagnement" className={cn(
         // Full screen on a phone (like a messaging app), a floating card from the tablet up.
         "fixed inset-0 z-[60] flex h-dvh flex-col overflow-hidden bg-surface pt-[env(safe-area-inset-top)] sm:inset-auto sm:right-6 sm:z-50 sm:h-[580px] sm:w-[420px] sm:rounded-[26px] sm:border sm:border-line sm:pt-0 sm:shadow-[0_20px_50px_rgba(0,0,0,0.22)]",
-        raised ? "sm:bottom-52 sm:max-h-[calc(100dvh-15rem)]" : cn("sm:bottom-20 sm:max-h-[80vh]", folded && "sm:bottom-48")
+        // Low in its corner like any chat, over the bubble it replaces (a folded call keeps its place).
+        folded ? "sm:bottom-48 sm:max-h-[calc(100dvh-14rem)]" : "sm:bottom-6 sm:max-h-[calc(100dvh-3rem)]"
       )}>
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <div className="flex items-center gap-3">
@@ -184,8 +193,8 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={() => (past ? setPast(null) : openPast())} title="Anciennes discussions" aria-label="Anciennes discussions" aria-pressed={!!past} className={cn("grid size-10 place-items-center rounded-lg hover:bg-soft hover:text-ink", past ? "bg-soft text-ink" : "text-ink-3")}>
-            <History className="size-4" />
+          <button type="button" onClick={() => (past ? setPast(null) : openPast())} title="Anciennes discussions" aria-label="Anciennes discussions" aria-pressed={!!past} className={cn("flex h-10 items-center gap-1.5 rounded-lg px-2 text-[13px] font-semibold hover:bg-soft hover:text-ink", past ? "bg-soft text-ink" : "text-ink-2")}>
+            <History className="size-4" /> Historique
           </button>
           {(shown.length > 0 || past) && (
             <button type="button" onClick={restart} title="Nouvelle discussion" aria-label="Nouvelle discussion" className="grid size-10 place-items-center rounded-lg text-ink-3 hover:bg-soft hover:text-ink">
@@ -229,6 +238,25 @@ function Panel({ companion, raised, folded, onClose }: { companion: Companion; r
                 Bonjour, je suis <span className="font-bold text-brand">Yélé</span>. Je vous aide à tirer le meilleur de vos Experts, à brancher vos outils et à régler un blocage.
               </p>
             </div>
+            {recent.length > 0 && (
+              <div>
+                <p className="px-1 pb-1 text-[12px] font-bold uppercase tracking-[0.05em] text-ink-3">Reprendre une discussion</p>
+                <nav className="flex flex-col gap-0.5">
+                  {recent.slice(0, 3).map((p) => (
+                    <button key={p.session_id} type="button" onClick={() => reopen(p.session_id)} className="flex min-h-11 items-center gap-2 rounded-xl px-3 text-left text-[14px] text-ink-2 hover:bg-soft">
+                      <History className="size-4 shrink-0 text-ink-3" />
+                      <span className="min-w-0 flex-1 truncate">{p.title || "Discussion avec Yélé"}</span>
+                      <span className="shrink-0 text-[12px] tabular-nums text-ink-3">{shortWhen(p.last_active)}</span>
+                    </button>
+                  ))}
+                </nav>
+                {recent.length > 3 && (
+                  <button type="button" onClick={openPast} className="mt-0.5 min-h-10 px-3 text-[13px] font-semibold text-brand-ink hover:underline">
+                    Tout l’historique ({recent.length})
+                  </button>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               {shortcuts.map(({ label, desc, prompt, icon: Icon }) => (
                 <button key={label} type="button" onClick={() => send(prompt)} disabled={isStreaming} className="flex flex-col items-start gap-1 rounded-xl border border-line bg-surface p-3 text-left transition-colors hover:border-brand/30 hover:bg-soft disabled:opacity-50">
@@ -324,12 +352,12 @@ export function YeleBubble() {
         onClick={() => setOpen((o) => !o)}
         aria-label={open ? "Fermer Yélé" : "Ouvrir Yélé, accompagnement"}
         aria-expanded={open}
-        className={cn("fixed right-6 z-50 flex items-center gap-2.5 rounded-full border border-line bg-surface p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.16)] transition-transform hover:scale-105", raised ? "bottom-36" : cn("bottom-6", folded && "sm:bottom-32"), open && "ring-2 ring-brand/50")}
+        className={cn("fixed right-6 z-50 flex items-center gap-2.5 rounded-full border border-line bg-surface p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.16)] transition-transform hover:scale-105", raised ? "bottom-36" : cn("bottom-6", folded && "sm:bottom-32"), open && "hidden")}
       >
         <Portrait animated={open} />
         {!open && <span className="hidden pr-3 text-xs font-semibold text-ink sm:inline">Yélé</span>}
       </button>
-      {open && <Panel key={companion.agentId} companion={companion} raised={raised} folded={folded} onClose={() => setOpen(false)} />}
+      {open && <Panel key={companion.agentId} companion={companion} folded={folded} onClose={() => setOpen(false)} />}
     </>
   );
 }
