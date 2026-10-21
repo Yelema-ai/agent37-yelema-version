@@ -67,22 +67,25 @@ export function AgentWorkspace({
 }) {
   const pathname = usePathname();
   const railOpen = useRailOpen();
-  // A small arrow on Discussion shows or hides « Conversations » under it, folded until asked for
-  // (unfolded when the column is already open), then remembered per browser.
-  const [discussionOpen, setDiscussionOpen] = useState(false);
+  // A small arrow on Discussion shows or hides « Conversations » under it. Until the member chooses,
+  // it follows the column (open by default on a computer); folding it also closes the column, which
+  // would otherwise stay open with nothing left to close it. The choice is remembered per browser.
+  const [discussionKept, setDiscussionKept] = useState<boolean | null>(null);
   useEffect(() => {
     try {
       const kept = localStorage.getItem("yelema.discussion-unfolded");
-      setDiscussionOpen(kept ? kept === "1" : localStorage.getItem("yelema.conversations-open") === "1");
+      if (kept) setDiscussionKept(kept === "1");
     } catch {}
   }, []);
-  const toggleDiscussion = () =>
-    setDiscussionOpen((o) => {
-      try {
-        localStorage.setItem("yelema.discussion-unfolded", o ? "0" : "1");
-      } catch {}
-      return !o;
-    });
+  const discussionOpen = discussionKept ?? railOpen;
+  const toggleDiscussion = () => {
+    const next = !discussionOpen;
+    try {
+      localStorage.setItem("yelema.discussion-unfolded", next ? "1" : "0");
+    } catch {}
+    setDiscussionKept(next);
+    if (!next) setRailOpen(false);
+  };
   const { setCurrentId } = useWorkspace();
 
   // Deep-linking to an agent scopes the WorkspaceProvider to its workspace, so the fleet/switcher
