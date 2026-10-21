@@ -129,7 +129,7 @@ export function ShareDashboardModal() {
   // Lien protégé via Mstudio : indispensable pour imposer la vérification d'authentification et de workspace
   const platformProtectedLink =
     typeof window !== "undefined" && agentId && profile
-      ? `${window.location.origin}/dashboards/view?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`
+      ? `${(process.env.NEXT_PUBLIC_SITE_URL || window.location.origin).replace(/\/$/, "")}/dashboards/view?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`
       : "";
 
   // En mode Workspace ou Emails spécifiques : obligatoirement le lien protégé Mstudio qui bloque les personnes non connectées
