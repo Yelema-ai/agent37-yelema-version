@@ -3,8 +3,9 @@
 import { useSafeDashboard } from "@/components/experts/DashboardProvider";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, CornerDownLeft, FileText, Image as ImageIcon, Loader2, PhoneCall, Repeat } from "lucide-react";
+import { ChevronDown, ChevronRight, ClipboardCheck, CornerDownLeft, FileText, Image as ImageIcon, Loader2, PhoneCall, Repeat } from "lucide-react";
 import { turnDocs, turnWindow } from "@/lib/drive-links";
+import { kanbanNotice } from "@/lib/kanban-notice";
 import { isRoutineRun, isSilentRun, routineRunText, SILENT_RUN_LABEL } from "@/lib/routines";
 import { isCallTranscript } from "@/lib/voice";
 import { cn } from "@/lib/utils";
@@ -151,6 +152,14 @@ export function ChatMessages({
           return (
             <p key={m.id} className="flex items-center justify-center gap-2 text-xs text-ink-3">
               <PhoneCall className="h-3.5 w-3.5" /> Transcription de l’appel transmise à l’expert
+            </p>
+          );
+        }
+        const notice = m.role === "user" ? kanbanNotice(m.content) : null;
+        if (notice) {
+          return (
+            <p key={m.id} className="flex items-center justify-center gap-2 text-center text-xs text-ink-3">
+              <ClipboardCheck className="h-3.5 w-3.5 shrink-0" /> {notice.who} {notice.verb} la tâche confiée : « {notice.title} »
             </p>
           );
         }
