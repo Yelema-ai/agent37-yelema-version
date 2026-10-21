@@ -39,11 +39,6 @@ describe("contrôles d’entrée de l’app (le back-office tient les vraies rè
     for (const bad of [null, {}, { provider: "Anthropic API" }, { provider: "x", secret: 1 }, { provider: "x", model: "x'; id" }, { provider: "x", secret: "s".repeat(5000) }]) assert.equal(parseAccountDraft(bad), null, JSON.stringify(bad));
     assert.deepEqual(parseAccountPatch({ label: " Perso " }), { label: "Perso" });
     for (const bad of [{}, { secret: "" }, { label: "x".repeat(61) }]) assert.equal(parseAccountPatch(bad), null);
-    // Partage : un drapeau, et l'ajout d'un compte partagé par son id, sans clé.
-    assert.deepEqual(parseAccountPatch({ shareable: true }), { shareable: true });
-    assert.equal(parseAccountPatch({ shareable: "oui" }), null);
-    assert.deepEqual(parseAccountDraft({ provider: "anthropic-oauth", reuse: "42" }), { provider: "anthropic-oauth", reuse: "42" });
-    assert.equal(parseAccountDraft({ provider: "anthropic-oauth", reuse: "../x" }), null);
   });
 
   it("ordre : groupes bornés, ids numériques, modèles à la forme attendue", () => {

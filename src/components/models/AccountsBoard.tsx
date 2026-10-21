@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import { CUSTOM_PROVIDER, type LlmLogin, type LlmProvider } from "@/lib/llm";
-import { layoutOf, moveItem, scopeParam, type InstanceScope, type LlmGroup, type LlmSetup, type SharedAccount } from "@/lib/llm-accounts";
+import { layoutOf, moveItem, scopeParam, type InstanceScope, type LlmGroup, type LlmSetup } from "@/lib/llm-accounts";
 import type { ModelGroup } from "@/lib/model-options";
 import { cn } from "@/lib/utils";
 import { AccountRow } from "./AccountRow";
@@ -43,7 +43,7 @@ const kindOf = (provider: string, isLogin: boolean) => (isLogin ? "Connexion" : 
 // Les comptes d'une instance, rangés par fournisseur, dans l'ordre où elle les essaie : tous les
 // comptes du premier fournisseur, puis ses modèles de secours, puis le fournisseur suivant, puis le
 // moteur Yelema. Glisser enregistre aussitôt le nouvel ordre ; une erreur le remet comme il était.
-export function AccountsBoard({ setup, scope, title, picker, scopeLabel, catalogue, logins, customEndpoints, shared, models, onChanged }: Catalogues & {
+export function AccountsBoard({ setup, scope, title, picker, scopeLabel, catalogue, logins, customEndpoints, models, onChanged }: Catalogues & {
   setup: LlmSetup;
   scope: InstanceScope;
   title: string;
@@ -51,8 +51,6 @@ export function AccountsBoard({ setup, scope, title, picker, scopeLabel, catalog
   picker?: React.ReactNode;
   scopeLabel: string;
   customEndpoints: boolean;
-  /** Les comptes que d'autres membres partagent avec l'entreprise. */
-  shared?: SharedAccount[];
   /** Les modèles par fournisseur ; null tant qu'ils ne sont pas lus. */
   models: ModelGroup[] | null;
   onChanged: () => Promise<void>;
@@ -152,7 +150,7 @@ export function AccountsBoard({ setup, scope, title, picker, scopeLabel, catalog
         </p>
       )}
 
-      <AddAccountDialog open={adding} scope={scope} scopeLabel={scopeLabel} catalogue={catalogue} logins={logins} customEndpoints={customEndpoints} shared={shared} onAdded={onChanged} onClose={() => setAdding(false)} />
+      <AddAccountDialog open={adding} scope={scope} scopeLabel={scopeLabel} catalogue={catalogue} logins={logins} customEndpoints={customEndpoints} onAdded={onChanged} onClose={() => setAdding(false)} />
     </section>
   );
 }

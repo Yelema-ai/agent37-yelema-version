@@ -23,18 +23,6 @@ export interface LlmAccount {
   login?: { verificationUrl: string; userCode: string; expiresAt: string };
   name?: string;
   baseUrl?: string;
-  /** Offered to the company's other members, who add it without its key; absent from an older back office. */
-  shareable?: boolean;
-}
-
-/** An account another member offers to the company: added to an instance without re-entering its key. */
-export interface SharedAccount {
-  id: string;
-  provider: string;
-  label: string;
-  hint: string;
-  /** Who offers it. */
-  owner: string;
 }
 
 /** A model on a given provider: what an expert, or every expert, runs on. */
@@ -68,8 +56,6 @@ export interface AccountDraft {
   label?: string;
   name?: string;
   baseUrl?: string;
-  /** A shared account to add as is: its key stays with the back office. */
-  reuse?: string;
 }
 
 export interface LayoutDraft {
@@ -114,25 +100,16 @@ export function parseAccountDraft(body: unknown): AccountDraft | null {
     const v = text(b[k], max);
     if (v) draft[k] = v;
   }
-  if (b.reuse !== undefined) {
-    if (!isAccountId(b.reuse)) return null;
-    draft.reuse = b.reuse;
-  }
   return draft;
 }
 
-export function parseAccountPatch(body: unknown): { label?: string; secret?: string; shareable?: boolean } | null {
+export function parseAccountPatch(body: unknown): { label?: string; secret?: string } | null {
   if (!body || typeof body !== "object") return null;
-  const { label, secret, shareable } = body as Record<string, unknown>;
+  const { label, secret } = body as Record<string, unknown>;
   if (label !== undefined && (typeof label !== "string" || label.length > 60)) return null;
   if (secret !== undefined && (typeof secret !== "string" || !secret.trim() || secret.length > 4200)) return null;
-  if (shareable !== undefined && typeof shareable !== "boolean") return null;
-  if (label === undefined && secret === undefined && shareable === undefined) return null;
-  return {
-    ...(typeof label === "string" ? { label: label.trim() } : {}),
-    ...(typeof secret === "string" ? { secret: secret.trim() } : {}),
-    ...(typeof shareable === "boolean" ? { shareable } : {}),
-  };
+  if (label === undefined && secret === undefined) return null;
+  return { ...(typeof label === "string" ? { label: label.trim() } : {}), ...(typeof secret === "string" ? { secret: secret.trim() } : {}) };
 }
 
 export function parseLayout(body: unknown): LayoutDraft | null {
