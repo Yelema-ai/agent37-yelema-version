@@ -58,18 +58,18 @@ export function ShareDashboardModal() {
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
 
-  // Recherche & Dropdown pour "Personnes ciblées"
-  const [searchQuery, setSearchQuery] = useState("");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  // Saisie directe d'e-mail & suggestions d'autocomplétion
+  const [emailInput, setEmailInput] = useState("");
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const inputContainerRef = useRef<HTMLDivElement>(null);
 
   // Synchroniser avec les données actuelles quand la modale s'ouvre
   useEffect(() => {
     if (shareModalOpen && data) {
       setAccesMode(data.acces || "public");
       setEmails(data.allowedEmails || []);
-      setSearchQuery("");
-      setDropdownOpen(false);
+      setEmailInput("");
+      setSuggestionsOpen(false);
       setSaveStatus("idle");
     }
   }, [shareModalOpen, data]);
@@ -92,18 +92,18 @@ export function ShareDashboardModal() {
       });
   }, [shareModalOpen, currentWorkspace?.id]);
 
-  // Fermer le dropdown lors d'un clic en dehors
+  // Fermer les suggestions lors d'un clic en dehors
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
+      if (inputContainerRef.current && !inputContainerRef.current.contains(event.target as Node)) {
+        setSuggestionsOpen(false);
       }
     }
-    if (dropdownOpen) {
+    if (suggestionsOpen) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [dropdownOpen]);
+  }, [suggestionsOpen]);
 
   // Enregistrement automatique et transparent en arrière-plan
   const persistSharing = async (mode: "public" | "workspace" | "emails", list: string[]) => {
@@ -148,31 +148,8 @@ export function ShareDashboardModal() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const toggleMemberEmail = (memberEmail: string) => {
-    const clean = memberEmail.toLowerCase().trim();
-    const updated = emails.includes(clean)
-      ? emails.filter((e) => e !== clean)
-      : [...emails, clean];
-    setEmails(updated);
-    void persistSharing(accesMode, updated);
-  };
-
-  const selectAllWorkspaceMembers = () => {
-    const memberEmails = workspaceMembers.map((m) => m.email.toLowerCase().trim());
-    const union = Array.from(new Set([...emails, ...memberEmails]));
-    setEmails(union);
-    void persistSharing(accesMode, union);
-  };
-
-  const deselectAllWorkspaceMembers = () => {
-    const memberEmails = new Set(workspaceMembers.map((m) => m.email.toLowerCase().trim()));
-    const remaining = emails.filter((e) => !memberEmails.has(e));
-    setEmails(remaining);
-    void persistSharing(accesMode, remaining);
-  };
-
-  const handleAddCustomEmail = (rawEmail: string) => {
-    const email = rawEmail.trim().toLowerCase();
+  const handleAddEmail = (rawEmail?: string) => {
+    const email = (rawEmail ?? emailInput).trim().toLowerCase();
     if (!email) return;
 
     if (!email.includes("@") || !email.includes(".")) {
@@ -181,33 +158,23 @@ export function ShareDashboardModal() {
     }
 
     if (emails.includes(email)) {
-      toast.info("Cette adresse est déjà sélectionnée.");
+      toast.info("Cette adresse est déjà dans la liste.");
+      setEmailInput("");
+      setSuggestionsOpen(false);
       return;
     }
 
     const updated = [...emails, email];
     setEmails(updated);
-    setSearchQuery("");
+    setEmailInput("");
+    setSuggestionsOpen(false);
     void persistSharing(accesMode, updated);
   };
 
-  const handleKeyDownSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDownEmail = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      const q = searchQuery.trim().toLowerCase();
-      if (!q) return;
-
-      const match = workspaceMembers.find(
-        (m) => m.email.toLowerCase().trim() === q || (m.name && m.name.toLowerCase().trim() === q)
-      );
-      if (match) {
-        toggleMemberEmail(match.email);
-        setSearchQuery("");
-      } else if (q.includes("@")) {
-        handleAddCustomEmail(q);
-      } else {
-        toast.error("Entrez une adresse e-mail complète ou choisissez un membre.");
-      }
+      handleAddEmail(emailInput);
     }
   };
 
@@ -216,6 +183,17 @@ export function ShareDashboardModal() {
     setEmails(updated);
     void persistSharing(accesMode, updated);
   };
+
+  // Suggestions d'autocomplétion des membres du workspace uniquement si une saisie est en cours
+  const memberSuggestions = emailInput.trim().length >= 1
+    ? workspaceMembers.filter((m) => {
+        const q = emailInput.toLowerCase().trim();
+        const notAlreadyAdded = !emails.includes(m.email.toLowerCase().trim());
+        const nameMatch = m.name ? m.name.toLowerCase().includes(q) : false;
+        const emailMatch = m.email.toLowerCase().includes(q);
+        return notAlreadyAdded && (nameMatch || emailMatch);
+      })
+    : [];
 
   // Calcul des destinataires pour l'envoi par email (mailto:)
   const emailRecipients = (() => {
@@ -236,20 +214,6 @@ export function ShareDashboardModal() {
     `Bonjour,\n\nVoici le lien d'accès au tableau de bord de ${agentName} :\n${effectiveShareLink}\n\nCordialement,\n${workspaceCtx?.userName || "L'équipe Mstudio"}`
   );
   const mailtoHref = `mailto:${emailRecipients}?subject=${mailtoSubject}&body=${mailtoBody}`;
-
-  // Filtrage des membres dans le dropdown
-  const filteredMembers = workspaceMembers.filter((m) => {
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) return true;
-    const nameMatch = m.name ? m.name.toLowerCase().includes(q) : false;
-    const emailMatch = m.email.toLowerCase().includes(q);
-    return nameMatch || emailMatch;
-  });
-
-  const isSearchQueryCustomEmail =
-    searchQuery.trim().includes("@") &&
-    searchQuery.trim().includes(".") &&
-    !workspaceMembers.some((m) => m.email.toLowerCase().trim() === searchQuery.trim().toLowerCase());
 
   return (
     <Dialog open={shareModalOpen} onOpenChange={setShareModalOpen}>
@@ -405,160 +369,91 @@ export function ShareDashboardModal() {
               </div>
             )}
 
-            {/* Sélecteur intelligent (Dropdown / Combobox) pour "Personnes ciblées" */}
+            {/* Sélecteur intelligent pour "Personnes ciblées" */}
             {accesMode === "emails" && (
               <div className="mt-3 space-y-3 rounded-xl border border-line bg-soft/40 p-4">
                 <div>
                   <label className="text-xs font-semibold text-ink block mb-1">
-                    Sélectionner les personnes autorisées
+                    Adresses e-mails autorisées
                   </label>
                   <p className="text-[11px] text-ink-3 mb-2">
-                    Recherchez parmi les membres du workspace ou saisissez une adresse externe.
+                    Saisissez les adresses e-mails (internes ou externes) autorisées à consulter le tableau.
                   </p>
                 </div>
 
-                {/* Combobox avec recherche & dropdown flottant */}
-                <div ref={dropdownRef} className="relative">
-                  <div className="relative flex items-center">
-                    <Search className="absolute left-3 size-3.5 text-ink-4 pointer-events-none" />
-                    <Input
-                      type="text"
-                      placeholder="Rechercher un membre par nom ou email (ex: Leslie, aude@mstudio.vc)..."
-                      value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value);
-                        setDropdownOpen(true);
-                      }}
-                      onFocus={() => setDropdownOpen(true)}
-                      onKeyDown={handleKeyDownSearch}
-                      className="h-9 pl-9 pr-8 text-xs bg-surface border-line"
-                    />
-                    <button
+                <div ref={inputContainerRef} className="relative">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Mail className="absolute left-3 size-3.5 text-ink-4 pointer-events-none" />
+                      <Input
+                        type="email"
+                        placeholder="Saisir une adresse e-mail (ex: contact@client.com)..."
+                        value={emailInput}
+                        onChange={(e) => {
+                          setEmailInput(e.target.value);
+                          setSuggestionsOpen(true);
+                        }}
+                        onFocus={() => {
+                          if (emailInput.trim().length >= 1) setSuggestionsOpen(true);
+                        }}
+                        onKeyDown={handleKeyDownEmail}
+                        className="h-9 pl-9 text-xs bg-surface border-line"
+                      />
+                    </div>
+
+                    <Button
                       type="button"
-                      onClick={() => setDropdownOpen(!dropdownOpen)}
-                      className="absolute right-2.5 text-ink-4 hover:text-ink"
-                      title="Afficher la liste"
+                      size="sm"
+                      onClick={() => handleAddEmail(emailInput)}
+                      disabled={!emailInput.trim()}
+                      className="h-9 px-3.5 text-xs bg-brand hover:bg-brand/90 text-white shrink-0 gap-1.5 font-medium shadow-xs"
                     >
-                      <ChevronDown className={cn("size-3.5 transition-transform", dropdownOpen && "rotate-180")} />
-                    </button>
+                      <Plus className="size-3.5" />
+                      <span>Ajouter</span>
+                    </Button>
                   </div>
 
-                  {/* Panneau déroulant (Dropdown) */}
-                  {dropdownOpen && (
+                  {/* Suggestions d'autocomplétion des membres du workspace lors de la saisie */}
+                  {suggestionsOpen && memberSuggestions.length > 0 && (
                     <div className="absolute top-full left-0 right-0 z-50 mt-1.5 overflow-hidden rounded-xl border border-line bg-surface shadow-xl animate-in fade-in-0 zoom-in-95">
-                      {/* Barre d'action rapide */}
-                      <div className="flex items-center justify-between border-b border-line bg-soft/60 px-3 py-1.5 text-[11px]">
-                        <span className="font-medium text-ink-3">
-                          {filteredMembers.length} membre{filteredMembers.length > 1 ? "s" : ""} Mstudio
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={selectAllWorkspaceMembers}
-                            className="font-medium text-brand hover:underline"
-                          >
-                            Tout cocher
-                          </button>
-                          <span className="text-ink-4">·</span>
-                          <button
-                            type="button"
-                            onClick={deselectAllWorkspaceMembers}
-                            className="text-ink-3 hover:underline"
-                          >
-                            Tout décocher
-                          </button>
-                        </div>
+                      <div className="border-b border-line bg-soft/60 px-3 py-1.5 text-[10.5px] font-medium text-ink-3">
+                        Membres de votre espace suggérés :
                       </div>
-
-                      {/* Option pour ajouter une adresse e-mail personnalisée si tapée */}
-                      {isSearchQueryCustomEmail && (
-                        <div
-                          onClick={() => handleAddCustomEmail(searchQuery)}
-                          className="flex items-center gap-2 border-b border-line bg-brand/5 px-3 py-2 text-xs font-medium text-brand cursor-pointer hover:bg-brand/10 transition-colors"
-                        >
-                          <Plus className="size-3.5" />
-                          <span>Ajouter l'invité externe : <strong>{searchQuery.trim()}</strong></span>
-                        </div>
-                      )}
-
-                      {/* Liste scrollable des membres */}
-                      <div className="max-h-56 overflow-y-auto divide-y divide-line/40">
-                        {loadingMembers ? (
-                          <div className="flex items-center justify-center py-6 text-xs text-ink-3">
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin text-brand" />
-                            Chargement des membres...
-                          </div>
-                        ) : filteredMembers.length === 0 && !isSearchQueryCustomEmail ? (
-                          <div className="p-4 text-center text-xs text-ink-3">
-                            Aucun membre ne correspond à « {searchQuery} »
-                            <p className="mt-1 text-[11px] text-ink-4">
-                              Appuyez sur Entrée pour ajouter une adresse e-mail externe.
-                            </p>
-                          </div>
-                        ) : (
-                          filteredMembers.map((m) => {
-                            const cleanEmail = m.email.toLowerCase().trim();
-                            const isSelected = emails.includes(cleanEmail);
-                            return (
-                              <div
-                                key={m.user_id || m.email}
-                                onClick={() => toggleMemberEmail(m.email)}
-                                className={cn(
-                                  "flex items-center justify-between px-3 py-2 cursor-pointer transition-colors text-xs select-none hover:bg-soft",
-                                  isSelected && "bg-brand/5 font-medium"
-                                )}
-                              >
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <div
-                                    className={cn(
-                                      "flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold uppercase",
-                                      isSelected ? "bg-brand text-white" : "bg-soft text-ink-2"
-                                    )}
-                                  >
-                                    {m.name ? m.name.charAt(0) : m.email.charAt(0)}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-ink truncate leading-tight">
-                                      {m.name || m.email}
-                                    </p>
-                                    <p className="text-[10.5px] text-ink-3 truncate leading-tight">
-                                      {m.email}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <span className="rounded bg-soft px-1.5 py-0.5 text-[9.5px] uppercase font-semibold text-ink-4">
-                                    {m.role || "membre"}
-                                  </span>
-                                  <div
-                                    className={cn(
-                                      "flex size-4 items-center justify-center rounded border transition-colors",
-                                      isSelected
-                                        ? "border-brand bg-brand text-white"
-                                        : "border-line bg-surface"
-                                    )}
-                                  >
-                                    {isSelected && <Check className="size-3" />}
-                                  </div>
-                                </div>
+                      <div className="max-h-48 overflow-y-auto divide-y divide-line/40">
+                        {memberSuggestions.map((m) => (
+                          <div
+                            key={m.user_id || m.email}
+                            onClick={() => handleAddEmail(m.email)}
+                            className="flex items-center justify-between px-3 py-2 cursor-pointer transition-colors text-xs hover:bg-soft"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand text-[10px] font-bold uppercase">
+                                {m.name ? m.name.charAt(0) : m.email.charAt(0)}
                               </div>
-                            );
-                          })
-                        )}
-                      </div>
-
-                      <div className="border-t border-line bg-soft/30 px-3 py-1.5 text-[10.5px] text-ink-4 text-center">
-                        Tapez un nom ou un email pour filtrer • Entrée pour ajouter une adresse externe
+                              <div className="min-w-0">
+                                <p className="text-ink truncate font-medium leading-tight">
+                                  {m.name || m.email}
+                                </p>
+                                <p className="text-[10.5px] text-ink-3 truncate leading-tight">
+                                  {m.email}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="rounded bg-soft px-1.5 py-0.5 text-[9.5px] font-medium text-ink-4 shrink-0">
+                              {m.role || "membre"}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Badges des personnes sélectionnées */}
+                {/* Badges des personnes ajoutées */}
                 {emails.length > 0 ? (
-                  <div className="pt-1">
-                    <div className="flex items-center justify-between mb-1.5 text-[11px] text-ink-3">
-                      <span>{emails.length} personne{emails.length > 1 ? "s" : ""} autorisée{emails.length > 1 ? "s" : ""} :</span>
+                  <div className="pt-1 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px] text-ink-3">
+                      <span>{emails.length} adresse{emails.length > 1 ? "s" : ""} autorisée{emails.length > 1 ? "s" : ""} :</span>
                       <button
                         type="button"
                         onClick={() => {
@@ -570,7 +465,7 @@ export function ShareDashboardModal() {
                         Tout effacer
                       </button>
                     </div>
-                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                    <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
                       {emails.map((e) => {
                         const member = workspaceMembers.find(
                           (m) => m.email.toLowerCase().trim() === e.toLowerCase().trim()
@@ -578,9 +473,9 @@ export function ShareDashboardModal() {
                         return (
                           <span
                             key={e}
-                            className="inline-flex items-center gap-1 rounded-md bg-surface border border-line px-2 py-0.5 text-xs text-ink shadow-xs"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1 text-xs text-ink shadow-xs"
                           >
-                            <span className="truncate max-w-[200px]">
+                            <span className="truncate max-w-[220px]">
                               {member?.name ? `${member.name} (${e})` : e}
                             </span>
                             <button
@@ -598,7 +493,7 @@ export function ShareDashboardModal() {
                   </div>
                 ) : (
                   <p className="text-[11px] text-ink-4 italic">
-                    Aucun membre ou email sélectionné pour le moment.
+                    Aucune adresse e-mail ajoutée pour le moment.
                   </p>
                 )}
               </div>
