@@ -186,8 +186,15 @@ export function DashboardProvider({
     return customUrl || data?.lien || messageUrl || null;
   }, [customUrl, data, messageUrl, activeTab]);
 
-  // URL pour l'integration dans l'iframe (directe, securisee par sandbox strict sans allow-same-origin)
+  // URL pour l'integration dans l'iframe (securisee par sandbox strict sans allow-same-origin)
   const embedUrl = useMemo(() => {
+    if (!activeUrl) return null;
+    if (
+      activeUrl.startsWith("https://mstudio-frames.onrender.com/share/frame/") ||
+      activeUrl.startsWith("https://yelema-dashboards.onrender.com/share/frame/")
+    ) {
+      return `/api/dashboards/frame?url=${encodeURIComponent(activeUrl)}`;
+    }
     return activeUrl;
   }, [activeUrl]);
 
