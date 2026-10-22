@@ -19,6 +19,7 @@ import {
   parsePersisted,
   persistedFor,
   remember,
+  routineDoneTitle,
   routineFinished,
   startTurn,
   view,
@@ -28,6 +29,7 @@ import {
   type Outcome,
   type Turn,
 } from "@/lib/activity";
+import { isAccountToTopUp } from "@/lib/chat-errors";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { expertDisplayName } from "@/lib/experts";
 import type { ChatSession } from "@/components/chat/types";
@@ -149,8 +151,12 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       const expert = expertsRef.current.find((e) => expertKey(e.agentId, e.profileId) === expertKey(n.agentId, n.profile));
       const name = expert?.displayName ?? (n.profile ? expertDisplayName(n.profile) : "Votre expert");
       const title =
-        n.kind === "routine" ? `Routine ${routine} terminée (${name})` : n.kind === "failed" ? `${name} : la réponse a échoué` : `${name} a répondu`;
-      const body = n.kind === "reply" ? excerpt(text) || undefined : undefined;
+        n.kind === "routine" ? `${routineDoneTitle(routine)} (${name})` : n.kind === "failed"
+            ? isAccountToTopUp(text)
+              ? "Votre compte d’IA est à recharger"
+              : `${name} : la réponse a échoué`
+            : `${name} a répondu`;
+      const body = n.kind === "reply" || isAccountToTopUp(text) ? excerpt(text) || undefined : undefined;
       const open = () => openConversation(n.agentId, n.profile, n.sessionId);
       if (n.toast) {
         const show = n.kind === "failed" ? toast.error : toast;

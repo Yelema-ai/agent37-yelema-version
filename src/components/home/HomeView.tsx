@@ -3,8 +3,12 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, MessageCircle, Send } from "lucide-react";
+import { Loader2, MessageCircle, Mic, Send } from "lucide-react";
+import { toast } from "sonner";
 import { useWorkspace } from "@/components/WorkspaceProvider";
+import { DictationBar } from "@/components/chat/ChatComposer";
+import { useDictation } from "@/components/chat/useDictation";
+import { useVoices } from "@/components/voice/useVoices";
 import { CompanyProfileCard } from "@/components/company/CompanyProfileCard";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { ExpertMedia } from "@/components/experts/ExpertMedia";
@@ -130,6 +134,14 @@ export function HomeView() {
   const suggestions = (to?.catalogueKey && entries.get(to.catalogueKey)?.suggestions) || [];
   const hello = userFirstName || userEmail.split("@")[0];
 
+  // The microphone of the chat, here too: what is said lands in the field, sent with Envoyer.
+  const canDictate = useVoices().length > 0;
+  const dictation = useDictation({
+    expert: to?.catalogueKey ?? null,
+    onText: (said) => setText((prev) => (prev.trim() ? `${prev.trim()} ${said}` : said)),
+    onError: (message) => toast.error(message),
+  });
+
   function send(message: string) {
     const m = message.trim();
     if (!m || !to) return;
@@ -177,7 +189,21 @@ export function HomeView() {
               placeholder={`Que voulez-vous confier à ${to.displayName} ?`}
               className="mt-3 w-full resize-none bg-transparent px-1 text-[16px] text-ink placeholder:text-ink-3 focus:outline-none"
             />
-            <div className="flex justify-end">
+            {dictation.state !== "idle" ? (
+              <DictationBar dictation={dictation} />
+            ) : (
+            <div className="flex items-center justify-end gap-2">
+              {canDictate && (
+                <button
+                  type="button"
+                  onClick={() => void dictation.start()}
+                  aria-label="Dicter un message"
+                  title="Dicter un message"
+                  className="inline-flex size-11 items-center justify-center rounded-xl text-ink-2 transition-colors hover:bg-soft hover:text-ink"
+                >
+                  <Mic className="h-5 w-5" />
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => send(text)}
@@ -187,6 +213,7 @@ export function HomeView() {
                 <Send className="h-4 w-4" /> Envoyer
               </button>
             </div>
+            )}
           </section>
 
           {suggestions.length > 0 && (

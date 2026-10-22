@@ -419,8 +419,9 @@ export function YeleTopButton() {
 export function YeleBubble() {
   const { companion } = useExpertsContext();
   const [open, setOpen] = useState(false);
-  // An expert's workspace keeps its chat composer at the bottom: the bubble sits clear above it (and
-  // so above a folded call too), never on the composer's Envoyer button. On a phone it moves to the top bar.
+  // An expert's workspace keeps its chat composer at the bottom: there the bubble is a round in the
+  // corner, beside the composer (which leaves it the room), never on its Envoyer button. On a phone it
+  // moves to the top bar.
   const raised = usePathname()?.startsWith("/experts/") ?? false;
   useEffect(() => {
     const show = () => setOpen(true);
@@ -437,10 +438,10 @@ export function YeleBubble() {
         onClick={() => setOpen((o) => !o)}
         aria-label={open ? "Fermer Yélé" : "Ouvrir Yélé, accompagnement"}
         aria-expanded={open}
-        className={cn("fixed right-6 z-50 flex items-center gap-2.5 rounded-full border border-line bg-surface p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.16)] transition-transform hover:scale-105", raised ? "max-sm:hidden bottom-36" : cn("bottom-6", folded && "sm:bottom-32"), open && "hidden")}
+        className={cn("fixed right-6 z-50 flex items-center gap-2.5 rounded-full border border-line bg-surface p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.16)] transition-transform hover:scale-105", raised && "max-sm:hidden", "bottom-6", folded && "sm:bottom-32", open && "hidden")}
       >
         <Portrait animated={open} />
-        {!open && <span className="hidden pr-3 text-xs font-semibold text-ink sm:inline">Yélé</span>}
+        {!open && !raised && <span className="hidden pr-3 text-xs font-semibold text-ink sm:inline">Yélé</span>}
       </button>
       {open && <Panel key={companion.agentId} companion={companion} folded={folded} onClose={() => setOpen(false)} />}
     </>

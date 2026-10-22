@@ -124,10 +124,11 @@ export function AgentWorkspace({
   // Only an expert of the catalogue can be called: the back office opens the call by its key.
   const callee = expert?.catalogueKey ? { key: expert.catalogueKey, name: expertName, photoUrl: portrait } : null;
 
-  // A message typed on the home page rides the URL as ?q= and is sent once the chat is up.
-  const [initialMessage] = useState<string | null>(() =>
-    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("q")
-  );
+  // A message typed on the home page rides the URL as ?q= and is sent once the chat is up. Read once
+  // mounted, like ?session= below: on a client navigation from the home page the first render still
+  // sees the home page's URL, so reading it during render lost the message.
+  const [initialMessage, setInitialMessage] = useState<string | null>(null);
+  useEffect(() => setInitialMessage(new URLSearchParams(window.location.search).get("q")), []);
 
   // The open tab follows the URL (history.pushState updates usePathname in the App Router). Fall
   // back to the server-resolved initialTab on the first paint before the path is parsed.

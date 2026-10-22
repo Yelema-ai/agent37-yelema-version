@@ -14,6 +14,7 @@ import type { Expert } from "@/lib/types";
 import { useChatContext } from "./ChatProvider";
 import { DocumentCards, useDriveListing } from "./DocumentCards";
 import { Markdown } from "./Markdown";
+import { cleanReply } from "@/lib/chat-errors";
 import { LiveStep, StepsList } from "./ChatSteps";
 import type { ChatMessage, MessageAttachment } from "./types";
 
@@ -207,7 +208,7 @@ export function ChatMessages({
               {routineThread && !live && isSilentRun(m.content) ? (
                 <p className="text-sm italic text-ink-3">{SILENT_RUN_LABEL}</p>
               ) : m.content ? (
-                <Markdown content={m.content} agentId={agentId} />
+                <Markdown content={cleanReply(m.content)} agentId={agentId} />
               ) : showDots ? (
                 <TypingDots />
               ) : null}

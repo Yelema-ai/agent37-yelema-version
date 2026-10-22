@@ -339,7 +339,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
         while (run.steers.size) await Promise.allSettled([...run.steers]);
         run.done = true;
         // No terminal event: the turn may still run upstream, the tracker follows it (no-op once stopped).
-        if (sawTerminal) turns.end(run, streamError ? "failed" : "completed");
+        if (sawTerminal) turns.end(run, streamError ? "failed" : "completed", streamError ?? undefined);
         else turns.detach(run);
         // Sweep any still-running tool spinners, and put a failure into the bubble itself so it
         // shows wherever the thread is next viewed — covers terminal events and a bare stream-end.
@@ -583,7 +583,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
         // thread rediscovers it from the session's active_response_id and reattaches.
         forgetRun(run);
         const aborted = (e as Error).name === "AbortError";
-        if (!aborted) turns.end(run, "failed");
+        if (!aborted) turns.end(run, "failed", chatFailureMessage((e as Error).message, ""));
         const next = !aborted && run.sessionId ? run.queue.splice(0) : [];
         // consume() may already have handed the queue to a newer turn: leave its state alone.
         const current = run.sessionId ? runsRef.current.get(run.sessionId) : newChatRunRef.current;

@@ -82,9 +82,12 @@ export function parseVaultDraft(body: unknown): VaultDraft | null {
   return { label: label.trim(), origin: origin.trim(), identifierType: b.identifierType as IdentifierType, identifier: identifier.trim(), password, purpose: purpose.trim() };
 }
 
-/** Le nom affiché d'un profil : « Assistant général » pour `default`, sinon le prénom de l'expert. */
+/** Le profil de l'instance elle-même, qui n'est pas un Expert : il ne se propose pas dans les listes. */
+export const INSTANCE_PROFILE = "default";
+
+/** Le nom affiché d'un profil, à défaut du nom que le catalogue donne : « Accès commun » pour l'instance, sinon le prénom de l'expert. */
 export function profileLabel(profile: string): string {
-  if (profile === "default") return "Assistant général";
+  if (profile === INSTANCE_PROFILE) return "Accès commun";
   const name = profile.split("__").at(-1) ?? profile;
   return name.charAt(0).toUpperCase() + name.slice(1);
 }

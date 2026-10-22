@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Download, ExternalLink, FileCode, FileText, LayoutDashboard, Loader2, Maximize2, RefreshCw, Share2, Sparkles, X } from "lucide-react";
+import { useEffect, type ReactNode } from "react";
+import Image from "next/image";
+import { BarChart3, ExternalLink, FileCode, FileText, Loader2, Maximize2, Minimize2, MoreHorizontal, Presentation, RefreshCw, Share2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useDashboard } from "./DashboardProvider";
 import { useComputer } from "./ComputerProvider";
@@ -30,8 +30,7 @@ export function DashboardButton() {
   const comp = useComputer();
   if (!profile) return null;
 
-  const isDjeneba = profile.toLowerCase().includes("djeneba");
-  const label = isDjeneba ? "Tableaux de l'équipe" : "Tableau de bord";
+  const label = "Tableau de bord";
   const isAnyPanelOpen = panelOpen || Boolean(comp?.panelOpen);
 
   const handleClick = () => {
@@ -54,16 +53,13 @@ export function DashboardButton() {
       type="button"
       title={label}
       onClick={handleClick}
+      // Same size and weight as « Son ordinateur » and « Nouvelle conversation » beside it.
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-full border bg-card px-2.5 text-xs font-medium text-ink transition-colors hover:bg-soft",
-        (panelOpen || isGenerating) && "wide:border-brand/40 wide:bg-soft-2 wide:text-brand"
+        "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border bg-card px-3 text-[13px] font-semibold text-ink transition-colors hover:bg-soft",
+        (panelOpen || isGenerating) && "wide:border-brand/30 wide:bg-soft-2 wide:text-brand-ink"
       )}
     >
-      {isGenerating ? (
-        <Loader2 className="h-3.5 w-3.5 text-brand animate-spin" />
-      ) : (
-        <LayoutDashboard className="h-3.5 w-3.5 text-brand" />
-      )}
+      {isGenerating ? <Loader2 className="h-4 w-4 animate-spin text-brand" /> : <BarChart3 className="h-4 w-4" />}
       <span className={cn("hidden sm:inline", isAnyPanelOpen && "wide:hidden")}>
         {isGenerating ? "Génération…" : label}
       </span>
@@ -72,28 +68,19 @@ export function DashboardButton() {
 }
 
 function DashboardHeaderControls({
+  maximized,
   onMaximize,
   onClose,
 }: {
+  maximized?: boolean;
   onMaximize?: () => void;
   onClose?: () => void;
 }) {
-  const {
-    activeUrl,
-    refresh,
-    loading,
-    isGenerating,
-    triggerGeneration,
-    data,
-    activeTab,
-    setActiveTab,
-    setShareModalOpen,
-    downloadPdf,
-    downloadHtml,
-  } = useDashboard();
+  const { activeUrl, refresh, loading, data, activeTab, setActiveTab, setShareModalOpen, downloadPdf, downloadHtml, downloadPptx } = useDashboard();
+  const icon = "h-9 w-9 text-ink-3 hover:text-ink";
 
   return (
-    <div className="flex shrink-0 items-center gap-1.5">
+    <div className="flex shrink-0 items-center gap-1">
       {data?.isDjeneba && (
         <div className="mr-2 inline-flex rounded-lg border border-line bg-soft p-0.5 text-xs font-medium">
           <button
@@ -119,159 +106,108 @@ function DashboardHeaderControls({
         </div>
       )}
 
-      {/* Bouton pour régénérer / actualiser les chiffres auprès de l'expert */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-ink-3 hover:text-ink"
-        onClick={() => void triggerGeneration()}
-        disabled={isGenerating || loading}
-        title="Actualiser les chiffres auprès de l’expert (/tableau)"
-        aria-label="Actualiser les chiffres"
-      >
-        <Sparkles className={cn("h-3.5 w-3.5 text-brand", isGenerating && "animate-spin")} />
+      {/* Four gestures in the bar: reload, share, the rest under « … », enlarge, close. */}
+      <Button variant="ghost" size="icon" className={icon} onClick={() => void refresh()} disabled={loading} title="Actualiser" aria-label="Actualiser">
+        <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
       </Button>
 
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-ink-3 hover:text-ink"
-        onClick={() => void refresh()}
-        disabled={loading}
-        title="Recharger l'affichage"
-        aria-label="Recharger"
-      >
-        <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+      <Button variant="ghost" size="icon" className={icon} onClick={() => setShareModalOpen(true)} title="Partager" aria-label="Partager">
+        <Share2 className="h-4 w-4" />
       </Button>
 
-      {/* Bouton Exporter / Télécharger dédié (séparé du partage) */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-ink-3 hover:text-ink"
-            title="Télécharger / Exporter le tableau de bord"
-            aria-label="Télécharger"
-          >
-            <Download className="h-3.5 w-3.5" />
+          <Button variant="ghost" size="icon" className={icon} title="Télécharger et plus" aria-label="Télécharger et plus">
+            <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-60 p-1.5 shadow-lg border-line bg-surface z-50">
-          <div className="px-2 py-1.5 text-xs font-semibold text-ink">
-            Exporter le tableau de bord
-          </div>
-          <DropdownMenuItem
-            onClick={downloadPdf}
-            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs cursor-pointer hover:bg-soft focus:bg-soft text-ink"
-          >
-            <div className="flex size-7 items-center justify-center rounded-md bg-orange-500/10 text-orange-600">
-              <FileText className="size-4" />
-            </div>
-            <div>
-              <p className="font-medium text-ink">Télécharger en PDF</p>
-              <p className="text-[10.5px] text-ink-3">Livrable officiel A4 paysage</p>
-            </div>
-          </DropdownMenuItem>
-
-          <DropdownMenuItem
-            onClick={downloadHtml}
-            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs cursor-pointer hover:bg-soft focus:bg-soft text-ink"
-          >
-            <div className="flex size-7 items-center justify-center rounded-md bg-blue-500/10 text-blue-600">
-              <FileCode className="size-4" />
-            </div>
-            <div>
-              <p className="font-medium text-ink">Télécharger en HTML</p>
-              <p className="text-[10.5px] text-ink-3">Page web autonome complète</p>
-            </div>
-          </DropdownMenuItem>
+        <DropdownMenuContent align="end" className="w-60 p-1.5">
+          <div className="px-2 py-1.5 text-xs font-semibold text-ink-3">Télécharger</div>
+          <ExportItem icon={<FileText className="size-4" />} tone="bg-orange-500/10 text-orange-600" label="PDF" hint="A4 paysage, prêt à imprimer" onSelect={downloadPdf} />
+          <ExportItem icon={<Presentation className="size-4" />} tone="bg-red-500/10 text-red-600" label="PowerPoint" hint="Une diapositive par bloc" onSelect={downloadPptx} />
+          <ExportItem icon={<FileCode className="size-4" />} tone="bg-blue-500/10 text-blue-600" label="HTML" hint="Page web autonome" onSelect={downloadHtml} />
+          {activeUrl && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild className="gap-2.5 rounded-lg px-2.5 py-2 text-[13px]">
+                <a href={activeUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="size-4 text-ink-3" /> Ouvrir dans un nouvel onglet
+                </a>
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Bouton Partager (dédié à la visibilité et au partage du lien) */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-ink-3 hover:text-ink"
-        onClick={() => setShareModalOpen(true)}
-        title="Partager le tableau de bord"
-        aria-label="Partager"
-      >
-        <Share2 className="h-3.5 w-3.5" />
-      </Button>
-
-      {activeUrl && (
-        <a
-          href={activeUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-3 transition-colors hover:bg-soft hover:text-ink"
-          title="Ouvrir dans un nouvel onglet"
-          aria-label="Ouvrir dans un nouvel onglet"
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-        </a>
-      )}
-
       {onMaximize && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-ink-3 hover:text-ink"
-          onClick={onMaximize}
-          title="Agrandir en plein écran"
-          aria-label="Agrandir"
-        >
-          <Maximize2 className="h-3.5 w-3.5" />
+        <Button variant="ghost" size="icon" className={icon} onClick={onMaximize} title={maximized ? "Réduire" : "Agrandir"} aria-label={maximized ? "Réduire" : "Agrandir"}>
+          {maximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
         </Button>
       )}
 
       {onClose && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-ink-3 hover:text-ink"
-          onClick={onClose}
-          title="Fermer"
-          aria-label="Fermer"
-        >
-          <X className="h-3.5 w-3.5" />
+        <Button variant="ghost" size="icon" className={icon} onClick={onClose} title="Fermer" aria-label="Fermer">
+          <X className="h-4 w-4" />
         </Button>
       )}
     </div>
   );
 }
 
+function ExportItem({ icon, tone, label, hint, onSelect }: { icon: ReactNode; tone: string; label: string; hint: string; onSelect: () => void }) {
+  return (
+    <DropdownMenuItem onSelect={onSelect} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-ink">
+      <span className={cn("flex size-7 items-center justify-center rounded-md", tone)}>{icon}</span>
+      <span>
+        <span className="block text-[13px] font-medium text-ink">{label}</span>
+        <span className="block text-[11px] text-ink-3">{hint}</span>
+      </span>
+    </DropdownMenuItem>
+  );
+}
+
 function DashboardHeader({
+  maximized,
   onMaximize,
   onClose,
 }: {
+  maximized?: boolean;
   onMaximize?: () => void;
   onClose?: () => void;
 }) {
   const { agentName, data, activeTab } = useDashboard();
   const isEquipeTab = activeTab === "equipe" && data?.isDjeneba;
-  const title = isEquipeTab
-    ? "Tableaux de bord de l'équipe"
-    : (data?.title || `Tableau de bord — ${agentName}`);
-  const description = isEquipeTab
-    ? "Vue consolidée des 13 experts sous la supervision de Djénéba"
-    : (data?.role || null);
+  const title = isEquipeTab ? "Tableaux de bord de l'équipe" : data?.title || `Tableau de bord de ${agentName}`;
+  const description = isEquipeTab ? "Vue d'ensemble des Experts de l'équipe" : data?.role || null;
   const majFormatted = formatMajDate(data?.maj);
 
   return (
-    <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
+    <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-line px-4">
       <div className="min-w-0 pr-2">
         <h2 className="truncate text-sm font-semibold text-ink">{title}</h2>
-        <div className="flex items-center gap-2 text-xs text-ink-3">
+        <div className="flex min-w-0 items-center gap-2 text-xs text-ink-3">
           {description && <span className="truncate">{description}</span>}
-          {description && majFormatted && <span>•</span>}
-          {majFormatted && <span className="shrink-0">{majFormatted}</span>}
+          {description && majFormatted && <span aria-hidden>•</span>}
+          {majFormatted && <span className="truncate">{majFormatted}</span>}
         </div>
       </div>
-      <DashboardHeaderControls onMaximize={onMaximize} onClose={onClose} />
+      <DashboardHeaderControls maximized={maximized} onMaximize={onMaximize} onClose={onClose} />
     </div>
+  );
+}
+
+/** Under every dashboard, as on every Yelema document. */
+function PoweredBy() {
+  return (
+    <a
+      href="https://yelema.ai"
+      target="_blank"
+      rel="noopener"
+      className="flex shrink-0 items-center justify-center gap-2 border-t border-line bg-surface py-2.5 text-xs text-ink-3"
+    >
+      Powered by
+      <Image src="/yelema-long.png" alt="Yelema" width={55} height={16} className="h-4 w-auto" />
+    </a>
   );
 }
 
@@ -291,29 +227,20 @@ function DashboardContent() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
         <div className="mb-3 flex size-12 items-center justify-center rounded-2xl bg-soft text-ink-3">
-          <LayoutDashboard className="size-6 text-brand" />
+          <BarChart3 className="size-6 text-brand" />
         </div>
-        <h3 className="mb-1 text-sm font-semibold text-ink">
-          {data?.title || "Tableau de bord non disponible"}
-        </h3>
-        <p className="mb-4 max-w-xs text-xs text-ink-3">
-          {data?.role || "Aucun tableau de bord n'a encore été généré pour cet expert."}
-        </p>
-        <Button
-          size="sm"
-          onClick={() => void triggerGeneration()}
-          disabled={isGenerating}
-          className="gap-2"
-        >
+        <h3 className="mb-1 text-sm font-semibold text-ink">{data?.title || "Pas encore de tableau de bord"}</h3>
+        <p className="mb-4 max-w-xs text-xs text-ink-3">{data?.role || "Aucun tableau de bord n'a encore été préparé pour cet Expert."}</p>
+        <Button size="sm" onClick={() => void triggerGeneration()} disabled={isGenerating} className="gap-2">
           {isGenerating ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Génération en cours…
+              Préparation en cours…
             </>
           ) : (
             <>
               <Sparkles className="h-4 w-4" />
-              Générer le tableau de bord (/tableau)
+              Préparer le tableau de bord
             </>
           )}
         </Button>
@@ -331,6 +258,7 @@ function DashboardContent() {
           sandbox="allow-scripts allow-popups allow-downloads"
         />
       </div>
+      <PoweredBy />
     </div>
   );
 }
@@ -356,20 +284,40 @@ export function DashboardPanel() {
   );
 }
 
+/**
+ * Enlarged (and on narrow screens): the dashboard takes the whole working area beside the menu,
+ * not a window over the page. « Réduire » brings back the side panel where there is room for one.
+ */
 export function DashboardDialog() {
-  const { profile, dialogOpen, setDialogOpen } = useDashboard();
-  if (!profile) return null;
+  const { profile, dialogOpen, setDialogOpen, setPanelOpen } = useDashboard();
+  useEffect(() => {
+    if (!dialogOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDialogOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dialogOpen, setDialogOpen]);
+  if (!profile || !dialogOpen) return null;
+  const wide = typeof window !== "undefined" && window.matchMedia(WIDE).matches;
 
   return (
-    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <DialogContent className="flex h-[90vh] w-[95vw] max-w-[1400px] flex-col overflow-hidden p-0">
-        <DialogHeader className="sr-only">
-          <DialogTitle>Tableau de bord métier</DialogTitle>
-          <DialogDescription>Visualisation du tableau de bord de l'expert</DialogDescription>
-        </DialogHeader>
-        <DashboardHeader onClose={() => setDialogOpen(false)} />
-        <DashboardContent />
-      </DialogContent>
-    </Dialog>
+    <section
+      role="region"
+      aria-label="Tableau de bord métier"
+      className="fixed inset-y-0 right-0 left-0 z-40 flex flex-col bg-card md:left-[var(--shell-nav,0px)] md:border-l md:border-line"
+    >
+      <DashboardHeader
+        maximized
+        onMaximize={
+          wide
+            ? () => {
+                setDialogOpen(false);
+                setPanelOpen(true);
+              }
+            : undefined
+        }
+        onClose={() => setDialogOpen(false)}
+      />
+      <DashboardContent />
+    </section>
   );
 }

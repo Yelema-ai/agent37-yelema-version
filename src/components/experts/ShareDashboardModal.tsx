@@ -194,9 +194,12 @@ export function ShareDashboardModal() {
     return "";
   })();
 
-  const mailtoSubject = encodeURIComponent(`Tableau de bord ${agentName} — Mstudio`);
+  // The e-mail's template: the company's name, never a fixed one; the link first, then what it holds.
+  const company = workspaceCtx?.current?.name?.trim() || "votre entreprise";
+  const today = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+  const mailtoSubject = encodeURIComponent(`Tableau de bord de ${agentName}, ${company} (${today})`);
   const mailtoBody = encodeURIComponent(
-    `Bonjour,\n\nVoici le lien d'accès au tableau de bord de ${agentName} :\n${effectiveShareLink}\n\nCordialement,\n${workspaceCtx?.userName || "L'équipe Mstudio"}`
+    `Bonjour,\n\nVoici le tableau de bord de ${agentName}, à jour au ${today}.\n\nPour l'ouvrir : ${effectiveShareLink}\n\nVous y trouverez les indicateurs du mois, l'avancement des projets et les points d'attention. Le lien s'ouvre avec votre compte ${company}.\n\nBonne lecture,\n${workspaceCtx?.userName || company}`
   );
   const mailtoHref = `mailto:${emailRecipients}?subject=${mailtoSubject}&body=${mailtoBody}`;
 
