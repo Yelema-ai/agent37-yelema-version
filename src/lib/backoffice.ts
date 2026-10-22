@@ -9,7 +9,7 @@ import { vaultPath, type VaultDraft, type VaultItem, type VaultList, type VaultO
 import { scopePath, type LlmModelChoice, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { mailPath, type MailDetail, type MailDraft, type MailInbox, type MailRights, type MailRightsPatch, type MailSummary } from "@/lib/mail";
 import { isPublicId, type MemoryList, type MemoryNote, type MemoryPatch, type OrgAssignmentDraft, type OrgChart, type OrgGrantDraft, type OrgMember, type OrgRole } from "@/lib/memory";
-import { backofficeUrl } from "@/lib/runtime-config";
+import { backofficeUrl, resolverToken } from "@/lib/runtime-config";
 import { SIGNALING_METHOD, type CallRecord, type SignalingStep, type VoiceOption } from "@/lib/voice";
 import { pinnedWorkspaceId } from "@/lib/tenant";
 
@@ -111,6 +111,14 @@ export interface ExpertLook {
 export interface ExpertAvatarDraft {
   draftId: string;
   url: string;
+}
+
+export type DashboardShareMode = "team" | "people" | "link";
+
+/** A dashboard's share as the back office keeps it; `number` is sealed into the link and never sent to a browser. */
+export interface BoDashboardShareView {
+  share: { id: string; number: string; mode: DashboardShareMode; people: string[]; updatedAt: string | null } | null;
+  candidates: { email: string; name: string | null }[];
 }
 
 export type BoInstance = BoInstanceView & { id: string };
@@ -292,6 +300,12 @@ function mailRoute(expert: string, messageId?: string, attachmentId?: string): s
   return path;
 }
 
+function dashboardSharePath(profile: string): string {
+  const p = profile.toLowerCase();
+  if (!/^[a-z0-9_-]{1,64}$/.test(p)) throw new BackofficeError(404, "not_found", "Tableau de bord introuvable.");
+  return `/app/dashboards/shares/${p}`;
+}
+
 function usageQuery(filter: BoUsageFilter, page?: number): string {
   const params = new URLSearchParams();
   if (filter.from) params.set("from", filter.from);
@@ -335,6 +349,25 @@ export const backoffice = {
   requestExpert: (token: string, key: string) => {
     if (!EXPERT_KEY.test(key)) throw new BackofficeError(404, "not_found", "Expert introuvable.");
     return call<{ ok: true }>(`/app/experts/${key}/request`, { method: "POST", token });
+  },
+  // The owner's share of an expert's dashboard. The back office checks the expert is on the caller's
+  // instance and keeps who may read it; the expert's own files never decide that.
+  dashboardShare: (token: string, profile: string) => call<BoDashboardShareView>(dashboardSharePath(profile), { token }),
+  saveDashboardShare: (token: string, profile: string, body: { mode: DashboardShareMode; people?: string[]; regenerate?: boolean }) =>
+    call<BoDashboardShareView>(dashboardSharePath(profile), { method: "PUT", token, body }),
+  stopDashboardShare: (token: string, profile: string) => call<BoDashboardShareView>(dashboardSharePath(profile), { method: "DELETE", token }),
+  // On every opening of a shared link, in the app's name (its resolver secret), with the reader's
+  // session when there is one: the instance and profile to read, or 401 login_required / 403 / 404.
+  dashboardAccess: (workspace: string, share: string, number: string, session: string | null) => {
+    const secret = resolverToken();
+    if (!secret) throw new BackofficeError(404, "not_found", "Tableau de bord introuvable.");
+    const qs = new URLSearchParams({ share, n: number });
+    return call<{ instance: string; profile: string; mode: DashboardShareMode }>(`/app/dashboards/access?${qs.toString()}`, {
+      token: secret,
+      workspace,
+      timeoutMs: 10_000,
+      headers: session ? { "X-App-Session": session } : {},
+    });
   },
   // A member's own name and picture for an expert installed on their instance. The back office checks
   // the expert is theirs, keeps the choice, and writes the name in the expert's SOUL.md itself.
