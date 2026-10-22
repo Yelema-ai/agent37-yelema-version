@@ -384,7 +384,7 @@ export function ShareDashboardModal() {
                 <div ref={inputContainerRef} className="relative">
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
-                      <Mail className="absolute left-3 size-3.5 text-ink-4 pointer-events-none" />
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-ink-4 pointer-events-none" />
                       <Input
                         type="email"
                         placeholder="Saisir une adresse e-mail (ex: contact@client.com)..."
