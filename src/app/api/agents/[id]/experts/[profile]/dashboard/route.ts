@@ -1,3 +1,4 @@
+import { invalidateDashboardCache } from "@/lib/dashboard-cache";
 import { pinnedWorkspaceId } from "@/lib/tenant";
 import { agent37, instanceFetch } from "@/lib/agent37";
 import { requireAgentAccess } from "@/lib/auth";
@@ -259,6 +260,8 @@ export async function PATCH(request: Request, { params }: Ctx) {
     if (!putRes.ok) {
       return json({ error: "Impossible d'enregistrer les droits de partage sur l'instance." }, 502);
     }
+
+    invalidateDashboardCache(id, profile);
 
     return json({
       ok: true,

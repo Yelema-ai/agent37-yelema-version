@@ -1,3 +1,4 @@
+import { fetchCachedDashboardState } from "@/lib/dashboard-cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { instanceFetch } from "@/lib/agent37";
 import { getDashboardMeta } from "@/lib/dashboards";
@@ -93,25 +94,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 2. Récupération de l'état du tableau de bord sur l'instance de l'agent
-    const candidatePaths = [
-      `Livrables/${capitalizedProfile}/_memoire/state/tableau-de-bord-metier.json`,
-      `Livrables/${profile}/_memoire/state/tableau-de-bord-metier.json`,
-      `memory/state/tableau-de-bord-metier.json`,
-      `memory/state/${profile}/tableau-de-bord-metier.json`,
-    ];
-
-    let state: any = null;
-
-    for (const p of candidatePaths) {
-      try {
-        const res = await instanceFetch(agentId, `/v1/files/content?path=${encodeURIComponent(p)}`);
-        if (res.ok) {
-          state = await res.json();
-          break;
-        }
-      } catch {}
-    }
+    // 2. Récupération de l'état du tableau de bord avec cache mémoire haute performance (60s)
+    const state = await fetchCachedDashboardState(agentId, profile);
 
     if (!state || !state.lien || typeof state.lien !== "string" || !state.lien.startsWith("https://")) {
       return NextResponse.json(

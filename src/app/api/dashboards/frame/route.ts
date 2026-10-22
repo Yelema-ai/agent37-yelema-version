@@ -1,3 +1,4 @@
+import { fetchCachedDashboardState, fetchCachedFrameHtml } from "@/lib/dashboard-cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { instanceFetch } from "@/lib/agent37";
 import { getDashboardMeta } from "@/lib/dashboards";
@@ -79,24 +80,8 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Récupération de l'état du tableau
-      const candidatePaths = [
-        `Livrables/${capitalizedProfile}/_memoire/state/tableau-de-bord-metier.json`,
-        `Livrables/${profile}/_memoire/state/tableau-de-bord-metier.json`,
-        `memory/state/tableau-de-bord-metier.json`,
-        `memory/state/${profile}/tableau-de-bord-metier.json`,
-      ];
-
-      let state: any = null;
-      for (const p of candidatePaths) {
-        try {
-          const res = await instanceFetch(agentId, `/v1/files/content?path=${encodeURIComponent(p)}`);
-          if (res.ok) {
-            state = await res.json();
-            break;
-          }
-        } catch {}
-      }
+      // Récupération de l'état du tableau avec cache mémoire haute performance (60s)
+      const state = await fetchCachedDashboardState(agentId, profile);
 
       if (!state || !state.lien || typeof state.lien !== "string" || !state.lien.startsWith("https://")) {
         return new NextResponse("Tableau de bord introuvable ou non généré.", { status: 404 });
@@ -154,22 +139,8 @@ export async function GET(request: NextRequest) {
       return new NextResponse("Cible de tableau non valide.", { status: 403 });
     }
 
-    // SSRF Prevention : interdiction formelle des redirections
-    const res = await fetch(targetUrl, {
-      redirect: "error",
-      headers: {
-        "User-Agent": "Mstudio-Dashboard/1.0",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      },
-    });
-
-    if (!res.ok) {
-      return new NextResponse(`Impossible de charger le tableau de bord (${res.status})`, {
-        status: res.status,
-      });
-    }
-
-    const html = await res.text();
+    // SSRF Prevention & Cache mémoire Render (60s avec déduplication)
+    const html = await fetchCachedFrameHtml(targetUrl);
 
     return new NextResponse(html, {
       status: 200,
