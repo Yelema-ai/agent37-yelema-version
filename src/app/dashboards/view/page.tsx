@@ -107,22 +107,8 @@ export default function SharedDashboardViewPage() {
       a.click();
       document.body.removeChild(a);
     } else if (data?.lien) {
-      try {
-        const previewUrl = `/api/dashboards/preview?url=${encodeURIComponent(data.lien)}`;
-        const res = await fetch(previewUrl);
-        const html = await res.text();
-        const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = blobUrl;
-        a.download = "tableau-de-bord.html";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      } catch (err) {
-        alert("Impossible de télécharger le fichier HTML.");
-      }
+      // Si aucun fichier HTML statique n'est disponible sur l'instance, ouvrir le tableau
+      window.open(data.lien, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -235,7 +221,7 @@ export default function SharedDashboardViewPage() {
   }
 
   // 5. Affichage du tableau de bord interactif avec bandeau supérieur
-  const embedUrl = `/api/dashboards/preview?url=${encodeURIComponent(data.lien)}`;
+  const embedUrl = data.lien;
 
   return (
     <div className="flex h-screen w-screen flex-col bg-slate-950 overflow-hidden font-sans">
@@ -298,15 +284,17 @@ export default function SharedDashboardViewPage() {
             <span className="hidden sm:inline">HTML</span>
           </Button>
 
-          <a
-            href={data.lien}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 text-xs text-slate-200 hover:bg-slate-700 transition-colors"
-            title="Ouvrir directement dans un nouvel onglet"
-          >
-            <ExternalLink className="size-3.5" />
-          </a>
+          {data.acces === "public" && (
+            <a
+              href={data.lien}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 text-xs text-slate-200 hover:bg-slate-700 transition-colors"
+              title="Ouvrir directement dans un nouvel onglet"
+            >
+              <ExternalLink className="size-3.5" />
+            </a>
+          )}
 
           <Button
             variant="ghost"
@@ -326,7 +314,7 @@ export default function SharedDashboardViewPage() {
           src={embedUrl}
           title={data.title || "Tableau de bord"}
           className="h-full w-full border-0 bg-transparent"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-downloads"
+          sandbox="allow-scripts allow-forms allow-popups allow-downloads"
         />
       </main>
     </div>

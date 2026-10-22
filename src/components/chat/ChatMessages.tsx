@@ -134,20 +134,18 @@ export function ChatMessages({
     const href = target.getAttribute("href") || "";
     const text = (target.textContent || "").toLowerCase();
     const isDashboardLink =
-      href.includes("onrender.com") ||
-      href.includes("/share/frame/") ||
-      text.includes("ouvrir le tableau de bord") ||
-      text.includes("tableau de bord") ||
-      (href.includes("/modeles/") && text.includes("tableau"));
+      (href.startsWith("https://mstudio-frames.onrender.com/share/frame/") ||
+       href.startsWith("https://yelema-dashboards.onrender.com/share/frame/") ||
+       href.startsWith("/modeles/")) &&
+      (text.includes("ouvrir le tableau de bord") ||
+       text.includes("tableau de bord") ||
+       text.includes("ouvrir") ||
+       href.includes("/modeles/"));
 
     if (isDashboardLink) {
       e.preventDefault();
       e.stopPropagation();
-      if (href && (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("/"))) {
-        dashboard?.openDashboard(href);
-      } else {
-        dashboard?.openDashboard();
-      }
+      dashboard?.openDashboard(href);
       void dashboard?.refresh();
     }
   };

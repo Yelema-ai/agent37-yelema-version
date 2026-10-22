@@ -1,3 +1,4 @@
+import { pinnedWorkspaceId } from "@/lib/tenant";
 import { agent37, instanceFetch } from "@/lib/agent37";
 import { requireAgentAccess } from "@/lib/auth";
 import { getDashboardMeta } from "@/lib/dashboards";
@@ -161,7 +162,7 @@ export async function GET(request: Request, { params }: Ctx) {
             const history = detail.history || [];
             for (let i = history.length - 1; i >= 0; i--) {
               const content = history[i].content || "";
-              const match = content.match(/https:\/\/[^\s\)\>\]"'`]+(?:onrender\.com|\/share\/frame\/)[^\s\)\>\]"'`]*/i);
+              const match = content.match(/https:\/\/(?:mstudio-frames\.onrender\.com|yelema-dashboards\.onrender\.com)\/share\/frame\/[a-zA-Z0-9_\-]+/i);
               if (match) {
                 state.lien = match[0];
                 state.hebergeur = "render";
@@ -176,9 +177,7 @@ export async function GET(request: Request, { params }: Ctx) {
       }
     }
 
-    const previewUrl = state.lien
-      ? `/api/dashboards/preview?url=${encodeURIComponent(state.lien)}`
-      : `/modeles/${meta.modelFile}`;
+    const previewUrl = state.lien || `/modeles/${meta.modelFile}`;
 
     return json({
       available: true,
@@ -240,6 +239,10 @@ export async function PATCH(request: Request, { params }: Ctx) {
       } catch {}
     }
 
+    const pinned = await pinnedWorkspaceId().catch(() => undefined);
+    if (pinned) {
+      existingContent.workspace_id = pinned;
+    }
     existingContent.acces = acces;
     existingContent.allowed_emails = allowedEmails;
 

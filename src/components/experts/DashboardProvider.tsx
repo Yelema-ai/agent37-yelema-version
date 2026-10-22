@@ -68,20 +68,33 @@ export function useDashboard() {
 /**
  * Extrait le dernier lien de tableau de bord ou frame partage dans l'historique des messages.
  */
+export function isTrustedDashboardUrl(url: string): boolean {
+  if (!url) return false;
+  if (url.startsWith("/modeles/")) return true;
+  try {
+    const parsed = new URL(url);
+    const h = parsed.hostname.toLowerCase();
+    return (
+      (h === "mstudio-frames.onrender.com" || h === "yelema-dashboards.onrender.com") &&
+      parsed.pathname.startsWith("/share/frame/")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function extractDashboardLinkFromMessages(messages: ChatMessage[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (!m.content) continue;
-    // 1. Liens Markdown comme [Ouvrir le tableau...](URL) ou [Tableau...](URL)
-    const mdMatch =
-      m.content.match(/\[([^\]]*(?:tableau|frame|ouvrir|accéder|acceder)[^\]]*)\]\((https?:\/\/[^\s\)]+)\)/i) ||
-      m.content.match(/\[([^\]]+)\]\((https?:\/\/[^\s\)]*(?:onrender\.com|\/share\/frame\/)[^\s\)]*)\)/i);
-    if (mdMatch && mdMatch[2]) {
+    // 1. Liens Markdown
+    const mdMatch = m.content.match(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/i);
+    if (mdMatch && mdMatch[2] && isTrustedDashboardUrl(mdMatch[2])) {
       return mdMatch[2];
     }
-    // 2. Liens directs pointant vers Render frames
-    const bareMatch = m.content.match(/https?:\/\/[^\s\)\>\]"'`]+(?:onrender\.com|\/share\/frame\/)[^\s\)\>\]"'`]+/i);
-    if (bareMatch) {
+    // 2. Liens directs pointant vers des frames sécurisés
+    const bareMatch = m.content.match(/https?:\/\/[^\s\)\>\]"'`]+/i);
+    if (bareMatch && isTrustedDashboardUrl(bareMatch[0])) {
       return bareMatch[0];
     }
   }
@@ -173,12 +186,8 @@ export function DashboardProvider({
     return customUrl || data?.lien || messageUrl || null;
   }, [customUrl, data, messageUrl, activeTab]);
 
-  // URL pour l'integration dans l'iframe (utilise le proxy si c'est une URL externe afin d'eviter X-Frame-Options: DENY)
+  // URL pour l'integration dans l'iframe (directe, securisee par sandbox strict sans allow-same-origin)
   const embedUrl = useMemo(() => {
-    if (!activeUrl) return null;
-    if (activeUrl.startsWith("http://") || activeUrl.startsWith("https://")) {
-      return `/api/dashboards/preview?url=${encodeURIComponent(activeUrl)}`;
-    }
     return activeUrl;
   }, [activeUrl]);
 
