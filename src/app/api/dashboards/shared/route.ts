@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         acces: "workspace",
-        lien: state.lien,
+        lien: `/api/dashboards/frame?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`,
         maj: state.maj || null,
         title: meta.title,
         description: meta.role || "",
@@ -229,7 +229,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         acces: "emails",
-        lien: state.lien,
+        lien: `/api/dashboards/frame?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`,
         maj: state.maj || null,
         title: meta.title,
         description: meta.role || "",
