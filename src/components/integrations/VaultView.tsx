@@ -8,17 +8,23 @@ import { Pager } from "@/components/Pager";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import { paginate } from "@/lib/paginate";
-import { IDENTIFIER_TYPES, entriesOf, profileLabel, type VaultDraft, type VaultEntry, type VaultOverview } from "@/lib/vault";
+import { useExpertsContext } from "@/components/experts/ExpertsProvider";
+import { IDENTIFIER_TYPES, INSTANCE_PROFILE, entriesOf, profileLabel, type VaultDraft, type VaultEntry, type VaultOverview } from "@/lib/vault";
 import { VaultItemDialog } from "./VaultItemDialog";
 
 const PER_PAGE = 10;
 const typeLabel = (t: VaultEntry["identifierType"]) => IDENTIFIER_TYPES.find((x) => x.value === t)?.label ?? t;
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—");
+// The Experts only: the instance's own profile is not one to pick.
+const experts_ = (data: VaultOverview | null) => (data?.profiles ?? []).filter((p) => p !== INSTANCE_PROFILE);
 const vaultUrl = (profile: string, handle?: string) => `/api/vault/own/${encodeURIComponent(profile)}${handle ? `/${encodeURIComponent(handle)}` : ""}`;
 
 // Intégrations · Identifiants : les connexions confiées aux experts de SA propre instance. Une liste
 // déroulante filtre par expert (aucun choix : toutes) ; chaque affichage relit le coffre de l'instance.
 export function VaultView() {
+  // Each Expert by the name the member sees everywhere else (Djénéba, not « Djeneba »).
+  const { experts } = useExpertsContext();
+  const nameOf = (p: string) => experts.find((e) => e.profileId === p)?.displayName ?? profileLabel(p);
   const [data, setData] = useState<VaultOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<string | null>(null);
@@ -44,7 +50,7 @@ export function VaultView() {
 
   async function add(target: string, draft: VaultDraft) {
     await apiFetch(vaultUrl(target), { method: "POST", body: JSON.stringify(draft) });
-    toast.success(`Connexion « ${draft.label} » confiée à ${profileLabel(target)}`);
+    toast.success(`Connexion « ${draft.label} » confiée à ${nameOf(target)}`);
     setAdding(false);
     await load();
   }
@@ -80,9 +86,9 @@ export function VaultView() {
           className="block w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm font-normal text-ink"
         >
           <option value="">Tous les experts</option>
-          {data?.profiles.map((p) => (
+          {experts_(data).map((p) => (
             <option key={p} value={p}>
-              {profileLabel(p)}
+              {nameOf(p)}
             </option>
           ))}
         </select>
@@ -106,7 +112,7 @@ export function VaultView() {
         </div>
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-line px-6 py-12 text-center">
-          <p className="text-sm font-semibold text-ink">{profile ? `Aucune connexion confiée à ${profileLabel(profile)}` : "Aucune connexion confiée à vos experts"}</p>
+          <p className="text-sm font-semibold text-ink">{profile ? `Aucune connexion confiée à ${nameOf(profile)}` : "Aucune connexion confiée à vos experts"}</p>
           <p className="mt-1 max-w-sm text-xs text-ink-3">Ajoutez l’accès à un site (portail administratif, banque, outil métier) et dites à quoi il sert.</p>
           <Button onClick={() => setAdding(true)} variant="outline" size="sm" className="mt-4">
             <Plus /> Ajouter une connexion
@@ -115,13 +121,12 @@ export function VaultView() {
       ) : (
         <div>
           <div className="overflow-x-auto rounded-lg border border-line bg-surface">
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[700px] text-sm">
               <thead className="bg-soft text-left text-xs text-ink-3">
                 <tr>
                   <th className="px-4 py-2.5 font-medium">Expert</th>
                   <th className="px-4 py-2.5 font-medium">Libellé</th>
                   <th className="px-4 py-2.5 font-medium">Site</th>
-                  <th className="px-4 py-2.5 font-medium">Identifiant</th>
                   <th className="px-4 py-2.5 font-medium">À quoi elle sert</th>
                   <th className="px-4 py-2.5 font-medium">Ajoutée le</th>
                   <th className="px-4 py-2.5" />
@@ -130,13 +135,15 @@ export function VaultView() {
               <tbody>
                 {shown.items.map((it) => (
                   <tr key={`${it.profile}:${it.id}`} className="border-t border-line align-top">
-                    <td className="px-4 py-3 font-medium text-ink">{profileLabel(it.profile)}</td>
-                    <td className="px-4 py-3 text-ink">{it.label}</td>
-                    <td className="max-w-[220px] truncate px-4 py-3 font-mono text-[12px] text-ink-2" title={it.origin}>{it.origin}</td>
-                    <td className="px-4 py-3 text-ink-2">
-                      <span className="text-ink-3">{typeLabel(it.identifierType)} · </span>
-                      {it.identifier}
+                    <td className="px-4 py-3 font-medium text-ink">{nameOf(it.profile)}</td>
+                    <td className="px-4 py-3 text-ink">
+                      {it.label}
+                      {/* Ni l'identifiant ni l'adresse : seulement leur nature, rien qui se lise par-dessus l'épaule. */}
+                      <span className="mt-0.5 flex items-center gap-1 text-[12px] text-ink-3">
+                        <Lock className="size-3" /> {typeLabel(it.identifierType)} enregistré
+                      </span>
                     </td>
+                    <td className="max-w-[220px] truncate px-4 py-3 font-mono text-[12px] text-ink-2" title={it.origin}>{it.origin}</td>
                     <td className="max-w-[260px] px-4 py-3 text-ink-3">{it.purpose || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-ink-3">{day(it.createdAt)}</td>
                     <td className="px-4 py-3 text-right">
@@ -153,13 +160,13 @@ export function VaultView() {
         </div>
       )}
 
-      <VaultItemDialog open={adding} onOpenChange={setAdding} profile={profile} profiles={data?.profiles ?? []} onSave={add} />
+      <VaultItemDialog open={adding} onOpenChange={setAdding} profile={profile} profiles={experts_(data)} nameOf={nameOf} onSave={add} />
 
       <ConfirmDialog
         open={Boolean(removing)}
         onOpenChange={(open) => !open && setRemoving(null)}
         title="Retirer la connexion"
-        description={`Retirer « ${removing?.label ?? ""} » ? ${removing ? profileLabel(removing.profile) : "L’expert"} ne pourra plus se connecter à ce site.`}
+        description={`Retirer « ${removing?.label ?? ""} » ? ${removing ? nameOf(removing.profile) : "L’expert"} ne pourra plus se connecter à ce site.`}
         confirmText="Retirer"
         destructive
         onConfirm={remove}

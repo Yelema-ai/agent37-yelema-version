@@ -57,3 +57,13 @@ test("cards: a named file missing from a listed folder is made up, elsewhere it 
   const text = "`~/Livrables/Kouassi/Inventé.pdf` et `~/Livrables/Archives/2025/export.pdf`";
   assert.deepEqual(turnDocs(text, listing, { start: 5, end: 6 }).map((d) => d.path), ["~/Livrables/Archives/2025/export.pdf"]);
 });
+
+test("turnDocs shows no card for a working file (JSON, script, log)", () => {
+  const listing = [
+    { path: "Livrables/Kouassi/etat.json", type: "file" as const, hidden: false, modified: 50, size: 10, name: "etat.json" },
+    { path: "Livrables/Kouassi/calcul.py", type: "file" as const, hidden: false, modified: 50, size: 10, name: "calcul.py" },
+    { path: "Livrables/Kouassi/Point.pdf", type: "file" as const, hidden: false, modified: 50, size: 10, name: "Point.pdf" },
+  ];
+  const docs = turnDocs("Voir Livrables/Kouassi/etat.json", listing as never, { start: 0, end: 100 });
+  assert.deepEqual(docs.map((d) => d.name), ["Point.pdf"]);
+});

@@ -19,6 +19,8 @@ export interface DashboardData {
   maj?: string | null;
   pdfPath?: string | null;
   htmlPath?: string | null;
+  /** The PowerPoint the Expert made beside the PDF, when there is one. */
+  pptxPath?: string | null;
   previewUrl?: string;
   isDjeneba?: boolean;
   teamViewLien?: string | null;
@@ -58,6 +60,7 @@ interface DashboardContextValue {
   stopSharing: () => Promise<boolean>;
   downloadPdf: () => void;
   downloadHtml: () => void;
+  downloadPptx: () => void;
 }
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -209,7 +212,7 @@ export function DashboardProvider({
   useEffect(() => {
     if (isGenerating && activeUrl) {
       setIsGenerating(false);
-      toast.success("Tableau de bord genere et mis en ligne sur Render !");
+      toast.success("Le tableau de bord est mis en ligne.");
     }
   }, [isGenerating, activeUrl]);
 
@@ -250,7 +253,7 @@ export function DashboardProvider({
     const fullUrl = `${window.location.origin}${data.shareUrl}`;
 
     navigator.clipboard.writeText(fullUrl);
-    toast.success("Lien du tableau de bord copie dans le presse-papier !");
+    toast.success("Lien du tableau de bord copié.");
   }, [data?.shareUrl]);
 
   const sharePath = agentId && profile ? `/api/agents/${agentId}/experts/${encodeURIComponent(profile)}/dashboard` : null;
@@ -284,12 +287,27 @@ export function DashboardProvider({
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      toast.success("Telechargement du PDF demarre !");
+      toast.success("Téléchargement du PDF lancé.");
     } else {
-      toast.info("Impression / Enregistrement PDF en cours...");
+      toast.info("Enregistrement en PDF…");
       window.print();
     }
   }, [agentId, data?.pdfPath, profile]);
+
+  // The PowerPoint is a file the Expert writes with its PDF; without one, the Expert is asked for it.
+  const downloadPptx = useCallback(() => {
+    if (data?.pptxPath) {
+      const a = document.createElement("a");
+      a.href = `/api/agents/${agentId}/files/content?path=${encodeURIComponent(data.pptxPath)}&disposition=attachment`;
+      a.download = data.pptxPath.split("/").pop() || `tableau-de-bord-${profile || "expert"}.pptx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success("Téléchargement du PowerPoint lancé.");
+    } else {
+      toast.info("Pas encore de version PowerPoint : demandez-la à l’Expert dans la discussion.");
+    }
+  }, [agentId, data?.pptxPath, profile]);
 
   const downloadHtml = useCallback(async () => {
     if (data?.htmlPath) {
@@ -300,10 +318,10 @@ export function DashboardProvider({
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      toast.success("Telechargement du HTML demarre !");
+      toast.success("Téléchargement de la page HTML lancé.");
     } else if (embedUrl) {
       try {
-        toast.info("Preparation du fichier HTML...");
+        toast.info("Préparation du fichier HTML…");
         const res = await fetch(embedUrl);
         if (!res.ok) throw new Error("Erreur de recuperation");
         const html = await res.text();
@@ -316,12 +334,12 @@ export function DashboardProvider({
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(blobUrl);
-        toast.success("Fichier HTML telecharge !");
+        toast.success("Fichier HTML téléchargé.");
       } catch {
-        toast.error("Echec du telechargement HTML.");
+        toast.error("Le fichier HTML n’a pas pu être téléchargé.");
       }
     } else {
-      toast.error("Aucun contenu disponible pour le telechargement.");
+      toast.error("Rien à télécharger pour l’instant.");
     }
   }, [agentId, data?.htmlPath, embedUrl, profile]);
 
@@ -353,6 +371,7 @@ export function DashboardProvider({
         stopSharing,
         downloadPdf,
         downloadHtml,
+        downloadPptx,
       }}
     >
       {children}

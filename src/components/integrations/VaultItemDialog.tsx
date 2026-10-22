@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { IDENTIFIER_TYPES, profileLabel, type IdentifierType, type VaultDraft } from "@/lib/vault";
+import { IDENTIFIER_TYPES, type IdentifierType, type VaultDraft } from "@/lib/vault";
 import { cn } from "@/lib/utils";
 
 const EMPTY: VaultDraft = { label: "", origin: "", identifierType: "email", identifier: "", password: "", purpose: "" };
@@ -16,7 +16,7 @@ const PLACEHOLDER: Record<IdentifierType, string> = { email: "rh@entreprise.ci",
 // Ajout d'une connexion : ce que demande `hermes vault add`, plus une description pour l'expert. Pas de
 // 2FA. Sans expert choisi dans la page, le formulaire le demande. Le brouillon part au back-office ; un
 // dialogue refermé repart vide (le mot de passe ne reste pas).
-export function VaultItemDialog({ open, onOpenChange, profile, profiles, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; profile: string | null; profiles: string[]; onSave: (profile: string, draft: VaultDraft) => Promise<void> }) {
+export function VaultItemDialog({ open, onOpenChange, profile, profiles, nameOf, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; profile: string | null; profiles: string[]; nameOf: (profile: string) => string; onSave: (profile: string, draft: VaultDraft) => Promise<void> }) {
   const [draft, setDraft] = useState<VaultDraft>(EMPTY);
   const [target, setTarget] = useState<string>(profile ?? "");
   const [busy, setBusy] = useState(false);
@@ -24,7 +24,7 @@ export function VaultItemDialog({ open, onOpenChange, profile, profiles, onSave 
     if (!open) setDraft(EMPTY);
     else setTarget(profile ?? "");
   }, [open, profile]);
-  const expertName = target ? profileLabel(target) : "l’expert";
+  const expertName = target ? nameOf(target) : "l’expert";
   const set = <K extends keyof VaultDraft>(k: K, v: VaultDraft[K]) => setDraft((d) => ({ ...d, [k]: v }));
   const ready = Boolean(target && draft.label.trim() && draft.origin.trim() && draft.identifier.trim() && draft.password);
 
@@ -56,7 +56,7 @@ export function VaultItemDialog({ open, onOpenChange, profile, profiles, onSave 
                 <option value="">Choisir l’expert…</option>
                 {profiles.map((p) => (
                   <option key={p} value={p}>
-                    {profileLabel(p)}
+                    {nameOf(p)}
                   </option>
                 ))}
               </select>

@@ -18,7 +18,7 @@ test("a draft keeps its six fields only; the password is never trimmed", () => {
 });
 
 test("names and refusal sentences", () => {
-  assert.equal(profileLabel("default"), "Assistant général");
+  assert.equal(profileLabel("default"), "Accès commun");
   assert.equal(profileLabel("acme__koffi"), "Koffi");
   assert.equal(profileLabel("adjoua"), "Adjoua");
   assert.match(vaultRefusalMessage("bad_origin") ?? "", /https/);

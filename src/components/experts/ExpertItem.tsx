@@ -63,8 +63,9 @@ export function ExpertItem({
     >
       <span className="relative shrink-0">
         <ExpertAvatar expert={expert} />
+        {/* At work: a green dot that breathes; a new answer: the violet dot; nothing: no dot. */}
         {compact && (unread > 0 || running) && (
-          <span className={cn("absolute -right-0.5 -top-0.5 size-2.5 rounded-full ring-2 ring-surface", unread ? "bg-brand" : "animate-pulse bg-ink-3")} aria-hidden />
+          <span className={cn("absolute -right-0.5 -top-0.5 size-3 rounded-full ring-2 ring-surface", unread ? "bg-brand" : "animate-pulse bg-ok")} aria-hidden />
         )}
       </span>
       {!compact && (
@@ -78,7 +79,7 @@ export function ExpertItem({
           {unread}
         </span>
       )}
-      {!compact && !unread && running && <Loader2 className="size-3.5 shrink-0 animate-spin text-ink-3" aria-label="En cours" />}
+      {!compact && !unread && running && <Loader2 className="size-4 shrink-0 animate-spin text-ok" aria-label="En cours" />}
     </Link>
   );
 }

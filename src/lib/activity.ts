@@ -148,7 +148,7 @@ const MAX_NOTES = 30;
 
 /** Keeps what a notice said, for the bell: the newest event of each conversation, 30 at most. */
 export function remember(s: ActivityState, n: Pick<Notice, "key" | "kind">, text: string, routine: string | null, at: number): ActivityState {
-  const notes = { ...s.notes, [n.key]: { at, kind: n.kind, text: n.kind === "reply" ? excerpt(text) : "", routine } };
+  const notes = { ...s.notes, [n.key]: { at, kind: n.kind, text: n.kind === "routine" ? "" : excerpt(text), routine } };
   const kept = Object.entries(notes)
     .sort((a, b) => b[1].at - a[1].at)
     .slice(0, MAX_NOTES);
@@ -342,4 +342,11 @@ export function splitSSE(buffer: string): { events: { event: string; data: Recor
     }
   }
   return { events, rest };
+}
+
+/** « Routine « … » terminée », without saying « routine » twice when the routine's own name starts with it. */
+export function routineDoneTitle(name: string | null | undefined): string {
+  const n = name?.trim();
+  if (!n) return "Routine terminée";
+  return /^routines?\b/i.test(n) ? `« ${n} » terminée` : `Routine « ${n} » terminée`;
 }

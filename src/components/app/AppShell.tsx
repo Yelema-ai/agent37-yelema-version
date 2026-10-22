@@ -75,7 +75,8 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
         <CallProvider>
         <div
           className="min-h-screen md:grid"
-          style={{ gridTemplateColumns: `${collapsed ? 72 : 272}px minmax(0,1fr)` }}
+          // --shell-nav: where the working area starts, for what covers it (an enlarged dashboard).
+          style={{ gridTemplateColumns: `${collapsed ? 72 : 272}px minmax(0,1fr)`, ["--shell-nav" as string]: `${collapsed ? 72 : 272}px` }}
         >
           {drawerOpen && (
             <button

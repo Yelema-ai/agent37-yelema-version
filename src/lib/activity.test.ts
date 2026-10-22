@@ -7,6 +7,7 @@ import {
   convKey,
   detachTurn,
   detectRoutineRuns,
+  routineDoneTitle,
   excerpt,
   expertActivity,
   finishTurn,
@@ -175,4 +176,10 @@ test("notes survive a reload, per instance", () => {
   const back = parsePersisted(JSON.stringify(persistedFor(s, {}, "a1")), "a1", 0);
   assert.deepEqual(back.notes, { [k]: { at: 7, kind: "reply", text: "Bonjour", routine: null } });
   assert.deepEqual(parsePersisted(JSON.stringify(persistedFor(s, {}, "a2")), "a2", 0).notes, {});
+});
+
+test("routineDoneTitle never says « routine » twice", () => {
+  assert.equal(routineDoneTitle("Calendrier éditorial"), "Routine « Calendrier éditorial » terminée");
+  assert.equal(routineDoneTitle("Routine du point de 17 h"), "« Routine du point de 17 h » terminée");
+  assert.equal(routineDoneTitle(null), "Routine terminée");
 });
