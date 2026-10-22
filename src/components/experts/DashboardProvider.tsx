@@ -17,20 +17,14 @@ export interface DashboardData {
   lien?: string | null;
   hebergeur?: string;
   maj?: string | null;
+  acces?: "public" | "workspace" | "emails";
+  allowedEmails?: string[];
   pdfPath?: string | null;
   htmlPath?: string | null;
   previewUrl?: string;
   isDjeneba?: boolean;
   teamViewLien?: string | null;
-  /** False where the back office does not keep shares (sharing is then unavailable). */
-  sharing?: boolean;
-  share?: { mode: ShareMode; people: string[]; updatedAt: string | null } | null;
-  candidates?: { email: string; name: string | null }[];
-  shareUrl?: string | null;
 }
-
-export type ShareMode = "team" | "people" | "link";
-type ShareAnswer = Pick<DashboardData, "share" | "candidates" | "shareUrl">;
 
 interface DashboardContextValue {
   agentId: string;
@@ -54,8 +48,7 @@ interface DashboardContextValue {
   refresh: () => Promise<void>;
   shareModalOpen: boolean;
   setShareModalOpen: (open: boolean) => void;
-  updateSharing: (mode: ShareMode, people?: string[], regenerate?: boolean) => Promise<boolean>;
-  stopSharing: () => Promise<boolean>;
+  updateSharing: (acces: "public" | "workspace" | "emails", allowedEmails?: string[]) => Promise<boolean>;
   downloadPdf: () => void;
   downloadHtml: () => void;
 }
@@ -243,37 +236,39 @@ export function DashboardProvider({
   }, [profile]);
 
   const copyShareLink = useCallback(() => {
-    if (!data?.shareUrl) {
+    if (!activeUrl) {
       toast.error("Aucun lien de tableau de bord disponible.");
       return;
     }
-    const fullUrl = `${window.location.origin}${data.shareUrl}`;
+    const fullUrl = activeUrl.startsWith("http")
+      ? activeUrl
+      : `${window.location.origin}${activeUrl}`;
 
     navigator.clipboard.writeText(fullUrl);
     toast.success("Lien du tableau de bord copie dans le presse-papier !");
-  }, [data?.shareUrl]);
-
-  const sharePath = agentId && profile ? `/api/agents/${agentId}/experts/${encodeURIComponent(profile)}/dashboard` : null;
-
-  const applyShare = useCallback(async (init: RequestInit): Promise<boolean> => {
-    if (!sharePath) return false;
-    try {
-      const res = await apiFetch<ShareAnswer>(sharePath, init);
-      setData((prev) => (prev ? { ...prev, share: res.share, candidates: res.candidates, shareUrl: res.shareUrl } : null));
-      return true;
-    } catch (err) {
-      toast.error(err instanceof Error && err.message ? err.message : "Le partage n’a pas pu être enregistré.");
-      return false;
-    }
-  }, [sharePath]);
+  }, [activeUrl]);
 
   const updateSharing = useCallback(
-    (mode: ShareMode, people: string[] = [], regenerate = false) =>
-      applyShare({ method: "PATCH", body: JSON.stringify({ mode, people, regenerate }) }),
-    [applyShare]
+    async (acces: "public" | "workspace" | "emails", allowedEmails: string[] = [], showToast = false): Promise<boolean> => {
+      if (!agentId || !profile) return false;
+      try {
+        const res = await apiFetch<{ ok: boolean; acces: "public" | "workspace" | "emails"; allowedEmails: string[] }>(
+          `/api/agents/${agentId}/experts/${encodeURIComponent(profile)}/dashboard`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ acces, allowedEmails }),
+          }
+        );
+        setData((prev) => (prev ? { ...prev, acces: res.acces, allowedEmails: res.allowedEmails } : null));
+        if (showToast) toast.success("Droits d'accès enregistrés !");
+        return true;
+      } catch (err) {
+        toast.error("Erreur lors de l'enregistrement des acces.");
+        return false;
+      }
+    },
+    [agentId, profile]
   );
-
-  const stopSharing = useCallback(() => applyShare({ method: "DELETE" }), [applyShare]);
 
   const downloadPdf = useCallback(() => {
     if (data?.pdfPath) {
@@ -350,7 +345,6 @@ export function DashboardProvider({
         shareModalOpen,
         setShareModalOpen,
         updateSharing,
-        stopSharing,
         downloadPdf,
         downloadHtml,
       }}

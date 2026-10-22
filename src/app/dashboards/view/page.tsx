@@ -22,37 +22,39 @@ import { cn } from "@/lib/utils";
 
 interface SharedDashboardResponse {
   ok: boolean;
-  mode?: "team" | "people" | "link";
+  acces?: "public" | "workspace" | "emails";
   lien?: string;
   maj?: string;
   title?: string;
   description?: string;
-  pdfUrl?: string | null;
-  htmlUrl?: string | null;
+  pdfPath?: string | null;
+  htmlPath?: string | null;
   reason?: "login_required" | "forbidden";
   message?: string;
+  currentUserEmail?: string | null;
   error?: string;
 }
 
 export default function SharedDashboardViewPage() {
   const searchParams = useSearchParams();
-  const shareToken = searchParams.get("s");
+  const agentId = searchParams.get("agentId");
+  const profile = searchParams.get("profile");
 
   const [data, setData] = useState<SharedDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const fetchSharedDashboard = async () => {
-    if (!shareToken) {
+    if (!agentId || !profile) {
       setLoading(false);
-      setData({ ok: false, error: "Lien de partage incomplet." });
+      setData({ ok: false, error: "Lien incomplet (agentId ou profil manquant)." });
       return;
     }
 
     setLoading(true);
     try {
       const res = await fetch(
-        `/api/dashboards/shared?s=${encodeURIComponent(shareToken)}`,
+        `/api/dashboards/shared?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`,
         { cache: "no-store" }
       );
       const json: SharedDashboardResponse = await res.json();
@@ -69,7 +71,7 @@ export default function SharedDashboardViewPage() {
 
   useEffect(() => {
     fetchSharedDashboard();
-  }, [shareToken]);
+  }, [agentId, profile]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -82,10 +84,11 @@ export default function SharedDashboardViewPage() {
   };
 
   const handleDownloadPdf = () => {
-    if (data?.pdfUrl) {
+    if (data?.pdfPath && agentId) {
+      const url = `/api/agents/${agentId}/files/content?path=${encodeURIComponent(data.pdfPath)}&disposition=attachment`;
       const a = document.createElement("a");
-      a.href = data.pdfUrl;
-      a.download = "tableau-de-bord.pdf";
+      a.href = url;
+      a.download = data.pdfPath.split("/").pop() || "tableau-de-bord.pdf";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -95,10 +98,11 @@ export default function SharedDashboardViewPage() {
   };
 
   const handleDownloadHtml = async () => {
-    if (data?.htmlUrl) {
+    if (data?.htmlPath && agentId) {
+      const url = `/api/agents/${agentId}/files/content?path=${encodeURIComponent(data.htmlPath)}&disposition=attachment`;
       const a = document.createElement("a");
-      a.href = data.htmlUrl;
-      a.download = "tableau-de-bord.html";
+      a.href = url;
+      a.download = data.htmlPath.split("/").pop() || "tableau-de-bord.html";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -133,7 +137,7 @@ export default function SharedDashboardViewPage() {
           </div>
           <h1 className="text-xl font-bold text-white mb-2">Connexion requise</h1>
           <p className="text-sm text-slate-400 mb-6 leading-relaxed">
-            {data.error || "Ce tableau de bord est réservé à votre entreprise. Connectez-vous pour l’ouvrir."}
+            {data.message || "Ce tableau de bord est sécurisé. Veuillez vous connecter à votre compte Mstudio pour y accéder."}
           </p>
           <div className="space-y-3">
             <Button
@@ -144,6 +148,9 @@ export default function SharedDashboardViewPage() {
             >
               Se connecter à Mstudio
             </Button>
+            <p className="text-xs text-slate-500">
+              Accès réservé {data.acces === "workspace" ? "aux membres du workspace" : "aux adresses autorisées"}.
+            </p>
           </div>
         </div>
       </div>
@@ -160,8 +167,13 @@ export default function SharedDashboardViewPage() {
           </div>
           <h1 className="text-xl font-bold text-white mb-2">Accès restreint</h1>
           <p className="text-sm text-slate-300 mb-6 leading-relaxed">
-            {data.error || "Ce tableau de bord n’est pas partagé avec vous."}
+            {data.message || "Vous n'avez pas l'autorisation d'accéder à ce tableau de bord."}
           </p>
+          {data.currentUserEmail && (
+            <div className="mb-6 rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
+              Connecté en tant que : <span className="font-semibold text-slate-200">{data.currentUserEmail}</span>
+            </div>
+          )}
           <div className="flex gap-2 justify-center">
             <Button
               variant="outline"
@@ -209,7 +221,12 @@ export default function SharedDashboardViewPage() {
   }
 
   // 5. Affichage du tableau de bord interactif avec bandeau supérieur
-  const embedUrl = data.lien;
+  const embedUrl =
+    data.lien.startsWith("/api/dashboards/frame")
+      ? data.lien
+      : (agentId && profile
+          ? `/api/dashboards/frame?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`
+          : data.lien);
 
   return (
     <div className="flex h-screen w-screen flex-col bg-slate-950 overflow-hidden font-sans">
@@ -224,19 +241,19 @@ export default function SharedDashboardViewPage() {
               <h1 className="text-sm font-semibold text-white tracking-tight">
                 {data.title || "Tableau de bord métier"}
               </h1>
-              {data.mode === "link" && (
+              {data.acces === "public" && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 ring-1 ring-emerald-500/20">
-                  <Globe className="size-2.5" /> Lien
+                  <Globe className="size-2.5" /> Public
                 </span>
               )}
-              {data.mode === "team" && (
+              {data.acces === "workspace" && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-400 ring-1 ring-blue-500/20">
-                  <Users className="size-2.5" /> Entreprise
+                  <Users className="size-2.5" /> Espace Mstudio
                 </span>
               )}
-              {data.mode === "people" && (
+              {data.acces === "emails" && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-400 ring-1 ring-purple-500/20">
-                  <Lock className="size-2.5" /> Personnes choisies
+                  <Lock className="size-2.5" /> Accès restreint
                 </span>
               )}
             </div>
@@ -272,7 +289,7 @@ export default function SharedDashboardViewPage() {
             <span className="hidden sm:inline">HTML</span>
           </Button>
 
-          {data.mode === "link" && (
+          {data.acces === "public" && (
             <a
               href={data.lien}
               target="_blank"

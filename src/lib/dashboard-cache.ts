@@ -22,6 +22,15 @@ const htmlStore = new Map<string, CacheEntry<string>>();
 const htmlFlying = new Map<string, Promise<string>>();
 
 /**
+ * Invalide immédiatement le cache d'un expert (ex: après modification des droits dans la modale).
+ */
+export function invalidateDashboardCache(agentId: string, profile: string): void {
+  const key = `${agentId}:${profile.toLowerCase()}`;
+  stateStore.delete(key);
+  stateFlying.delete(key);
+}
+
+/**
  * Récupère l'état du tableau de bord avec cache mémoire (30s),
  * protection contre le cache négatif (ne bloque pas la génération en cours)
  * et déduplication des requêtes concurrentes (Promise Coalescing).
