@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
+  Info,
   ChevronDown,
   Copy,
   ExternalLink,
@@ -168,6 +169,10 @@ export function ShareDashboardModal() {
       if (match) {
         toggleMemberEmail(match.email);
         setSearchQuery("");
+      } else if (q.includes("@")) {
+        toast.info(
+          "Cette adresse n'appartient pas à votre espace. Pour partager avec une personne externe hors entreprise, choisissez le mode « Toute personne disposant du lien »."
+        );
       } else {
         toast.error("Choisissez un membre de votre espace.");
       }
@@ -433,7 +438,18 @@ export function ShareDashboardModal() {
                       <div className="max-h-56 overflow-y-auto divide-y divide-line/40">
                         {filteredMembers.length === 0 ? (
                           <div className="p-4 text-center text-xs text-ink-3">
-                            {searchQuery ? `Aucun membre ne correspond à « ${searchQuery} »` : "Aucun autre membre dans votre espace."}
+                            {searchQuery.includes("@") ? (
+                              <div className="space-y-1.5 text-left px-1 py-1">
+                                <p className="font-medium text-ink">« {searchQuery} » n’est pas un membre de votre espace.</p>
+                                <p className="text-[11px] text-ink-4 leading-relaxed">
+                                  Pour partager avec un contact extérieur (client, partenaire, banquier), choisissez le mode <strong>« Toute personne disposant du lien »</strong>.
+                                </p>
+                              </div>
+                            ) : searchQuery ? (
+                              `Aucun membre ne correspond à « ${searchQuery} »`
+                            ) : (
+                              "Aucun autre membre dans votre espace."
+                            )}
                           </div>
                         ) : (
                           filteredMembers.map((m) => {
@@ -538,6 +554,14 @@ export function ShareDashboardModal() {
                     Personne n’est choisi : vous seul pouvez ouvrir ce lien.
                   </p>
                 )}
+
+                {/* Guide intuitif pour les personnes hors entreprise */}
+                <div className="flex items-start gap-2.5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-[11.5px] text-blue-800 dark:text-blue-300">
+                  <Info className="size-4 shrink-0 mt-0.5 text-blue-500" />
+                  <div className="leading-relaxed">
+                    <strong>Partager avec une personne externe (hors entreprise) ?</strong> Les clients, partenaires ou banquiers n'ont pas de compte de connexion à votre espace Mstudio. Pour leur transmettre le tableau de bord, sélectionnez le mode <strong>« Toute personne disposant du lien »</strong> (accès direct sécurisé sans connexion) ou téléchargez l'export <strong>PDF / HTML</strong>.
+                  </div>
+                </div>
               </div>
             )}
           </div>
