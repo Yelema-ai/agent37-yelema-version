@@ -1,4 +1,5 @@
 import { instanceFetch } from "@/lib/agent37";
+import { getDashboardStateCandidatePaths, type StoredDashboardState } from "@/lib/dashboards";
 
 // TTL de 30 secondes : équilibre parfait entre réduction drastique de la charge (divisée par 50)
 // et fraîcheur des données pour les utilisateurs.
@@ -14,8 +15,8 @@ interface CacheEntry<T> {
   value: T;
 }
 
-const stateStore = new Map<string, CacheEntry<any>>();
-const stateFlying = new Map<string, Promise<any>>();
+const stateStore = new Map<string, CacheEntry<StoredDashboardState>>();
+const stateFlying = new Map<string, Promise<StoredDashboardState | null>>();
 
 const htmlStore = new Map<string, CacheEntry<string>>();
 const htmlFlying = new Map<string, Promise<string>>();
@@ -34,7 +35,10 @@ export function invalidateDashboardCache(agentId: string, profile: string): void
  * protection contre le cache négatif (ne bloque pas la génération en cours)
  * et déduplication des requêtes concurrentes (Promise Coalescing).
  */
-export async function fetchCachedDashboardState(agentId: string, profile: string): Promise<any> {
+export async function fetchCachedDashboardState(
+  agentId: string,
+  profile: string
+): Promise<StoredDashboardState | null> {
   const key = `${agentId}:${profile.toLowerCase()}`;
   const hit = stateStore.get(key);
   if (hit && Date.now() - hit.at < STATE_TTL_MS) {
@@ -44,23 +48,18 @@ export async function fetchCachedDashboardState(agentId: string, profile: string
   let pending = stateFlying.get(key);
   if (!pending) {
     pending = (async () => {
-      const capitalizedProfile =
-        profile.charAt(0).toUpperCase() + profile.slice(1).toLowerCase();
+      const candidatePaths = getDashboardStateCandidatePaths(profile);
 
-      const candidatePaths = [
-        `Livrables/${capitalizedProfile}/_memoire/state/tableau-de-bord-metier.json`,
-        `Livrables/${profile}/_memoire/state/tableau-de-bord-metier.json`,
-        `memory/state/tableau-de-bord-metier.json`,
-        `memory/state/${profile}/tableau-de-bord-metier.json`,
-      ];
-
-      let found: any = null;
+      let found: StoredDashboardState | null = null;
       for (const p of candidatePaths) {
         try {
           const res = await instanceFetch(agentId, `/v1/files/content?path=${encodeURIComponent(p)}`);
           if (res.ok) {
-            found = await res.json();
-            break;
+            const parsed = (await res.json()) as StoredDashboardState;
+            if (parsed && typeof parsed === "object") {
+              found = parsed;
+              break;
+            }
           }
         } catch {}
       }

@@ -142,10 +142,160 @@ export const EXPERT_DASHBOARD_MAP: Record<string, ExpertDashboardMeta> = {
  * Normalise un nom ou profileId pour trouver le modèle correspondant.
  */
 export function getDashboardMeta(profileId: string | null | undefined): ExpertDashboardMeta | null {
-  if (!profileId) return null;
-  const noVersion = profileId.split("@")[0] ?? profileId;
-  const raw = noVersion.toLowerCase().replace(/^.*__/, "").replace(/[^a-z0-9]/g, "");
+  if (!profileId || typeof profileId !== "string") return null;
+  const trimmed = profileId.trim();
+  // Protection stricte anti-traversée de chemin : rejeter toute tentative avec slash, anti-slash ou points
+  if (trimmed.includes("/") || trimmed.includes("\\") || trimmed.includes("..")) {
+    return null;
+  }
+  const noVersion = trimmed.split("@")[0] ?? trimmed;
+  const raw = noVersion.toLowerCase().replace(/^.*__/, "");
+  // Doit être un identifiant strict sans caractères parasites
+  if (!/^[a-z0-9_-]+$/.test(raw)) {
+    return null;
+  }
   return EXPERT_DASHBOARD_MAP[raw] ?? null;
+}
+
+export const TRUSTED_FRAME_REGEX =
+  /^https:\/\/(?:mstudio-frames\.onrender\.com|yelema-dashboards\.onrender\.com)\/share\/frame\/[0-9a-fA-F\-]{36}$/;
+
+export function isTrustedDashboardUrl(url: unknown): url is string {
+  return typeof url === "string" && TRUSTED_FRAME_REGEX.test(url.trim());
+}
+
+/**
+ * Chemins d'emplacement candidats du fichier d'état du tableau de bord sur l'instance Agent37.
+ */
+export function getDashboardStateCandidatePaths(profile: string): string[] {
+  const capitalized = profile ? profile.charAt(0).toUpperCase() + profile.slice(1).toLowerCase() : "";
+  return [
+    `Livrables/${capitalized}/_memoire/state/tableau-de-bord-metier.json`,
+    `Livrables/${profile}/_memoire/state/tableau-de-bord-metier.json`,
+    `memory/state/tableau-de-bord-metier.json`,
+    `memory/state/${profile}/tableau-de-bord-metier.json`,
+    `.hermes/profiles/${profile}/memory/state/tableau-de-bord-metier.json`,
+  ];
+}
+
+export type DashboardAccessRule = "public" | "workspace" | "emails";
+
+export interface StoredDashboardState {
+  lien?: string | null;
+  hebergeur?: string | null;
+  maj?: string | null;
+  acces?: "public" | "workspace" | "emails" | string | null;
+  allowed_emails?: string[];
+  allowedEmails?: string[];
+  workspace_id?: string | null;
+  pdfPath?: string | null;
+  htmlPath?: string | null;
+  fichiers?: string | null;
+  [key: string]: unknown;
+}
+
+/**
+ * Normalise la règle d'accès avec sécurité par défaut (workspace par défaut).
+ */
+export function normalizeDashboardAccess(raw: unknown): DashboardAccessRule {
+  if (typeof raw !== "string") return "workspace";
+  const trimmed = raw.toLowerCase().trim();
+  if (trimmed === "public") return "public";
+  if (trimmed === "emails") return "emails";
+  return "workspace";
+}
+
+export interface DashboardAccessCheckParams {
+  acces: DashboardAccessRule;
+  allowedEmails: string[];
+  stateWorkspaceId?: string | null;
+  pinnedWorkspaceId?: string | null;
+  isBackoffice: boolean;
+  currentUserEmail?: string | null;
+  isWorkspaceMember: boolean;
+}
+
+export type DashboardAccessResult =
+  | { allowed: true }
+  | { allowed: false; status: 401; reason: "login_required"; message: string }
+  | { allowed: false; status: 403; reason: "forbidden"; message: string }
+  | { allowed: false; status: 404; reason: "not_found"; message: string };
+
+/**
+ * Évalue les autorisations d'accès à un tableau de bord.
+ * Implémente le cloisonnement multi-locataires strict et le repli sécurisé.
+ */
+export function evaluateDashboardAccess(params: DashboardAccessCheckParams): DashboardAccessResult {
+  const {
+    acces,
+    allowedEmails,
+    stateWorkspaceId,
+    pinnedWorkspaceId,
+    isBackoffice,
+    currentUserEmail,
+    isWorkspaceMember,
+  } = params;
+
+  // Règle Critique 1 : Cloisonnement strict multi-locataires
+  // En mode back-office (ex: app.yelema.ai avec tenant pinned),
+  // exiger STRICTEMENT state.workspace_id === pinned, sans exception (même en mode public).
+  // Si le tableau n'a pas été partagé/enregistré pour ce workspace ou appartient à un autre client -> 404
+  if (isBackoffice) {
+    if (!pinnedWorkspaceId || !stateWorkspaceId || stateWorkspaceId !== pinnedWorkspaceId) {
+      return { allowed: false, status: 404, reason: "not_found", message: "Tableau de bord introuvable." };
+    }
+  } else if (pinnedWorkspaceId && stateWorkspaceId && stateWorkspaceId !== pinnedWorkspaceId) {
+    return { allowed: false, status: 404, reason: "not_found", message: "Tableau de bord introuvable." };
+  }
+
+  // Évaluation selon la règle d'accès
+  if (acces === "public") {
+    return { allowed: true };
+  }
+
+  if (acces === "workspace") {
+    if (!currentUserEmail) {
+      return {
+        allowed: false,
+        status: 401,
+        reason: "login_required",
+        message: "Ce tableau de bord est réservé aux collaborateurs de l'espace de travail. Veuillez vous connecter.",
+      };
+    }
+    if (!isWorkspaceMember) {
+      return {
+        allowed: false,
+        status: 403,
+        reason: "forbidden",
+        message: "Votre compte n'appartient pas à l'espace de travail propriétaire de ce tableau de bord.",
+      };
+    }
+    return { allowed: true };
+  }
+
+  if (acces === "emails") {
+    if (!currentUserEmail) {
+      return {
+        allowed: false,
+        status: 401,
+        reason: "login_required",
+        message: "Ce tableau de bord est réservé à des personnes spécifiques. Veuillez vous connecter avec votre adresse autorisée.",
+      };
+    }
+    const normalizedCurrentUser = currentUserEmail.toLowerCase().trim();
+    const hasEmail = allowedEmails.some((e) => e.toLowerCase().trim() === normalizedCurrentUser);
+    if (!hasEmail) {
+      return {
+        allowed: false,
+        status: 403,
+        reason: "forbidden",
+        message: `L'adresse ${currentUserEmail} n'est pas autorisée à consulter ce tableau de bord. Contactez l'administrateur pour demander l'accès.`,
+      };
+    }
+    return { allowed: true };
+  }
+
+  return { allowed: false, status: 403, reason: "forbidden", message: "Accès non autorisé." };
 }
 
 export interface DashboardState {

@@ -328,7 +328,7 @@ function DashboardContent() {
           src={embedUrl}
           title="Tableau de bord"
           className="h-full w-full border-0 bg-transparent"
-          sandbox="allow-scripts allow-forms allow-popups allow-downloads"
+          sandbox="allow-scripts allow-popups allow-downloads"
         />
       </div>
     </div>

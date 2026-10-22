@@ -2,7 +2,7 @@ import { invalidateDashboardCache } from "@/lib/dashboard-cache";
 import { pinnedWorkspaceId } from "@/lib/tenant";
 import { agent37, instanceFetch } from "@/lib/agent37";
 import { requireAgentAccess } from "@/lib/auth";
-import { getDashboardMeta } from "@/lib/dashboards";
+import { getDashboardMeta, getDashboardStateCandidatePaths, normalizeDashboardAccess } from "@/lib/dashboards";
 import { handleError, json, readJson } from "@/lib/http";
 
 type Ctx = { params: Promise<{ id: string; profile: string }> };
@@ -10,6 +10,9 @@ type Ctx = { params: Promise<{ id: string; profile: string }> };
 export async function GET(request: Request, { params }: Ctx) {
   try {
     const { id, profile } = await params;
+    if (!profile || !/^[a-z0-9_-]+$/i.test(profile)) {
+      return json({ available: false, message: "Profil d'expert invalide." }, 400);
+    }
     await requireAgentAccess(id);
 
     const meta = getDashboardMeta(profile);
@@ -26,22 +29,18 @@ export async function GET(request: Request, { params }: Ctx) {
       lien: null as string | null,
       hebergeur: "render",
       maj: null as string | null,
-      acces: "public" as "public" | "workspace" | "emails",
+      acces: "workspace" as "public" | "workspace" | "emails",
       allowedEmails: [] as string[],
       pdfPath: null as string | null,
       htmlPath: null as string | null,
     };
 
-    const capitalizedProfile = profile ? profile.charAt(0).toUpperCase() + profile.slice(1).toLowerCase() : "";
-    const candidatePaths = [
-      `Livrables/${capitalizedProfile}/_memoire/state/tableau-de-bord-metier.json`,
-      `Livrables/${profile}/_memoire/state/tableau-de-bord-metier.json`,
-      `memory/state/tableau-de-bord-metier.json`,
-      `memory/state/${profile}/tableau-de-bord-metier.json`,
-      `.hermes/profiles/${profile}/memory/state/tableau-de-bord-metier.json`,
-    ];
+    const capitalizedProfile = profile.charAt(0).toUpperCase() + profile.slice(1).toLowerCase();
+    const candidatePaths = getDashboardStateCandidatePaths(profile);
 
     let foundFichiersFolder: string | null = null;
+    let foundFileContent: Record<string, unknown> | null = null;
+    let foundFilePath: string | null = null;
 
     for (const p of candidatePaths) {
       try {
@@ -50,14 +49,7 @@ export async function GET(request: Request, { params }: Ctx) {
           const text = await res.text();
           const parsed = JSON.parse(text);
           if (parsed && typeof parsed === "object" && typeof parsed.lien === "string" && parsed.lien) {
-            let parsedAcces: "public" | "workspace" | "emails" = "public";
-            if (parsed.acces === "workspace" || parsed.acces === "protege") {
-              parsedAcces = "workspace";
-            } else if (parsed.acces === "emails") {
-              parsedAcces = "emails";
-            } else if (typeof parsed.acces === "string" && parsed.acces.toLowerCase().includes("public")) {
-              parsedAcces = "public";
-            }
+            const parsedAcces = normalizeDashboardAccess(parsed.acces);
 
             const parsedEmails = Array.isArray(parsed.allowed_emails)
               ? parsed.allowed_emails.filter((x: unknown): x is string => typeof x === "string")
@@ -76,12 +68,32 @@ export async function GET(request: Request, { params }: Ctx) {
             if (typeof parsed.fichiers === "string" && parsed.fichiers.trim()) {
               foundFichiersFolder = parsed.fichiers.trim();
             }
+            foundFileContent = parsed;
+            foundFilePath = p;
             break;
           }
         }
       } catch {
         // try next candidate path
       }
+    }
+
+    // Auto-stamp workspace_id si manquant lors de la consultation par le propriétaire
+    const pinned = await pinnedWorkspaceId().catch(() => undefined);
+    if (pinned && foundFileContent && foundFilePath && !foundFileContent.workspace_id) {
+      try {
+        foundFileContent.workspace_id = pinned;
+        await instanceFetch(
+          id,
+          `/v1/files/content?path=${encodeURIComponent(foundFilePath)}&overwrite=true`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(foundFileContent, null, 1),
+          }
+        );
+        invalidateDashboardCache(id, profile);
+      } catch {}
     }
 
     // Recherche des fichiers PDF et HTML de livrable
@@ -99,7 +111,6 @@ export async function GET(request: Request, { params }: Ctx) {
           const listRes = await agent37.listFiles(id, dir);
           const entries = listRes.entries || [];
           
-          // Vérifier si des sous-dossiers de date existent (ex: 2026-10-21)
           for (const entry of entries) {
             if (entry.type === "directory" && entry.name !== "archives" && !state.pdfPath) {
               try {
@@ -206,22 +217,27 @@ export async function GET(request: Request, { params }: Ctx) {
 export async function PATCH(request: Request, { params }: Ctx) {
   try {
     const { id, profile } = await params;
-    await requireAgentAccess(id);
 
+    // 1. Validation stricte du profil : rejette ../ et profils inconnus
+    if (!profile || !/^[a-z0-9_-]+$/i.test(profile)) {
+      return json({ error: "Profil d'expert invalide." }, 400);
+    }
+    const meta = getDashboardMeta(profile);
+    if (!meta) {
+      return json({ error: "Profil d'expert introuvable." }, 404);
+    }
+
+    // 2. Exiger le rôle admin pour configurer les droits de partage
+    await requireAgentAccess(id, "admin");
+
+    // 3. Normaliser la règle d'accès : défaut strict à "workspace" (et non "public")
     const body = await readJson<{ acces?: string; allowedEmails?: string[] }>(request);
-    const acces = body.acces === "workspace" || body.acces === "emails" ? body.acces : "public";
+    const acces = normalizeDashboardAccess(body.acces);
     const allowedEmails = Array.isArray(body.allowedEmails)
       ? body.allowedEmails.map((e) => String(e).trim().toLowerCase()).filter(Boolean)
       : [];
 
-    const capitalizedProfile = profile ? profile.charAt(0).toUpperCase() + profile.slice(1).toLowerCase() : "";
-    const candidatePaths = [
-      `Livrables/${capitalizedProfile}/_memoire/state/tableau-de-bord-metier.json`,
-      `Livrables/${profile}/_memoire/state/tableau-de-bord-metier.json`,
-      `memory/state/tableau-de-bord-metier.json`,
-      `memory/state/${profile}/tableau-de-bord-metier.json`,
-    ];
-
+    const candidatePaths = getDashboardStateCandidatePaths(profile);
     let targetPath = candidatePaths[0];
     let existingContent: Record<string, unknown> = {};
 
