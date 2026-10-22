@@ -222,10 +222,11 @@ export default function SharedDashboardViewPage() {
 
   // 5. Affichage du tableau de bord interactif avec bandeau supérieur
   const embedUrl =
-    data.lien.startsWith("https://mstudio-frames.onrender.com/share/frame/") ||
-    data.lien.startsWith("https://yelema-dashboards.onrender.com/share/frame/")
-      ? `/api/dashboards/frame?url=${encodeURIComponent(data.lien)}`
-      : data.lien;
+    data.lien.startsWith("/api/dashboards/frame")
+      ? data.lien
+      : (agentId && profile
+          ? `/api/dashboards/frame?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`
+          : data.lien);
 
   return (
     <div className="flex h-screen w-screen flex-col bg-slate-950 overflow-hidden font-sans">

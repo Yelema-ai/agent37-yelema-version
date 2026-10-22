@@ -193,7 +193,7 @@ export function DashboardProvider({
       activeUrl.startsWith("https://mstudio-frames.onrender.com/share/frame/") ||
       activeUrl.startsWith("https://yelema-dashboards.onrender.com/share/frame/")
     ) {
-      return `/api/dashboards/frame?url=${encodeURIComponent(activeUrl)}`;
+      if (agentId && profile) { return `/api/dashboards/frame?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`; } return activeUrl;
     }
     return activeUrl;
   }, [activeUrl]);
