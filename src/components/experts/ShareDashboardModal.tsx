@@ -134,10 +134,8 @@ export function ShareDashboardModal() {
 
   // En mode Workspace ou Emails spécifiques : obligatoirement le lien protégé Mstudio qui bloque les personnes non connectées
   // En mode Public : le lien direct Render ou le lien plateforme
-  const effectiveShareLink =
-    accesMode === "public"
-      ? (activeUrl || platformProtectedLink)
-      : (platformProtectedLink || activeUrl || "");
+  // Toujours utiliser le lien securise Mstudio sous notre domaine
+  const effectiveShareLink = platformProtectedLink || activeUrl || "";
 
   const handleCopy = () => {
     if (!effectiveShareLink) {
