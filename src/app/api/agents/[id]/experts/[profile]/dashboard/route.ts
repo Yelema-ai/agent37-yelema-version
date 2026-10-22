@@ -1,10 +1,27 @@
-import { readDashboardState, shareUrlOf, stampShare, writeDashboardState } from "@/lib/dashboard-share";
+import { backoffice, BackofficeError, type BoDashboardShareView, type DashboardShareMode } from "@/lib/backoffice";
+import { shareForBrowser, shareUrlOf } from "@/lib/dashboard-share";
 import { agent37, instanceFetch } from "@/lib/agent37";
 import { requireAgentAccess } from "@/lib/auth";
-import { getDashboardMeta, getDashboardStateCandidatePaths, normalizeDashboardAccess } from "@/lib/dashboards";
-import { handleError, json, readJson } from "@/lib/http";
+import { getDashboardMeta, getDashboardStateCandidatePaths } from "@/lib/dashboards";
+import { ApiError, handleError, json, readJson } from "@/lib/http";
+import { authViaBackoffice } from "@/lib/runtime-config";
+import { readSession } from "@/lib/session";
+import { pinnedWorkspaceId } from "@/lib/tenant";
 
 type Ctx = { params: Promise<{ id: string; profile: string }> };
+
+const MODES: readonly DashboardShareMode[] = ["team", "people", "link"];
+
+/** The owner's back-office session; sharing is the back office's, so without it there is none. */
+async function shareToken(): Promise<string> {
+  const session = authViaBackoffice() ? await readSession() : null;
+  if (!session) throw new ApiError(404, "not_found", "Le partage n’est pas disponible ici.");
+  return session.accessToken;
+}
+
+async function shareAnswer(view: BoDashboardShareView | null) {
+  return { ...shareForBrowser(view), shareUrl: shareUrlOf(await pinnedWorkspaceId().catch(() => undefined), view) };
+}
 
 export async function GET(request: Request, { params }: Ctx) {
   try {
@@ -12,7 +29,7 @@ export async function GET(request: Request, { params }: Ctx) {
     if (!profile || !/^[a-z0-9_-]+$/i.test(profile)) {
       return json({ available: false, message: "Profil d'expert invalide." }, 400);
     }
-    const { row } = await requireAgentAccess(id);
+    await requireAgentAccess(id);
 
     const meta = getDashboardMeta(profile);
     const isDjeneba = profile.toLowerCase().includes("djeneba");
@@ -28,8 +45,6 @@ export async function GET(request: Request, { params }: Ctx) {
       lien: null as string | null,
       hebergeur: "render",
       maj: null as string | null,
-      acces: "workspace" as "public" | "workspace" | "emails",
-      allowedEmails: [] as string[],
       pdfPath: null as string | null,
       htmlPath: null as string | null,
     };
@@ -38,8 +53,6 @@ export async function GET(request: Request, { params }: Ctx) {
     const candidatePaths = getDashboardStateCandidatePaths(profile);
 
     let foundFichiersFolder: string | null = null;
-    let foundFileContent: Record<string, unknown> | null = null;
-    let foundFilePath: string | null = null;
 
     for (const p of candidatePaths) {
       try {
@@ -48,18 +61,10 @@ export async function GET(request: Request, { params }: Ctx) {
           const text = await res.text();
           const parsed = JSON.parse(text);
           if (parsed && typeof parsed === "object" && typeof parsed.lien === "string" && parsed.lien) {
-            const parsedAcces = normalizeDashboardAccess(parsed.acces);
-
-            const parsedEmails = Array.isArray(parsed.allowed_emails)
-              ? parsed.allowed_emails.filter((x: unknown): x is string => typeof x === "string")
-              : [];
-
             state = {
               lien: parsed.lien,
               hebergeur: typeof parsed.hebergeur === "string" ? parsed.hebergeur : "render",
               maj: typeof parsed.maj === "string" ? parsed.maj : null,
-              acces: parsedAcces,
-              allowedEmails: parsedEmails,
               pdfPath: null,
               htmlPath: null,
             };
@@ -67,8 +72,6 @@ export async function GET(request: Request, { params }: Ctx) {
             if (typeof parsed.fichiers === "string" && parsed.fichiers.trim()) {
               foundFichiersFolder = parsed.fichiers.trim();
             }
-            foundFileContent = parsed;
-            foundFilePath = p;
             break;
           }
         }
@@ -77,14 +80,9 @@ export async function GET(request: Request, { params }: Ctx) {
       }
     }
 
-    // A generated dashboard gets its client and share number once, so its owner always has a link to give.
-    let shareUrl: string | null = null;
-    if (foundFileContent && foundFilePath && row.workspace_id) {
-      if (stampShare(foundFileContent, row.workspace_id)) {
-        await writeDashboardState(id, profile, foundFilePath, foundFileContent).catch(() => false);
-      }
-      shareUrl = shareUrlOf(foundFileContent, id, profile);
-    }
+    // Who may read it is the back office's; a share it cannot read is shown as not shared.
+    const sharing = authViaBackoffice() && (await readSession()) !== null;
+    const share = sharing ? await backoffice.dashboardShare(await shareToken(), profile).catch(() => null) : null;
 
     // Recherche des fichiers PDF et HTML de livrable
     try {
@@ -191,60 +189,51 @@ export async function GET(request: Request, { params }: Ctx) {
       lien: state.lien,
       hebergeur: state.hebergeur || "render",
       maj: state.maj,
-      acces: state.acces,
-      allowedEmails: state.allowedEmails,
       pdfPath: state.pdfPath,
       htmlPath: state.htmlPath,
       previewUrl,
       isDjeneba,
       teamViewLien: teamLien,
-      shareUrl,
+      sharing,
+      ...(await shareAnswer(share)),
     });
   } catch (e) {
     return handleError(e);
   }
 }
 
+// `{ mode, people?, regenerate? }`: opens or sets the share; `DELETE` stops it. The back office checks the
+// expert is the caller's, keeps the rule and logs the change; nothing is written on the instance.
 export async function PATCH(request: Request, { params }: Ctx) {
   try {
     const { id, profile } = await params;
-
-    // 1. Validation stricte du profil : rejette ../ et profils inconnus
-    if (!profile || !/^[a-z0-9_-]+$/i.test(profile)) {
-      return json({ error: "Profil d'expert invalide." }, 400);
-    }
-    const meta = getDashboardMeta(profile);
-    if (!meta) {
-      return json({ error: "Profil d'expert introuvable." }, 404);
-    }
-
-    // 2. Exiger le rôle admin pour configurer les droits de partage
-    const { row } = await requireAgentAccess(id, "admin");
-
-    // 3. Normaliser la règle d'accès : défaut strict à "workspace" (et non "public")
-    const body = await readJson<{ acces?: string; allowedEmails?: string[]; regenerate?: boolean }>(request);
-    const acces = normalizeDashboardAccess(body.acces);
-    const allowedEmails = Array.isArray(body.allowedEmails)
-      ? body.allowedEmails
-          .map((e) => String(e).trim().toLowerCase())
-          .filter((e) => /^[^\s@]{1,64}@[^\s@]{1,255}$/.test(e))
-          .slice(0, 50)
-      : [];
-
-    const { path, state, found } = await readDashboardState(id, profile);
-    if (!found) {
-      return json({ error: "Aucun tableau de bord généré pour cet expert." }, 404);
-    }
-    stampShare(state, row.workspace_id, body.regenerate === true);
-    state.acces = acces;
-    state.allowed_emails = allowedEmails;
-
-    if (!(await writeDashboardState(id, profile, path, state))) {
-      return json({ error: "Impossible d'enregistrer les droits de partage sur l'instance." }, 502);
-    }
-
-    return json({ ok: true, acces, allowedEmails, shareUrl: shareUrlOf(state, id, profile) });
+    if (!/^[a-z0-9_-]{1,64}$/i.test(profile) || !getDashboardMeta(profile)) return json({ error: "Profil d'expert invalide." }, 400);
+    await requireAgentAccess(id);
+    const body = await readJson<{ mode?: unknown; people?: unknown; regenerate?: unknown }>(request);
+    const mode = MODES.find((m) => m === body.mode);
+    if (!mode) return json({ error: "Mode de partage inconnu." }, 400);
+    const people = Array.isArray(body.people) ? body.people.filter((e): e is string => typeof e === "string").slice(0, 50) : [];
+    const view = await backoffice.saveDashboardShare(await shareToken(), profile, { mode, people, regenerate: body.regenerate === true });
+    return json({ ok: true, ...(await shareAnswer(view)) });
   } catch (e) {
-    return handleError(e);
+    return shareError(e);
   }
+}
+
+export async function DELETE(_request: Request, { params }: Ctx) {
+  try {
+    const { id, profile } = await params;
+    if (!/^[a-z0-9_-]{1,64}$/i.test(profile) || !getDashboardMeta(profile)) return json({ error: "Profil d'expert invalide." }, 400);
+    await requireAgentAccess(id);
+    const view = await backoffice.stopDashboardShare(await shareToken(), profile);
+    return json({ ok: true, ...(await shareAnswer(view)) });
+  } catch (e) {
+    return shareError(e);
+  }
+}
+
+/** A back-office refusal keeps its status and its sentence (written for the member); the rest as usual. */
+function shareError(e: unknown) {
+  if (e instanceof BackofficeError && e.status < 500) return json({ error: e.message }, e.status);
+  return handleError(e);
 }

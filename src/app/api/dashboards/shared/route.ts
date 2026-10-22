@@ -14,25 +14,22 @@ export async function GET(request: NextRequest) {
           error: resolved.error,
           message: resolved.error,
           reason: resolved.reason,
-          acces: resolved.acces,
-          currentUserEmail: resolved.currentUserEmail,
         },
         { status: resolved.status }
       );
     }
 
-    const { state, meta, acces, currentUserEmail } = resolved;
+    const { state, meta, mode } = resolved;
     const s = encodeURIComponent(token ?? "");
     return NextResponse.json({
       ok: true,
-      acces,
+      mode,
       lien: `/api/dashboards/frame?s=${s}`,
       maj: state.maj || null,
       title: meta.title,
       description: meta.role || "",
       pdfUrl: deliverableKind(state.pdfPath) === "pdf" ? `/api/dashboards/file?s=${s}&kind=pdf` : null,
       htmlUrl: deliverableKind(state.htmlPath) === "html" ? `/api/dashboards/file?s=${s}&kind=html` : null,
-      currentUserEmail,
     });
   } catch (err) {
     console.error("[DashboardShared] Erreur interne:", err);

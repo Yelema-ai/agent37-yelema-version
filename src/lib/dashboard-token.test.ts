@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { newShareNumber, openShare, sealShare, shareKey } from "./dashboard-token.ts";
+import { openShare, sealShare, shareKey } from "./dashboard-token.ts";
 
 const KEY = shareKey({ DASHBOARD_SHARE_SECRET: "une-cle-de-test-assez-longue" });
 const OTHER = shareKey({ DASHBOARD_SHARE_SECRET: "une-autre-cle-de-test-longue" });
-const CLAIMS = { w: "ws-a", i: "7p5qy2effr", p: "fatima", n: newShareNumber() };
+const CLAIMS = { w: "ws-a", s: "shr_4f1c9a0e2b7d4c6f8a1e3b5d7c9f0a2b", n: "Q2h4cVd0Z3pMbW5Yb1ZhUjM" };
 
 describe("jeton de partage d'un tableau", () => {
-  it("s'ouvre avec la même clé et ne laisse lire ni l'instance ni le profil", () => {
+  it("s'ouvre avec la même clé et ne laisse lire ni le partage ni son numéro", () => {
     const token = sealShare(CLAIMS, KEY)!;
     assert.deepEqual(openShare(token, KEY), CLAIMS);
     const plain = Buffer.from(token, "base64url").toString("latin1");
-    assert.ok(!plain.includes("7p5qy2effr") && !plain.includes("fatima"));
+    assert.ok(!plain.includes("shr_") && !plain.includes(CLAIMS.n));
   });
 
   it("refuse une autre clé, un jeton altéré, tronqué ou étranger", () => {
