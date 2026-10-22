@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
+import { deliverableKind,
   evaluateDashboardAccess,
   getDashboardMeta,
   getDashboardStateCandidatePaths,
@@ -242,4 +242,13 @@ test("validation du profil dans les routes d'API : rejet strict de toute travers
   assert.equal(isProfileValid("mamadou%2Fadjoua"), false);
   assert.equal(isProfileValid(undefined), false);
   assert.equal(isProfileValid(""), false);
+});
+
+test("exports d'un tableau partagé : seulement un .pdf ou .html sous Livrables/", () => {
+  assert.equal(deliverableKind("Livrables/Fatima/2026-10-21/tableau.pdf"), "pdf");
+  assert.equal(deliverableKind("Livrables/Fatima/tableau.html"), "html");
+  assert.equal(deliverableKind("Livrables/../.env"), null);
+  assert.equal(deliverableKind("memory/state/x.pdf"), null);
+  assert.equal(deliverableKind("Livrables/Fatima/notes.txt"), null);
+  assert.equal(deliverableKind(null), null);
 });

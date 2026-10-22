@@ -1,9 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveDashboardAccess } from "@/lib/dashboard-access";
+import { deliverableKind } from "@/lib/dashboards";
 
 export async function GET(request: NextRequest) {
   try {
-    const resolved = await resolveDashboardAccess(request);
+    const token = request.nextUrl.searchParams.get("s");
+    const resolved = await resolveDashboardAccess(token);
 
     if (!resolved.ok) {
       return NextResponse.json(
@@ -19,17 +21,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { agentId, profile, state, meta, acces, currentUserEmail } = resolved;
-
+    const { state, meta, acces, currentUserEmail } = resolved;
+    const s = encodeURIComponent(token ?? "");
     return NextResponse.json({
       ok: true,
       acces,
-      lien: `/api/dashboards/frame?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`,
+      lien: `/api/dashboards/frame?s=${s}`,
       maj: state.maj || null,
       title: meta.title,
       description: meta.role || "",
-      pdfPath: state.pdfPath || null,
-      htmlPath: state.htmlPath || null,
+      pdfUrl: deliverableKind(state.pdfPath) === "pdf" ? `/api/dashboards/file?s=${s}&kind=pdf` : null,
+      htmlUrl: deliverableKind(state.htmlPath) === "html" ? `/api/dashboards/file?s=${s}&kind=html` : null,
       currentUserEmail,
     });
   } catch (err) {

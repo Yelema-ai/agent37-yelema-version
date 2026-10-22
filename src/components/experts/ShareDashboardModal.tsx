@@ -16,6 +16,7 @@ import {
   Users,
   X,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import {
   Dialog,
@@ -37,10 +38,7 @@ export function ShareDashboardModal() {
   const {
     shareModalOpen,
     setShareModalOpen,
-    agentId,
-    profile,
     agentName,
-    activeUrl,
     data,
     updateSharing,
   } = useDashboard();
@@ -66,7 +64,7 @@ export function ShareDashboardModal() {
   // Synchroniser avec les données actuelles quand la modale s'ouvre
   useEffect(() => {
     if (shareModalOpen && data) {
-      setAccesMode(data.acces || "public");
+      setAccesMode(data.acces || "workspace");
       setEmails(data.allowedEmails || []);
       setSearchQuery("");
       setDropdownOpen(false);
@@ -126,16 +124,17 @@ export function ShareDashboardModal() {
     void persistSharing(mode, emails);
   };
 
-  // Lien protégé via Mstudio : indispensable pour imposer la vérification d'authentification et de workspace
-  const platformProtectedLink =
-    typeof window !== "undefined" && agentId && profile
-      ? `${(process.env.NEXT_PUBLIC_SITE_URL || window.location.origin).replace(/\/$/, "")}/dashboards/view?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`
-      : "";
+  // Always the platform link, sealed by the server: it names neither the instance nor the expert, and
+  // every opening goes through the access check. Same origin as this page, so the client's sub-domain.
+  const effectiveShareLink =
+    typeof window !== "undefined" && data?.shareUrl ? `${window.location.origin}${data.shareUrl}` : "";
 
-  // En mode Workspace ou Emails spécifiques : obligatoirement le lien protégé Mstudio qui bloque les personnes non connectées
-  // En mode Public : le lien direct Render ou le lien plateforme
-  // Toujours utiliser le lien securise Mstudio sous notre domaine
-  const effectiveShareLink = platformProtectedLink || activeUrl || "";
+  const handleRegenerate = async () => {
+    setSaveStatus("saving");
+    const ok = await updateSharing(accesMode, emails, false, true);
+    setSaveStatus(ok ? "saved" : "idle");
+    if (ok) toast.success("Nouveau lien créé : l'ancien ne fonctionne plus.");
+  };
 
   const handleCopy = () => {
     if (!effectiveShareLink) {
@@ -658,6 +657,20 @@ export function ShareDashboardModal() {
                 >
                   <ExternalLink className="size-3.5" />
                 </a>
+              )}
+              {effectiveShareLink && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRegenerate}
+                  disabled={saveStatus === "saving"}
+                  className="h-9 px-3 text-xs gap-1.5 shrink-0"
+                  title="Créer un nouveau lien ; l'ancien cessera de fonctionner"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Régénérer</span>
+                </Button>
               )}
             </div>
 

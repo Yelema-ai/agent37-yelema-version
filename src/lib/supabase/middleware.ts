@@ -57,7 +57,8 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/invite") ||
     pathname.startsWith("/dashboards") ||
     pathname.startsWith("/api/dashboards/shared") ||
-    pathname.startsWith("/api/dashboards/frame");
+    pathname.startsWith("/api/dashboards/frame") ||
+    pathname.startsWith("/api/dashboards/file");
 
   if (!user && !isPublic) {
     if (pathname.startsWith("/api/")) {
@@ -109,7 +110,8 @@ function isPublicPath(pathname: string): boolean {
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/dashboards") ||
     pathname.startsWith("/api/dashboards/shared") ||
-    pathname.startsWith("/api/dashboards/frame")
+    pathname.startsWith("/api/dashboards/frame") ||
+    pathname.startsWith("/api/dashboards/file")
   );
 }
 

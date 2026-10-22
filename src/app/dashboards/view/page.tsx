@@ -27,8 +27,8 @@ interface SharedDashboardResponse {
   maj?: string;
   title?: string;
   description?: string;
-  pdfPath?: string | null;
-  htmlPath?: string | null;
+  pdfUrl?: string | null;
+  htmlUrl?: string | null;
   reason?: "login_required" | "forbidden";
   message?: string;
   currentUserEmail?: string | null;
@@ -37,24 +37,23 @@ interface SharedDashboardResponse {
 
 export default function SharedDashboardViewPage() {
   const searchParams = useSearchParams();
-  const agentId = searchParams.get("agentId");
-  const profile = searchParams.get("profile");
+  const shareToken = searchParams.get("s");
 
   const [data, setData] = useState<SharedDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const fetchSharedDashboard = async () => {
-    if (!agentId || !profile) {
+    if (!shareToken) {
       setLoading(false);
-      setData({ ok: false, error: "Lien incomplet (agentId ou profil manquant)." });
+      setData({ ok: false, error: "Lien de partage incomplet." });
       return;
     }
 
     setLoading(true);
     try {
       const res = await fetch(
-        `/api/dashboards/shared?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`,
+        `/api/dashboards/shared?s=${encodeURIComponent(shareToken)}`,
         { cache: "no-store" }
       );
       const json: SharedDashboardResponse = await res.json();
@@ -71,7 +70,7 @@ export default function SharedDashboardViewPage() {
 
   useEffect(() => {
     fetchSharedDashboard();
-  }, [agentId, profile]);
+  }, [shareToken]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -84,11 +83,10 @@ export default function SharedDashboardViewPage() {
   };
 
   const handleDownloadPdf = () => {
-    if (data?.pdfPath && agentId) {
-      const url = `/api/agents/${agentId}/files/content?path=${encodeURIComponent(data.pdfPath)}&disposition=attachment`;
+    if (data?.pdfUrl) {
       const a = document.createElement("a");
-      a.href = url;
-      a.download = data.pdfPath.split("/").pop() || "tableau-de-bord.pdf";
+      a.href = data.pdfUrl;
+      a.download = "tableau-de-bord.pdf";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -98,11 +96,10 @@ export default function SharedDashboardViewPage() {
   };
 
   const handleDownloadHtml = async () => {
-    if (data?.htmlPath && agentId) {
-      const url = `/api/agents/${agentId}/files/content?path=${encodeURIComponent(data.htmlPath)}&disposition=attachment`;
+    if (data?.htmlUrl) {
       const a = document.createElement("a");
-      a.href = url;
-      a.download = data.htmlPath.split("/").pop() || "tableau-de-bord.html";
+      a.href = data.htmlUrl;
+      a.download = "tableau-de-bord.html";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -221,12 +218,7 @@ export default function SharedDashboardViewPage() {
   }
 
   // 5. Affichage du tableau de bord interactif avec bandeau supérieur
-  const embedUrl =
-    data.lien.startsWith("/api/dashboards/frame")
-      ? data.lien
-      : (agentId && profile
-          ? `/api/dashboards/frame?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`
-          : data.lien);
+  const embedUrl = data.lien;
 
   return (
     <div className="flex h-screen w-screen flex-col bg-slate-950 overflow-hidden font-sans">

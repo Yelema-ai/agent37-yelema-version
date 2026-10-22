@@ -24,6 +24,7 @@ export interface DashboardData {
   previewUrl?: string;
   isDjeneba?: boolean;
   teamViewLien?: string | null;
+  shareUrl?: string | null;
 }
 
 interface DashboardContextValue {
@@ -48,7 +49,7 @@ interface DashboardContextValue {
   refresh: () => Promise<void>;
   shareModalOpen: boolean;
   setShareModalOpen: (open: boolean) => void;
-  updateSharing: (acces: "public" | "workspace" | "emails", allowedEmails?: string[]) => Promise<boolean>;
+  updateSharing: (acces: "public" | "workspace" | "emails", allowedEmails?: string[], showToast?: boolean, regenerate?: boolean) => Promise<boolean>;
   downloadPdf: () => void;
   downloadHtml: () => void;
 }
@@ -236,30 +237,28 @@ export function DashboardProvider({
   }, [profile]);
 
   const copyShareLink = useCallback(() => {
-    if (!activeUrl) {
+    if (!data?.shareUrl) {
       toast.error("Aucun lien de tableau de bord disponible.");
       return;
     }
-    const fullUrl = activeUrl.startsWith("http")
-      ? activeUrl
-      : `${window.location.origin}${activeUrl}`;
+    const fullUrl = `${window.location.origin}${data.shareUrl}`;
 
     navigator.clipboard.writeText(fullUrl);
     toast.success("Lien du tableau de bord copie dans le presse-papier !");
-  }, [activeUrl]);
+  }, [data?.shareUrl]);
 
   const updateSharing = useCallback(
-    async (acces: "public" | "workspace" | "emails", allowedEmails: string[] = [], showToast = false): Promise<boolean> => {
+    async (acces: "public" | "workspace" | "emails", allowedEmails: string[] = [], showToast = false, regenerate = false): Promise<boolean> => {
       if (!agentId || !profile) return false;
       try {
-        const res = await apiFetch<{ ok: boolean; acces: "public" | "workspace" | "emails"; allowedEmails: string[] }>(
+        const res = await apiFetch<{ ok: boolean; acces: "public" | "workspace" | "emails"; allowedEmails: string[]; shareUrl: string | null }>(
           `/api/agents/${agentId}/experts/${encodeURIComponent(profile)}/dashboard`,
           {
             method: "PATCH",
-            body: JSON.stringify({ acces, allowedEmails }),
+            body: JSON.stringify({ acces, allowedEmails, regenerate }),
           }
         );
-        setData((prev) => (prev ? { ...prev, acces: res.acces, allowedEmails: res.allowedEmails } : null));
+        setData((prev) => (prev ? { ...prev, acces: res.acces, allowedEmails: res.allowedEmails, shareUrl: res.shareUrl } : null));
         if (showToast) toast.success("Droits d'accès enregistrés !");
         return true;
       } catch (err) {

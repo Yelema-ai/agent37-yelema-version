@@ -1,5 +1,4 @@
-import { invalidateDashboardCache } from "@/lib/dashboard-cache";
-import { pinnedWorkspaceId } from "@/lib/tenant";
+import { readDashboardState, shareUrlOf, stampShare, writeDashboardState } from "@/lib/dashboard-share";
 import { agent37, instanceFetch } from "@/lib/agent37";
 import { requireAgentAccess } from "@/lib/auth";
 import { getDashboardMeta, getDashboardStateCandidatePaths, normalizeDashboardAccess } from "@/lib/dashboards";
@@ -13,7 +12,7 @@ export async function GET(request: Request, { params }: Ctx) {
     if (!profile || !/^[a-z0-9_-]+$/i.test(profile)) {
       return json({ available: false, message: "Profil d'expert invalide." }, 400);
     }
-    await requireAgentAccess(id);
+    const { row } = await requireAgentAccess(id);
 
     const meta = getDashboardMeta(profile);
     const isDjeneba = profile.toLowerCase().includes("djeneba");
@@ -78,22 +77,13 @@ export async function GET(request: Request, { params }: Ctx) {
       }
     }
 
-    // Auto-stamp workspace_id si manquant lors de la consultation par le propriétaire
-    const pinned = await pinnedWorkspaceId().catch(() => undefined);
-    if (pinned && foundFileContent && foundFilePath && !foundFileContent.workspace_id) {
-      try {
-        foundFileContent.workspace_id = pinned;
-        await instanceFetch(
-          id,
-          `/v1/files/content?path=${encodeURIComponent(foundFilePath)}&overwrite=true`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(foundFileContent, null, 1),
-          }
-        );
-        invalidateDashboardCache(id, profile);
-      } catch {}
+    // A generated dashboard gets its client and share number once, so its owner always has a link to give.
+    let shareUrl: string | null = null;
+    if (foundFileContent && foundFilePath && row.workspace_id) {
+      if (stampShare(foundFileContent, row.workspace_id)) {
+        await writeDashboardState(id, profile, foundFilePath, foundFileContent).catch(() => false);
+      }
+      shareUrl = shareUrlOf(foundFileContent, id, profile);
     }
 
     // Recherche des fichiers PDF et HTML de livrable
@@ -208,6 +198,7 @@ export async function GET(request: Request, { params }: Ctx) {
       previewUrl,
       isDjeneba,
       teamViewLien: teamLien,
+      shareUrl,
     });
   } catch (e) {
     return handleError(e);
@@ -228,62 +219,31 @@ export async function PATCH(request: Request, { params }: Ctx) {
     }
 
     // 2. Exiger le rôle admin pour configurer les droits de partage
-    await requireAgentAccess(id, "admin");
+    const { row } = await requireAgentAccess(id, "admin");
 
     // 3. Normaliser la règle d'accès : défaut strict à "workspace" (et non "public")
-    const body = await readJson<{ acces?: string; allowedEmails?: string[] }>(request);
+    const body = await readJson<{ acces?: string; allowedEmails?: string[]; regenerate?: boolean }>(request);
     const acces = normalizeDashboardAccess(body.acces);
     const allowedEmails = Array.isArray(body.allowedEmails)
-      ? body.allowedEmails.map((e) => String(e).trim().toLowerCase()).filter(Boolean)
+      ? body.allowedEmails
+          .map((e) => String(e).trim().toLowerCase())
+          .filter((e) => /^[^\s@]{1,64}@[^\s@]{1,255}$/.test(e))
+          .slice(0, 50)
       : [];
 
-    const candidatePaths = getDashboardStateCandidatePaths(profile);
-    let targetPath = candidatePaths[0];
-    let existingContent: Record<string, unknown> = {};
-
-    for (const p of candidatePaths) {
-      try {
-        const res = await instanceFetch(id, `/v1/files/content?path=${encodeURIComponent(p)}`);
-        if (res.ok) {
-          const text = await res.text();
-          const parsed = JSON.parse(text);
-          if (parsed && typeof parsed === "object") {
-            targetPath = p;
-            existingContent = parsed;
-            break;
-          }
-        }
-      } catch {}
+    const { path, state, found } = await readDashboardState(id, profile);
+    if (!found) {
+      return json({ error: "Aucun tableau de bord généré pour cet expert." }, 404);
     }
+    stampShare(state, row.workspace_id, body.regenerate === true);
+    state.acces = acces;
+    state.allowed_emails = allowedEmails;
 
-    const pinned = await pinnedWorkspaceId().catch(() => undefined);
-    if (pinned) {
-      existingContent.workspace_id = pinned;
-    }
-    existingContent.acces = acces;
-    existingContent.allowed_emails = allowedEmails;
-
-    const putRes = await instanceFetch(
-      id,
-      `/v1/files/content?path=${encodeURIComponent(targetPath)}&overwrite=true`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(existingContent, null, 1),
-      }
-    );
-
-    if (!putRes.ok) {
+    if (!(await writeDashboardState(id, profile, path, state))) {
       return json({ error: "Impossible d'enregistrer les droits de partage sur l'instance." }, 502);
     }
 
-    invalidateDashboardCache(id, profile);
-
-    return json({
-      ok: true,
-      acces,
-      allowedEmails,
-    });
+    return json({ ok: true, acces, allowedEmails, shareUrl: shareUrlOf(state, id, profile) });
   } catch (e) {
     return handleError(e);
   }

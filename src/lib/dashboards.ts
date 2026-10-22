@@ -160,6 +160,14 @@ export function getDashboardMeta(profileId: string | null | undefined): ExpertDa
 export const TRUSTED_FRAME_REGEX =
   /^https:\/\/(?:mstudio-frames\.onrender\.com|yelema-dashboards\.onrender\.com)\/share\/frame\/[0-9a-fA-F\-]{36}$/;
 
+/** "pdf" or "html" for a deliverable path an expert wrote under Livrables/; null for anything else. */
+export function deliverableKind(path: unknown): "pdf" | "html" | null {
+  if (typeof path !== "string" || path.length > 512 || !path.startsWith("Livrables/")) return null;
+  if (path.includes("..") || path.includes("\\") || path.includes("//")) return null;
+  const ext = /\.(pdf|html?)$/i.exec(path)?.[1]?.toLowerCase();
+  return ext === "pdf" ? "pdf" : ext ? "html" : null;
+}
+
 export function isTrustedDashboardUrl(url: unknown): url is string {
   return typeof url === "string" && TRUSTED_FRAME_REGEX.test(url.trim());
 }
@@ -188,6 +196,7 @@ export interface StoredDashboardState {
   allowed_emails?: string[];
   allowedEmails?: string[];
   workspace_id?: string | null;
+  share_id?: string | null;
   pdfPath?: string | null;
   htmlPath?: string | null;
   fichiers?: string | null;
