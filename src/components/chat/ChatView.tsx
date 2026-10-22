@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { ComputerButton, ComputerDialog, ComputerPanel } from "@/components/experts/ExpertComputer";
+import { DashboardProvider } from "@/components/experts/DashboardProvider";
+import { DashboardButton, DashboardPanel, DashboardDialog, ShareDashboardModal } from "@/components/experts/ExpertDashboard";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { expertDisplayName } from "@/lib/experts";
@@ -120,7 +122,19 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
     instance?.image?.template === SCREEN_TEMPLATE &&
     (instance.image.revision ?? 0) >= SCREEN_MIN_REVISION;
 
+    const handleTriggerTableau = useCallback(() => {
+    void send("/tableau");
+  }, [send]);
+
   return (
+    <DashboardProvider
+      agentId={agentId}
+      profile={profile}
+      agentName={agentName}
+      onTriggerTableau={handleTriggerTableau}
+      isStreaming={isStreaming}
+      messages={messages}
+    >
     <div className="flex h-full min-h-0">
     <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col wide:min-w-[400px]" {...att.dragHandlers}>
       {att.dragOver && <DropOverlay label="Déposez vos fichiers pour les joindre" />}
@@ -136,6 +150,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
         </div>
         <div className="flex shrink-0 items-center gap-2">
         {hasComputer && <ComputerButton />}
+        {Boolean(profile) && <DashboardButton />}
         <button
           type="button"
           onClick={startNewChat}
@@ -210,6 +225,14 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
           <ComputerDialog expert={{ name: agentName }} busy={isStreaming} onTakeOver={stop} onWrite={requestComposerFocus} />
         </>
       )}
+      {Boolean(profile) && (
+        <>
+          <DashboardPanel />
+          <DashboardDialog />
+          <ShareDashboardModal />
+        </>
+      )}
     </div>
+    </DashboardProvider>
   );
 }
