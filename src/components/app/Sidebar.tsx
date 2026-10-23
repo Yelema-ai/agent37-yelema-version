@@ -51,7 +51,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
   return (
     <aside
       className={cn(
-        "sticky top-0 flex h-screen flex-col gap-0.5 overflow-y-auto border-r border-line bg-surface px-3 py-3.5",
+        "sticky top-0 flex h-screen flex-col gap-0.5 border-r border-line bg-surface px-3 py-3.5",
         collapsed && "px-2.5 items-center"
       )}
     >
@@ -123,6 +123,8 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
         {!collapsed && "Intégrations"}
       </Link>
 
+      {/* The Experts and the conversations scroll between the top of the menu and its foot, which stay put. */}
+      <div className={cn("-mx-3 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3", collapsed && "-mx-2.5 items-center px-2.5")}>
       {!collapsed && (
         <div className="px-2.5 pt-4 pb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-3">Mes Experts</div>
       )}
@@ -182,7 +184,9 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
         </Link>
       )}
 
-      <div className="mt-auto flex w-full flex-col gap-0.5 border-t border-line pt-3">
+      </div>
+
+      <div className="flex w-full flex-col gap-0.5 border-t border-line pt-3">
         <Link
           href="/administration"
           className={cn(
@@ -203,10 +207,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
           href="https://yelema.ai"
           target="_blank"
           rel="noopener"
-          className={cn(
-            "mt-1 flex items-center justify-center gap-2 rounded-xl bg-soft px-2.5 py-2.5 text-xs text-ink-3",
-            collapsed && "px-0"
-          )}
+          className="mt-0.5 flex items-center justify-center gap-1.5 py-1 text-[11.5px] text-ink-3 hover:text-ink"
         >
           {!collapsed && "Powered by"}
           <Image src="/yelema-long.png" alt="Yelema" width={55} height={16} className="h-4 w-auto" />

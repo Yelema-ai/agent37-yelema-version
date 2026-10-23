@@ -18,7 +18,9 @@ import { MAX_UPLOAD_BYTES, TOO_LARGE } from "@/lib/upload-limit";
 import { useVoices } from "@/components/voice/useVoices";
 import { useVoiceExpert } from "@/components/voice/useVoiceExpert";
 import { loadVoicePrefs } from "@/lib/voice-prefs";
-import { chosenVoice, expertDefaultVoice, type VoicePrefs } from "@/lib/voice";
+import { chosenVoice, countryFlag, countryName, expertDefaultVoice, VOICE_LANGUAGES, type VoicePrefs } from "@/lib/voice";
+
+const GENDER_LABEL = { female: "Femme", male: "Homme", neutral: "Neutre" } as const;
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
@@ -212,10 +214,14 @@ export function ExpertEditModal({
                 <div className="flex items-center justify-between gap-3">
                   <span className="min-w-0">
                     <Label>Sa voix</Label>
-                    <span className="mt-1 flex items-center gap-1.5 text-sm text-ink">
+                    <span className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-ink">
                       {voiceNow ? (
                         <>
                           <b className="font-semibold">{voiceNow.label}</b>
+                          <span className="text-ink-3">
+                            {GENDER_LABEL[voiceNow.gender]}, {countryFlag(voiceNow.country)} {countryName(voiceNow.country)},{" "}
+                            {VOICE_LANGUAGES.find((l) => l.id === voiceNow.language)?.label.toLowerCase()}
+                          </span>
                           {voiceIsDefault && <span className="rounded-full bg-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-2">par défaut</span>}
                         </>
                       ) : (
