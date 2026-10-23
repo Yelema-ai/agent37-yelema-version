@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useConversationStatus } from "@/components/activity/hooks";
-import { CheckCheck, ChevronRight, Copy, Loader2, MoreHorizontal, Pencil, Plus, Repeat, RotateCw, Search, Trash2, X } from "lucide-react";
+import { CheckCheck, ChevronRight, Link2, Loader2, MoreHorizontal, Pencil, Plus, Repeat, RotateCw, Search, Trash2, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNotifications } from "@/components/activity/ActivityProvider";
 import { convKey } from "@/lib/activity";
@@ -10,10 +10,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { conversationText } from "@/lib/conversation-text";
-import { expertDisplayName } from "@/lib/experts";
 import { profileQuery } from "@/lib/profile-id";
-import type { SessionDetail } from "@/lib/types";
 import { useChatContext } from "./ChatProvider";
 import type { ChatSession } from "./types";
 
@@ -117,16 +114,25 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [draft, setDraft] = useState("");
   const skipBlur = useRef(false);
 
-  // « Copier la conversation »: the whole thread as text, to paste to a colleague or a developer.
-  // A shareable read-only link needs the back office (an expert's space is its owner's only).
-  async function copyConversation(s: ChatSession) {
+  // « Copier le lien »: a read-only link to the thread, for a signed-in colleague of the same company
+  // (30 days, see conversation-token.ts).
+  async function copyLink(s: ChatSession) {
+    const mint = apiFetch<{ path: string; days: number }>(
+      `/api/agents/${agentId}/chat/sessions/${s.session_id}/share${profileQuery(profile)}`,
+      { method: "POST", body: JSON.stringify({ title: s.routine ?? s.title ?? "" }) }
+    );
+    const url = mint.then((res) => new URL(res.path, window.location.origin).toString());
     try {
-      const res = await apiFetch<SessionDetail>(`/api/agents/${agentId}/chat/sessions/${s.session_id}${profileQuery(profile)}`);
-      const expert = profile ? expertDisplayName(profile) : "L’Expert";
-      await navigator.clipboard.writeText(conversationText(s.routine ?? s.title ?? "Conversation", expert, res.history ?? []));
-      toast.success("Conversation copiée. Collez-la où vous voulez.");
-    } catch {
-      toast.error("La conversation n’a pas pu être copiée. Réessayez.");
+      // Safari only copies inside the click itself: hand it the link still being made (ClipboardItem
+      // with a promise), and fall back to writing the text once it is there.
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
+        await navigator.clipboard.write([new ClipboardItem({ "text/plain": url.then((u) => new Blob([u], { type: "text/plain" })) })]);
+      } else {
+        await navigator.clipboard.writeText(await url);
+      }
+      toast.success(`Lien copié. Il ouvre la conversation en lecture seule pour vos collègues, pendant ${(await mint).days} jours.`);
+    } catch (e) {
+      toast.error((e as Error).message || "Le lien n’a pas pu être copié. Réessayez.");
     }
   }
 
@@ -195,11 +201,11 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           {/* The date gives way to the row's actions on hover. */}
           <span className="shrink-0 text-[11.5px] font-normal tabular-nums text-ink-3 group-hover:invisible group-has-[[data-state=open]]:invisible pointer-coarse:mr-7 pointer-coarse:group-hover:visible pointer-coarse:group-has-[[data-state=open]]:visible">{shortWhen(activeAt(s))}</span>
         </button>
-        {/* Renommer, Copier la conversation and Supprimer behind « … »: on hover with a mouse, always shown on a touch screen. */}
+        {/* Renommer, Copier le lien and Supprimer behind « … »: on hover with a mouse, always shown on a touch screen. */}
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={`Actions pour ${label}`}
-            title="Renommer, copier ou supprimer"
+            title="Renommer, copier le lien ou supprimer"
             className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-ink-3 opacity-0 transition-opacity hover:bg-soft-2 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100"
           >
             <MoreHorizontal className="h-4 w-4" />
@@ -208,8 +214,8 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
             <DropdownMenuItem onSelect={() => startRename(s.session_id, s.title)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
               <Pencil className="size-4" /> Renommer
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void copyConversation(s)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
-              <Copy className="size-4" /> Copier la conversation
+            <DropdownMenuItem onSelect={() => void copyLink(s)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
+              <Link2 className="size-4" /> Copier le lien
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setPendingDeleteId(s.session_id)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm text-ko">
               <Trash2 className="size-4" /> Supprimer
