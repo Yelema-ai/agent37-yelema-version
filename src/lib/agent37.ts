@@ -1,6 +1,6 @@
 import "server-only";
 import { coldStartWait } from "./cold-start";
-import { gatewayFetch, gatewayInstancePath, gatewayPortHeaders, runtimeGateway } from "./runtime-gateway";
+import { gatewayFetch, gatewayInstancePath, gatewayPortHeaders, runtimeGateway, type RuntimeGateway } from "./runtime-gateway";
 import type {
   Agent,
   Budget,
@@ -44,6 +44,15 @@ function urlId(value: string): string {
 function instanceBaseUrl(id: string, port?: number): string {
   const suffix = port === undefined ? "" : `-${Math.trunc(port)}`;
   return `https://${urlId(id)}${suffix}.${INSTANCE_DOMAIN}`;
+}
+
+/** What the hub of a Claude Code instance publishes; `hub: null` = no bot on it yet. */
+export type TelegramHubStatus = { connected: boolean; hub: { bot?: string; mode?: "topics" | "single"; started?: boolean; topics?: { profile: string; thread: number }[]; current?: string | null } | null };
+
+function requireGateway(): RuntimeGateway {
+  const gw = runtimeGateway();
+  if (!gw) throw new Agent37Error(501, "unsupported", "Telegram for this runtime needs the runtime gateway");
+  return gw;
 }
 
 export type RuntimeCapabilities = { runtime: string; profiles: string[]; active: boolean; capabilities: string[] };
@@ -297,6 +306,15 @@ export const agent37 = {
     const gw = runtimeGateway();
     if (gw) return gatewayFetch(gw, `/v1/instances/${urlId(id)}/experts/${urlId(profile)}/files/${encodeURIComponent(name)}`);
     return instanceFetch(id, `/v1/files/content?path=${encodeURIComponent(`~/.hermes/profiles/${profile}/${name}`)}`);
+  },
+
+  // Telegram of a Claude Code instance, through the runtime gateway's managed-bot manager: a t.me link
+  // that has the member create their own bot, then what the instance's hub publishes (bot, topics).
+  telegramHub: {
+    link: async (id: string, name: string): Promise<{ url: string; expiresAt: string }> =>
+      parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram/link`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) })),
+    status: async (id: string): Promise<TelegramHubStatus> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram`)),
+    disconnect: async (id: string): Promise<{ ok: true }> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram`, { method: "DELETE" })),
   },
 
   // What the instance's runtime offers (the gateway's /capabilities); `null` direct, where every

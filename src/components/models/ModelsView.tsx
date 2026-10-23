@@ -6,7 +6,9 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { llmPending, type LlmMember, type LlmOverview, type LlmWritten } from "@/lib/llm";
 import { scopeParam, type InstanceScope, type LlmSetup } from "@/lib/llm-accounts";
+import type { ClaudeAuthView } from "@/lib/claude-code-auth";
 import { AccountsBoard, describe } from "./AccountsBoard";
+import { ClaudeCodeModel } from "./ClaudeCodeModel";
 import { ExpertModels } from "./ExpertModels";
 import { MemberSources } from "./MemberSources";
 import { useModelGroups } from "./useModelGroups";
@@ -58,6 +60,20 @@ export function ModelsView() {
   }, [data, admin, others]);
 
   const member = scope.kind === "member" ? data?.members?.find((m) => m.id === scope.id) : undefined;
+  // Une instance sous Claude Code ne prend que l'abonnement Claude ou une clé Anthropic : son propre bloc.
+  const claudeMember = scope.kind === "member" ? scope.id : null;
+  const [claude, setClaude] = useState<ClaudeAuthView | null>(null);
+  const loadClaude = useCallback(async () => {
+    try {
+      setClaude(await apiFetch<ClaudeAuthView>(`/api/claude-code/auth${claudeMember ? `?member=${encodeURIComponent(claudeMember)}` : ""}`));
+    } catch {
+      setClaude({ unsupported: true });
+    }
+  }, [claudeMember]);
+  useEffect(() => {
+    setClaude(null);
+    void loadClaude();
+  }, [loadClaude]);
   const setup = (scope.kind === "member" ? member?.setup : data?.setup) ?? EMPTY;
   const version = setup.groups.map((g) => `${g.provider}:${g.accounts.length}`).join(",");
   const models = useModelGroups(data ? scopeParam(scope) : null, undefined, version);
@@ -72,13 +88,24 @@ export function ModelsView() {
   );
 
   if (error && !data) return <p className="max-w-xl rounded-xl bg-ko-pale px-4 py-3 text-sm text-ko">{error}</p>;
-  if (!data) return <div className="h-40 animate-pulse rounded-[22px] border border-line bg-soft" />;
+  if (!data || !claude) return <div className="h-40 animate-pulse rounded-[22px] border border-line bg-soft" />;
 
   const who = member?.name ?? member?.email ?? "ce membre";
   const title = scope.kind === "member" ? `Comptes de l’instance de ${who}` : "Comptes de l’instance";
   const scopeLabel = scope.kind === "member" ? `l’instance de ${who}` : "votre instance";
   const refused = (scope.kind === "member" ? member?.state : data.mine?.state) === "refused";
   const catalogues = { catalogue: data.catalogue, logins: data.logins ?? [] };
+
+  const picker = admin && others.length > 0 ? <InstancePicker mine={!!data.mine} others={others} value={scope} onChange={setScope} /> : undefined;
+  if (!("unsupported" in claude)) {
+    return (
+      <div className="space-y-6">
+        <p className="text-[15px] text-ink-2">Cette instance tourne sous Claude Code : connectez un abonnement Claude ou une clé API Anthropic.</p>
+        <ClaudeCodeModel status={claude} member={claudeMember} picker={picker} onChanged={loadClaude} />
+        {admin && data.members && <MemberSources members={data.members} onPick={(id) => setScope(data.members?.find((m) => m.id === id)?.self ? { kind: "own" } : { kind: "member", id })} />}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -95,7 +122,7 @@ export function ModelsView() {
         setup={setup}
         scope={scope}
         title={title}
-        picker={admin && others.length > 0 ? <InstancePicker mine={!!data.mine} others={others} value={scope} onChange={setScope} /> : undefined}
+        picker={picker}
         scopeLabel={scopeLabel}
         {...catalogues}
         customEndpoints={data.customEndpoints === true}

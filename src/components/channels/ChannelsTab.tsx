@@ -20,6 +20,7 @@ import { ChannelCredentialsForm } from "@/components/channels/ChannelCredentials
 import { SlackConnect } from "@/components/channels/SlackConnect";
 import { TeamsConnect } from "@/components/channels/TeamsConnect";
 import { TelegramConnect } from "@/components/channels/TelegramConnect";
+import { TelegramHub } from "@/components/channels/TelegramHub";
 import { TelegramTopics } from "@/components/channels/TelegramTopics";
 import { WhatsAppConnect } from "@/components/channels/WhatsAppConnect";
 import { useRuntimeTools } from "@/components/experts/useRuntimeTools";
@@ -45,7 +46,7 @@ export function ChannelsTab({
   // stopped agent. Only a state that says the instance is down gives up without trying: an unknown
   // one means it could not be read, not that it is stopped.
   const reachable = !["stopped", "deleting", "deleted", "failed", "error"].includes(agent.live_status ?? "");
-  // The channels below are the Hermes harness's own; another runtime's are set up by Yelema.
+  // The channels below are the Hermes harness's own; a Claude Code instance has Telegram through its hub.
   const hermesTools = useRuntimeTools(agentId);
 
   const [channels, setChannels] = useState<MessagingPlatform[] | null>(null);
@@ -78,9 +79,7 @@ export function ChannelsTab({
     return (
       <div className="space-y-6">
         <Header />
-        <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-          Les canaux de vos experts sont réglés par Yelema pour cet espace. Écrivez-nous pour en ajouter un.
-        </p>
+        <TelegramHub agentId={agentId} canManage={canManage} />
       </div>
     );
   }
