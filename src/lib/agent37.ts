@@ -1,5 +1,6 @@
 import "server-only";
 import { coldStartWait } from "./cold-start";
+import { gatewayFetch, gatewayInstancePath, gatewayPortHeaders, runtimeGateway } from "./runtime-gateway";
 import type {
   Agent,
   Budget,
@@ -44,6 +45,8 @@ function instanceBaseUrl(id: string, port?: number): string {
   const suffix = port === undefined ? "" : `-${Math.trunc(port)}`;
   return `https://${urlId(id)}${suffix}.${INSTANCE_DOMAIN}`;
 }
+
+export type RuntimeCapabilities = { runtime: string; profiles: string[]; active: boolean; capabilities: string[] };
 
 export class Agent37Error extends Error {
   status: number;
@@ -92,7 +95,14 @@ async function parseAgent37<T>(res: Response, augment402 = false): Promise<T> {
   return data as T;
 }
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
+// `gatewayPath`: the same call on the runtime gateway; absent = not offered there.
+async function call<T>(path: string, init?: RequestInit, gatewayPath?: string): Promise<T> {
+  const gw = runtimeGateway();
+  if (gw) {
+    if (!gatewayPath) throw new Agent37Error(501, "unsupported", `${path} is not offered by the runtime gateway`);
+    const res = await gatewayFetch(gw, gatewayPath, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } });
+    return parseAgent37<T>(res, true);
+  }
   const key = process.env.AGENT37_API_KEY;
   if (!key) {
     throw new Agent37Error(500, "config_error", "AGENT37_API_KEY is not set on the server");
@@ -124,11 +134,17 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 // (Blob/string/ArrayBuffer) already carry a length and pass straight through. Forwarded uploads are
 // bounded by the edge's upload envelope, so the buffer stays small.
 export async function instanceFetch(id: string, path: string, init?: RequestInit): Promise<Response> {
+  const body = init?.body instanceof ReadableStream ? await new Response(init.body).arrayBuffer() : init?.body;
+  const gw = runtimeGateway();
+  // The gateway mirrors the instance's paths under /v1/instances/{id}/ (same verbs, same bodies).
+  if (gw) {
+    if (!path.startsWith("/v1/")) throw new Agent37Error(400, "invalid_request", "Invalid instance path");
+    return gatewayFetch(gw, gatewayInstancePath(urlId(id), path), { ...init, body });
+  }
   const key = process.env.AGENT37_API_KEY;
   if (!key) {
     throw new Agent37Error(500, "config_error", "AGENT37_API_KEY is not set on the server");
   }
-  const body = init?.body instanceof ReadableStream ? await new Response(init.body).arrayBuffer() : init?.body;
   return fetch(`${instanceBaseUrl(id)}${path}`, {
     ...init,
     body,
@@ -141,6 +157,10 @@ export async function instanceFetch(id: string, path: string, init?: RequestInit
 // Routines tab reaches Hermes's API server (lib/hermes-cron), which checks its own Bearer key: the
 // edge passes Authorization through untouched. JSON bodies only.
 export async function instancePortFetch(id: string, port: number, path: string, init?: RequestInit): Promise<Response> {
+  const gw = runtimeGateway();
+  if (gw) {
+    return gatewayFetch(gw, `/v1/instances/${urlId(id)}/ports/${Math.trunc(port)}${path}`, { ...init, headers: gatewayPortHeaders(init?.headers) });
+  }
   const key = process.env.AGENT37_API_KEY;
   if (!key) {
     throw new Agent37Error(500, "config_error", "AGENT37_API_KEY is not set on the server");
@@ -171,8 +191,10 @@ async function instanceCall<T>(id: string, path: string, init?: RequestInit): Pr
 // deletes, starts, stops, updates, resizes or re-budgets an instance: those are the back office's,
 // and an app holding the workspace-wide key must not be able to do them for a signed-in user.
 export const agent37 = {
-  listAgents: () => call<{ data: Agent[] }>("/instances"),
-  getAgent: (id: string) => call<Agent>(`/instances/${urlId(id)}`),
+  // The Agent37 account is shared by every Yelema client: the gateway only lists this workspace's.
+  listAgents: (workspaceId: string) =>
+    call<{ data: Agent[] }>("/instances", undefined, `/v1/control/instances?workspace=${encodeURIComponent(workspaceId)}`),
+  getAgent: (id: string) => call<Agent>(`/instances/${urlId(id)}`, undefined, `/v1/instances/${urlId(id)}/agent`),
   // Run a shell command inside the instance. The escape hatch for anything the API does not wrap as
   // its own call. Here it is how the Messaging tab reaches the harness's own messaging API, which
   // listens on a loopback port inside the sandbox. A command that exits nonzero is a normal 200 with
@@ -180,16 +202,18 @@ export const agent37 = {
   exec: (id: string, command: string, user?: "root") =>
     call<{ exit_code: number; stdout: string; stderr: string; truncated: boolean }>(
       `/instances/${urlId(id)}/exec`,
-      { method: "POST", body: JSON.stringify({ command, ...(user ? { user } : {}) }) }
+      { method: "POST", body: JSON.stringify({ command, ...(user ? { user } : {}) }) },
+      `/v1/instances/${urlId(id)}/exec`
     ),
 
   signedUrl: (id: string, port: number, ttlSeconds?: number) =>
-    call<{ url: string; domain_urls?: string[]; port: number; expires_at: number }>(`/instances/${urlId(id)}/signed-url`, {
-      method: "POST",
-      body: JSON.stringify({ port, ...(ttlSeconds ? { ttl_seconds: ttlSeconds } : {}) }),
-    }),
+    call<{ url: string; domain_urls?: string[]; port: number; expires_at: number }>(
+      `/instances/${urlId(id)}/signed-url`,
+      { method: "POST", body: JSON.stringify({ port, ...(ttlSeconds ? { ttl_seconds: ttlSeconds } : {}) }) },
+      `/v1/instances/${urlId(id)}/signed-url`
+    ),
 
-  listTemplates: () => call<{ data: Template[] }>("/templates"),
+  listTemplates: () => call<{ data: Template[] }>("/templates", undefined, "/v1/control/templates"),
 
   // ---- Per-instance Agents API (data plane: web chat) — served on the instance host, see
   // instanceFetch. The streaming surfaces (POST /v1/responses SSE, GET/PUT /v1/files/content,
@@ -250,18 +274,36 @@ export const agent37 = {
   // App integrations (managed Composio, per-instance entity). Management ops only — no billing here.
   listIntegrationToolkits: (id: string, opts: { search?: string } = {}) => {
     const q = opts.search ? `?search=${encodeURIComponent(opts.search)}` : "";
-    return call<IntegrationToolkitsResult>(`/instances/${urlId(id)}/integrations/toolkits${q}`);
+    return call<IntegrationToolkitsResult>(`/instances/${urlId(id)}/integrations/toolkits${q}`, undefined, `/v1/instances/${urlId(id)}/integrations/toolkits${q}`);
   },
   connectIntegration: (id: string, body: { toolkit: string }) =>
-    call<IntegrationConnectResult>(`/instances/${urlId(id)}/integrations/connect`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+    call<IntegrationConnectResult>(
+      `/instances/${urlId(id)}/integrations/connect`,
+      { method: "POST", body: JSON.stringify(body) },
+      `/v1/instances/${urlId(id)}/integrations/connect`
+    ),
   listIntegrationConnections: (id: string) =>
-    call<IntegrationConnectionsResult>(`/instances/${urlId(id)}/integrations/connections`),
+    call<IntegrationConnectionsResult>(`/instances/${urlId(id)}/integrations/connections`, undefined, `/v1/instances/${urlId(id)}/integrations/connections`),
   disconnectIntegration: (id: string, connectedAccountId: string) =>
     call<{ id: string; deleted: boolean }>(
       `/instances/${urlId(id)}/integrations/connections/${urlId(connectedAccountId)}`,
-      { method: "DELETE" }
+      { method: "DELETE" },
+      `/v1/instances/${urlId(id)}/integrations/connections/${urlId(connectedAccountId)}`
     ),
+
+  // A file an expert's pack ships (e.g. outils-recommandes.json), wherever its runtime keeps it: the
+  // gateway knows the expert's folder; direct, it is the Hermes profile. Raw response, 404 = no file.
+  expertFile: (id: string, profile: string, name: string) => {
+    const gw = runtimeGateway();
+    if (gw) return gatewayFetch(gw, `/v1/instances/${urlId(id)}/experts/${urlId(profile)}/files/${encodeURIComponent(name)}`);
+    return instanceFetch(id, `/v1/files/content?path=${encodeURIComponent(`~/.hermes/profiles/${profile}/${name}`)}`);
+  },
+
+  // What the instance's runtime offers (the gateway's /capabilities); `null` direct, where every
+  // instance is Hermes and offers everything.
+  capabilities: async (id: string): Promise<RuntimeCapabilities | null> => {
+    const gw = runtimeGateway();
+    if (!gw) return null;
+    return parseAgent37<RuntimeCapabilities>(await gatewayFetch(gw, `/v1/instances/${urlId(id)}/capabilities`));
+  },
 };

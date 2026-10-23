@@ -22,6 +22,7 @@ import { TeamsConnect } from "@/components/channels/TeamsConnect";
 import { TelegramConnect } from "@/components/channels/TelegramConnect";
 import { TelegramTopics } from "@/components/channels/TelegramTopics";
 import { WhatsAppConnect } from "@/components/channels/WhatsAppConnect";
+import { useRuntimeTools } from "@/components/experts/useRuntimeTools";
 
 // The Messaging tab: connect this agent to the apps its owner already uses, so they can talk to it
 // from their phone instead of only from this dashboard.
@@ -44,6 +45,8 @@ export function ChannelsTab({
   // stopped agent. Only a state that says the instance is down gives up without trying: an unknown
   // one means it could not be read, not that it is stopped.
   const reachable = !["stopped", "deleting", "deleted", "failed", "error"].includes(agent.live_status ?? "");
+  // The channels below are the Hermes harness's own; another runtime's are set up by Yelema.
+  const hermesTools = useRuntimeTools(agentId);
 
   const [channels, setChannels] = useState<MessagingPlatform[] | null>(null);
   const [teamsEndpoint, setTeamsEndpoint] = useState<string | null>(null);
@@ -68,8 +71,19 @@ export function ChannelsTab({
   );
 
   useEffect(() => {
-    if (reachable) void load();
-  }, [reachable, load]);
+    if (reachable && hermesTools !== false) void load();
+  }, [reachable, hermesTools, load]);
+
+  if (hermesTools === false) {
+    return (
+      <div className="space-y-6">
+        <Header />
+        <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+          Les canaux de vos experts sont réglés par Yelema pour cet espace. Écrivez-nous pour en ajouter un.
+        </p>
+      </div>
+    );
+  }
 
   if (!reachable) {
     return (
