@@ -1,5 +1,7 @@
 "use client";
 
+import { CompanyColors } from "@/components/app/CompanyColors";
+import { SearchDialog } from "@/components/conversations/SearchDialog";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ActivityProvider } from "@/components/activity/ActivityProvider";
@@ -73,6 +75,8 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
       <ActivityProvider>
         {/* The call lives above the pages: it goes on, folded or not, while the member navigates. */}
         <CallProvider>
+        <CompanyColors />
+        <SearchDialog />
         <div
           className="min-h-screen md:grid"
           // --shell-nav: where the working area starts, for what covers it (an enlarged dashboard).

@@ -2,7 +2,8 @@
 
 import { useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Lock, Mic, Send } from "lucide-react";
+import { CalendarDays, ChevronDown, ListChecks, Loader2, Lock, Mail, Mic, Send, Sun } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { DictationBar } from "@/components/chat/ChatComposer";
@@ -11,21 +12,20 @@ import { useVoices } from "@/components/voice/useVoices";
 import { CompanyProfileCard } from "@/components/company/CompanyProfileCard";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
-import { useMyAgents } from "@/components/useMyAgents";
+import { useOwnAgentId } from "@/components/conversations/useAllConversations";
 import { RecentDeliverables } from "@/components/home/RecentDeliverables";
 import { agentTabPath } from "@/lib/expert-tabs";
 import type { Expert } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-function today(): string {
-  const s = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-
 // Four openers that suit any company, whoever the message goes to. A click puts the start of the
 // request in the field, to finish before sending.
-const SHORTCUTS = ["Point du matin", "Préparer une réunion", "Résumer mes emails", "Suivre un dossier"] as const;
+const SHORTCUTS = [
+  { label: "Point du matin", icon: Sun },
+  { label: "Préparer une réunion", icon: CalendarDays },
+  { label: "Résumer mes emails", icon: Mail },
+  { label: "Suivre un dossier", icon: ListChecks },
+] as const;
 const isDjeneba = (e: Expert) => (e.catalogueKey ?? e.profileId).toLowerCase().includes("djeneba");
 
 // The back office says the installation failed: said at once, with the experts concerned when it
@@ -89,8 +89,7 @@ export function HomeView() {
   const { experts, loading, unreadable, installing, stalled, failed, failedExperts } = useExpertsContext();
   // The chat d'entreprise is the member's own instance with no Expert chosen; who has Djénéba may
   // write to her instead.
-  const { agents } = useMyAgents(current?.id);
-  const ownAgentId = agents[0]?.agent37_id ?? experts[0]?.agentId ?? null;
+  const ownAgentId = useOwnAgentId();
   const djeneba = experts.find(isDjeneba) ?? null;
   const [picked, setPicked] = useState<"entreprise" | "djeneba">("entreprise");
   const [text, setText] = useState("");
@@ -119,88 +118,98 @@ export function HomeView() {
     }
   }
 
+  const company = current?.name ?? "votre entreprise";
+  const hasText = text.trim().length > 0;
+
   return (
-    <div className="mx-auto w-full max-w-[1280px] px-4 pb-24 pt-6 sm:px-8">
-      <p className="text-[15px] text-ink-3">{today()}</p>
-      <h1 className="mt-1 font-display text-[34px] font-bold tracking-tight text-ink sm:text-[38px]">Bonjour {hello}</h1>
+    <div className="relative min-h-full overflow-hidden">
+      {/* La fleur Yelema en filigrane, à la couleur de l'entreprise, penchée et coupée en bas à gauche. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-24 -left-24 size-[320px] -rotate-[18deg] bg-brand opacity-[0.05] max-sm:hidden"
+        style={{ mask: "url(/fleur.svg) center / contain no-repeat", WebkitMask: "url(/fleur.svg) center / contain no-repeat" }}
+      />
+    <div className="relative mx-auto w-full max-w-[880px] px-4 pb-24 pt-10 sm:px-8 sm:pt-16">
+      <h1 className="text-center font-display text-[34px] font-bold tracking-tight text-ink sm:text-[44px]">Bonjour {hello}</h1>
       <CompanyProfileCard />
 
       {ownAgentId && (
         <>
-          <section className="mt-5 rounded-[22px] border border-line bg-surface p-4 shadow-[0_8px_30px_rgb(48_22_103_/_0.05)]">
-            {djeneba && (
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                <span className="shrink-0 text-sm text-ink-3">À</span>
-                <button
-                  type="button"
-                  onClick={() => setPicked("entreprise")}
-                  className={cn(
-                    "flex h-9 shrink-0 items-center gap-2 rounded-full border px-3 text-[13px] font-semibold transition-colors",
-                    !to ? "border-brand/40 bg-tint text-brand-ink" : "border-line bg-surface text-ink-2 hover:bg-soft"
-                  )}
-                >
-                  <Lock className="size-3.5" /> Chat d’entreprise
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPicked("djeneba")}
-                  className={cn(
-                    "flex h-9 shrink-0 items-center gap-2 rounded-full border pl-1 pr-3 text-[13px] font-semibold transition-colors",
-                    to ? "border-brand/40 bg-tint text-brand-ink" : "border-line bg-surface text-ink-2 hover:bg-soft"
-                  )}
-                >
-                  <ExpertAvatar expert={{ ...djeneba, gateway: null }} size="xs" />
-                  {djeneba.displayName}
-                </button>
-              </div>
-            )}
+          <section className="mt-7 rounded-[22px] border border-line bg-surface p-4 shadow-[0_8px_30px_rgb(48_22_103_/_0.06)]">
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={onKeyDown}
-              rows={3}
+              rows={2}
               placeholder={to ? `Que voulez-vous confier à ${to.displayName} ?` : "Que puis-je faire pour vous ?"}
-              className="mt-3 w-full resize-none bg-transparent px-1 text-[16px] text-ink placeholder:text-ink-3 focus:outline-none"
+              className="w-full resize-none bg-transparent px-1 text-[16px] text-ink placeholder:text-ink-3 focus:outline-none"
             />
             {dictation.state !== "idle" ? (
               <DictationBar dictation={dictation} />
             ) : (
-            <div className="flex items-center justify-end gap-2">
-              {canDictate && (
-                <button
-                  type="button"
-                  onClick={() => void dictation.start()}
-                  aria-label="Dicter un message"
-                  title="Dicter un message"
-                  className="inline-flex size-11 items-center justify-center rounded-xl text-ink-2 transition-colors hover:bg-soft hover:text-ink"
-                >
-                  <Mic className="h-5 w-5" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => send(text)}
-                disabled={!text.trim()}
-                className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-[15px] font-semibold text-on-brand hover:opacity-90 disabled:opacity-40"
-              >
-                <Send className="h-4 w-4" /> Envoyer
-              </button>
-            </div>
+              <div className="flex items-center gap-2">
+                {/* Who gets the message: the chat d'entreprise, or Djénéba for who has her. */}
+                {djeneba ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button type="button" className={cn("inline-flex h-9 items-center gap-2 rounded-full border border-line bg-surface text-[13px] font-semibold text-ink hover:bg-soft", to ? "pl-1 pr-2.5" : "px-3")}>
+                        {to ? <ExpertAvatar expert={{ ...to, gateway: null }} size="xs" /> : <Lock className="size-3.5" />}
+                        {to ? to.displayName : "Chat d’entreprise"}
+                        <ChevronDown className="size-4 text-ink-3" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-60">
+                      <DropdownMenuItem onSelect={() => setPicked("entreprise")}>
+                        <Lock className="size-4" /> Chat d’entreprise
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setPicked("djeneba")}>
+                        <ExpertAvatar expert={{ ...djeneba, gateway: null }} size="xs" /> {djeneba.displayName}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-1 text-[13px] text-ink-3">
+                    <Lock className="size-3.5" /> Votre IA privée. Rien ne sort de {company}.
+                  </span>
+                )}
+                {/* One button: the microphone while the field is empty, Envoyer once something is typed. */}
+                {canDictate && !hasText ? (
+                  <button
+                    type="button"
+                    onClick={() => void dictation.start()}
+                    aria-label="Dicter un message"
+                    title="Dicter un message"
+                    className="ml-auto grid size-11 place-items-center rounded-full bg-brand text-on-brand transition-opacity hover:opacity-90"
+                  >
+                    <Mic className="h-5 w-5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => send(text)}
+                    disabled={!hasText}
+                    className="ml-auto inline-flex h-11 items-center gap-2 rounded-full bg-brand px-5 text-[15px] font-semibold text-on-brand hover:opacity-90 disabled:opacity-40"
+                  >
+                    <Send className="h-4 w-4" /> Envoyer
+                  </button>
+                )}
+              </div>
             )}
           </section>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            {SHORTCUTS.map((label) => (
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {SHORTCUTS.map(({ label, icon: Icon }) => (
               <button
                 key={label}
                 type="button"
                 onClick={() => setText(`${label} : `)}
-                className="rounded-full border border-dashed border-line bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:border-brand/30 hover:text-ink"
+                className="inline-flex h-10 items-center gap-2 rounded-full border border-line bg-surface px-3.5 text-[13px] font-semibold text-ink-2 hover:bg-soft hover:text-ink"
               >
-                {label}
+                <Icon className="size-4" /> {label}
               </button>
             ))}
           </div>
+          <p className="mt-3 text-center text-sm text-ink-3">Plus vous donnez de contexte, meilleure sera la réponse.</p>
         </>
       )}
 
@@ -232,6 +241,7 @@ export function HomeView() {
         </p>
       ) : null}
       {ownAgentId && <RecentDeliverables agentId={ownAgentId} />}
+    </div>
     </div>
   );
 }

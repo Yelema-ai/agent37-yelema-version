@@ -69,7 +69,7 @@ export interface BoMe {
   /** `name` is « Prénom Nom », computed by the back office from the two. */
   /** `avatarUrl`: the member's own photo, once the back office keeps one (`PUT /app/me/avatar`). */
   user: { id: string; email: string; firstName: string | null; lastName: string | null; name: string | null; jobTitle: string | null; role: "admin" | "member"; avatarUrl?: string | null; /** Call voice per expert (`*` = all) and language, shared with the mobile app. */ voices?: Record<string, Partial<Record<"fr" | "en", string>>> };
-  workspace: { id: string; name: string; logoUrl: string | null };
+  workspace: { id: string; name: string; logoUrl: string | null; brandColor?: string | null };
   instance: { id: string } | null;
 }
 

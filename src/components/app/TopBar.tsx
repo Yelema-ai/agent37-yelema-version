@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 // The breadcrumb comes from the path: no page pushes it, so it cannot drift from where the user is.
 function crumbs(pathname: string, experts: Expert[]): string[] {
   if (pathname === "/") return ["Accueil"];
+  if (pathname === "/conversations") return ["Toutes les conversations"];
   if (pathname === "/recruter") return ["Recruter"];
   if (pathname.startsWith("/recruter/")) return ["Recruter", "Fiche de poste"];
   if (pathname.startsWith("/integrations/connecteurs")) return ["Intégrations", "Connecteurs"];
@@ -20,7 +21,7 @@ function crumbs(pathname: string, experts: Expert[]): string[] {
   if (pathname.startsWith("/integrations/emails")) return ["Intégrations", "E-mails"];
   if (pathname.startsWith("/integrations/modeles")) return ["Intégrations", "Modèles"];
   if (pathname.startsWith("/integrations/mcp")) return ["Intégrations", "MCP"];
-  if (pathname.startsWith("/integrations/identifiants")) return ["Intégrations", "Identifiants"];
+  if (pathname.startsWith("/integrations/identifiants")) return ["Intégrations", "Clés"];
   if (pathname.startsWith("/integrations")) return ["Intégrations"];
   if (pathname.startsWith("/administration/instances")) return ["Administration", "Instances"];
   if (pathname.startsWith("/administration/facturation")) return ["Administration", "Facturation"];
@@ -32,7 +33,9 @@ function crumbs(pathname: string, experts: Expert[]): string[] {
     const [, agentId, ...rest] = pathname.split("/").filter(Boolean);
     const profileId = parseAgentRoute(rest)?.profileId;
     const expert = experts.find((e) => e.agentId === agentId && e.profileId === profileId);
-    return ["Mon équipe", expert ? expert.displayName : "Espace expert"];
+    // Without a profile, the instance's default home: the chat d'entreprise.
+    if (!profileId) return ["Chat d’entreprise"];
+    return ["Mes Experts", expert ? expert.displayName : "Espace expert"];
   }
   return [];
 }

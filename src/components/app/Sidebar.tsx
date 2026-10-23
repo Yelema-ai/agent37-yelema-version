@@ -4,24 +4,21 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Blocks, Lock, PanelLeftClose, Settings2, SquarePen, UserPlus } from "lucide-react";
+import { ArrowRight, Blocks, Lock, PanelLeftClose, Search, Settings2, SquarePen } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { AccountMenu } from "@/components/AccountMenu";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { ExpertItem } from "@/components/experts/ExpertItem";
-import { useMyAgents } from "@/components/useMyAgents";
+import { useOwnAgentId } from "@/components/conversations/useAllConversations";
+import { openSearch } from "@/components/conversations/SearchDialog";
 import type { ChatSession } from "@/components/chat/types";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-// « Nouvelle conversation » ouvre l'accueil et sa barre de chat. Une entrée n'apparaît ici que
-// lorsque son écran existe.
-const NAV = [
-  { href: "/", label: "Nouvelle conversation", icon: SquarePen, exact: true },
-  { href: "/recruter", label: "Recruter", icon: UserPlus, exact: false },
-  { href: "/integrations", label: "Intégrations", icon: Blocks, exact: false },
-] as const;
+// Le haut du menu : « Nouvelle conversation » (l'accueil et sa barre de chat), en couleur, puis
+// Rechercher (Ctrl K) et Intégrations. Recruter n'est plus au menu (Leslie, 23/10) ; sa page reste à
+// son adresse. Une entrée n'apparaît ici que lorsque son écran existe.
 
 export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolean; onToggle: () => void; onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -33,9 +30,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
   const { experts: installed, unreadable } = useExpertsContext();
   // Djénéba heads « Mes Experts », the others follow in their order.
   const experts = [...installed].sort((a, b) => Number(isDjeneba(b)) - Number(isDjeneba(a)));
-  // The chat d'entreprise is the member's own instance with no Expert chosen (its default home).
-  const { agents } = useMyAgents(current?.id);
-  const ownAgentId = agents[0]?.agent37_id ?? installed[0]?.agentId ?? null;
+  const ownAgentId = useOwnAgentId();
 
   return (
     <aside
@@ -73,26 +68,44 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
         </button>
       </div>
 
-      {NAV.map((item) => {
-        const Icon = item.icon;
-        const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
-        const base =
-          "flex min-h-10 items-center gap-2.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors";
-        return (
-          <Link
-            key={item.label}
-            href={item.href}
-            className={cn(
-              base,
-              active ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft",
-              collapsed && "justify-center px-0"
-            )}
-          >
-            <Icon className="size-5 shrink-0" strokeWidth={1.9} />
-            {!collapsed && item.label}
-          </Link>
-        );
-      })}
+      <Link
+        href="/"
+        onClick={onNavigate}
+        title="Nouvelle conversation"
+        className={cn(
+          "mb-1.5 flex min-h-11 items-center gap-2.5 rounded-xl bg-brand px-3 text-sm font-semibold text-on-brand transition-opacity hover:opacity-90",
+          collapsed && "justify-center px-0"
+        )}
+      >
+        <SquarePen className="size-5 shrink-0" strokeWidth={1.9} />
+        {!collapsed && "Nouvelle conversation"}
+      </Link>
+      <button
+        type="button"
+        onClick={openSearch}
+        title="Rechercher (Ctrl K)"
+        className={cn("flex min-h-10 items-center gap-2.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors text-ink-2 hover:bg-soft", collapsed && "justify-center px-0")}
+      >
+        <Search className="size-5 shrink-0" strokeWidth={1.9} />
+        {!collapsed && (
+          <>
+            Rechercher
+            <kbd className="ml-auto rounded-md border border-line px-1.5 py-0.5 font-sans text-[11px] font-medium text-ink-3">Ctrl K</kbd>
+          </>
+        )}
+      </button>
+      <Link
+        href="/integrations"
+        onClick={onNavigate}
+        className={cn(
+          "flex min-h-10 items-center gap-2.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors",
+          pathname.startsWith("/integrations") ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft",
+          collapsed && "justify-center px-0"
+        )}
+      >
+        <Blocks className="size-5 shrink-0" strokeWidth={1.9} />
+        {!collapsed && "Intégrations"}
+      </Link>
 
       {!collapsed && (
         <div className="px-2.5 pt-4 pb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-3">Mes Experts</div>
@@ -117,6 +130,19 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
       )}
 
       {!collapsed && ownAgentId && <CompanyChats agentId={ownAgentId} pathname={pathname} onNavigate={onNavigate} />}
+
+      {!collapsed && (
+        <Link
+          href="/conversations"
+          onClick={onNavigate}
+          className={cn(
+            "mt-3 flex min-h-10 items-center gap-1.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors",
+            pathname.startsWith("/conversations") ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft"
+          )}
+        >
+          Toutes les conversations <ArrowRight className="size-4" />
+        </Link>
+      )}
 
       <div className="mt-auto flex w-full flex-col gap-0.5 border-t border-line pt-3">
         <Link

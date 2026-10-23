@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Copy, FolderOpen, History, Mail, MessageSquare, Pencil, Repeat, Phone, Wrench } from "lucide-react";
+import { Copy, FolderOpen, History, Mail, MessageSquare, Pencil, Repeat, Phone } from "lucide-react";
 import { agentTabPath, parseAgentRoute, type AgentTab } from "@/lib/expert-tabs";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useMyAgents } from "@/components/useMyAgents";
@@ -13,7 +13,6 @@ import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { ExpertEmails } from "@/components/experts/ExpertEmails";
 import { ExpertRoutines } from "@/components/experts/ExpertRoutines";
 import { ExpertReadiness } from "@/components/experts/ExpertReadiness";
-import { ExpertTools } from "@/components/experts/ExpertTools";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { useCatalogueExpert } from "@/components/experts/useCatalogue";
 import { useMailInboxes } from "@/components/experts/useMailInboxes";
@@ -36,7 +35,6 @@ const TABS: { id: AgentTab; label: string; icon: typeof MessageSquare }[] = [
   { id: "emails", label: "E-mails", icon: Mail },
   { id: "files", label: "Livrables", icon: FolderOpen },
   { id: "routines", label: "Routines", icon: Repeat },
-  { id: "tools", label: "Outils", icon: Wrench },
 ];
 
 // The per-expert tabbed SPA, laid out as a SINGLE left rail + the active tab's pane. The instance
@@ -64,6 +62,7 @@ export function AgentWorkspace({
   initialTab: AgentTab;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const railOpen = useRailOpen();
   const { setCurrentId } = useWorkspace();
 
@@ -95,7 +94,7 @@ export function AgentWorkspace({
   // only for an expert that has an inbox.
   // Calls are offered where voice is on, for an expert of the catalogue.
   const voiceOn = useVoices().length > 0;
-  const tabs = TABS.filter((t) => (t.id === "routines" || t.id === "tools" ? profileId !== null : t.id === "emails" ? inbox !== null : t.id === "calls" ? voiceOn && Boolean(expert?.catalogueKey) : true));
+  const tabs = TABS.filter((t) => (t.id === "routines" ? profileId !== null : t.id === "emails" ? inbox !== null : t.id === "calls" ? voiceOn && Boolean(expert?.catalogueKey) : true));
   const sheet = useCatalogueExpert(expert?.catalogueKey);
   const expertName = expert?.displayName ?? (profileId ? expertDisplayName(profileId) : "");
   // The face for a call: the photo, or the full-body portrait cropped to it.
@@ -113,7 +112,11 @@ export function AgentWorkspace({
   // back to the server-resolved initialTab on the first paint before the path is parsed.
   const segments = pathname.split("/").filter(Boolean); // ["experts", agentId, profileId?, tab?]
   const currentTab = parseAgentRoute(segments.slice(2))?.tab ?? initialTab;
-  const isChat = currentTab === "chat";
+  // Outils has no tab any more (Leslie, 23/10): an old address to it opens the Discussion.
+  useEffect(() => {
+    if (currentTab === "tools") window.history.replaceState(null, "", agentTabPath(agentId, "chat", profileId));
+  }, [currentTab, agentId, profileId]);
+  const isChat = currentTab === "chat" || currentTab === "tools";
   const isFiles = currentTab === "files";
 
   function selectTab(tab: AgentTab) {
@@ -183,59 +186,65 @@ export function AgentWorkspace({
               Nothing is cut: the header shrinks the name, never a button. */}
           <div className="shrink-0 border-b border-line bg-surface">
             {expert && (
-              <div className="flex items-center gap-2.5 px-4 pb-1 pt-2.5 lg:gap-3.5 lg:px-6 lg:pt-4">
+              <div className="flex items-center gap-2.5 px-4 pb-1 pt-2.5 lg:gap-4 lg:px-8 lg:pb-3 lg:pt-5">
                 <span className="relative shrink-0">
                   <ExpertAvatar expert={expert} size="sm" className="lg:hidden" />
-                  <ExpertAvatar expert={expert} size="md" className="max-lg:hidden" />
+                  <ExpertAvatar expert={expert} size="lg" className="max-lg:hidden" />
                   {(canEdit || (callee && voiceOn)) && (
                     <button
                       type="button"
                       onClick={() => (canEdit ? setEditOpen(true) : setVoiceOpen(true))}
                       title={`Personnaliser ${expertName}`}
                       aria-label={`Personnaliser ${expertName}`}
-                      className="absolute -left-1 -top-1 grid size-6 place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-sm hover:bg-soft hover:text-ink"
+                      className="absolute -bottom-1 -left-1 grid size-6 place-items-center rounded-full bg-ink text-surface ring-2 ring-surface hover:opacity-85 lg:size-7"
                     >
-                      <Pencil className="size-3" />
+                      <Pencil className="size-3 lg:size-3.5" />
                     </button>
                   )}
                 </span>
                 <span className="ml-0.5 min-w-0 flex-1">
-                  <span className="flex min-w-0 items-baseline gap-2">
-                    <span className="truncate text-sm font-bold leading-tight text-ink lg:text-[17px]">{expert.displayName}</span>
-                    {expert.role && <span className="truncate text-xs text-ink-3 max-lg:hidden">{expert.role}</span>}
+                  <span className="block truncate font-display text-sm font-bold leading-tight text-ink lg:text-[28px]">{expert.displayName}</span>
+                  <span className="mt-0.5 flex min-w-0 items-center gap-3 text-[10px] text-ink-3 lg:mt-1 lg:text-[14px]">
+                    {expert.role && <span className="truncate max-lg:hidden">{expert.role}</span>}
+                    {inbox && (
+                      <button
+                        type="button"
+                        onClick={copyAddress}
+                        title="Copier l’adresse e-mail"
+                        className="flex min-w-0 items-center gap-1.5 text-left hover:text-ink"
+                      >
+                        <Mail className="size-3.5 shrink-0 max-lg:hidden" />
+                        <span className="truncate">{inbox.address}</span>
+                        <Copy className="size-3 shrink-0" />
+                      </button>
+                    )}
                   </span>
-                  {inbox && (
-                    <button
-                      type="button"
-                      onClick={copyAddress}
-                      title="Copier l’adresse e-mail"
-                      className="mt-0.5 flex max-w-full items-center gap-1 text-left text-[10px] text-ink-3 hover:text-ink lg:text-xs"
-                    >
-                      <span className="truncate">{inbox.address}</span>
-                      <Copy className="size-3 shrink-0" />
-                    </button>
-                  )}
                 </span>
-                {profileId && <ExpertReadiness agentId={agentId} profileId={profileId} expertName={expertName} onOpenTools={() => selectTab("tools")} className="shrink-0" />}
+                {profileId && <ExpertReadiness agentId={agentId} profileId={profileId} expertName={expertName} onOpenTools={() => router.push("/integrations/connecteurs")} className="shrink-0" />}
                 {callee && <CallButton expert={callee} iconOnly className="size-11 shrink-0 rounded-full lg:hidden" />}
-                {callee && <CallButton expert={callee} className="shrink-0 max-lg:hidden" />}
+                {callee && <CallButton expert={callee} className="h-11 shrink-0 rounded-full bg-brand px-5 text-[15px] text-on-brand hover:bg-brand/90 max-lg:hidden" />}
               </div>
             )}
-            <nav ref={pillsRef} className="flex items-center gap-1 overflow-x-auto px-4 py-2 [scrollbar-width:none] lg:px-6 [&::-webkit-scrollbar]:hidden">
-              {tabs.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => selectTab(t.id)}
-                  aria-current={currentTab === t.id ? "page" : undefined}
-                  className={cn(
-                    "min-h-9 shrink-0 rounded-full px-3 py-1.5 text-[13px] font-semibold",
-                    currentTab === t.id ? "bg-tint text-brand-ink" : "text-ink-2 hover:bg-soft"
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
+            <nav ref={pillsRef} className="flex items-center gap-1 overflow-x-auto px-4 py-2 [scrollbar-width:none] lg:gap-2 lg:px-8 lg:py-0 [&::-webkit-scrollbar]:hidden">
+              {tabs.map((t) => {
+                const Icon = t.icon;
+                const on = currentTab === t.id || (t.id === "chat" && isChat);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => selectTab(t.id)}
+                    aria-current={on ? "page" : undefined}
+                    className={cn(
+                      "min-h-9 shrink-0 rounded-full px-3 py-1.5 text-[13px] font-semibold lg:-mb-px lg:inline-flex lg:min-h-12 lg:items-center lg:gap-2 lg:rounded-none lg:border-b-2 lg:px-2 lg:text-[15px]",
+                      on ? "bg-tint text-brand-ink lg:border-brand lg:bg-transparent" : "text-ink-2 hover:bg-soft lg:border-transparent lg:hover:bg-transparent lg:hover:text-ink"
+                    )}
+                  >
+                    <Icon className="size-[18px] max-lg:hidden" />
+                    {t.label}
+                  </button>
+                );
+              })}
               {/* On a computer, the column of conversations beside the chat opens and closes here
                   (phones and tablets: the panel in the chat's header). */}
               {isChat && (
@@ -299,13 +308,6 @@ export function AgentWorkspace({
                     driveFolder: expert?.driveFolder ?? expertName,
                   }}
                 />
-              </div>
-            </div>
-          )}
-          {currentTab === "tools" && profileId && (
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="mx-auto w-full max-w-4xl p-6 md:px-10 md:py-8">
-                <ExpertTools agentId={agentId} profileId={profileId} expertName={expertName} />
               </div>
             </div>
           )}

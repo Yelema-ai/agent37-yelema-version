@@ -13,6 +13,8 @@ export interface WorkspaceWithRole extends Workspace {
   role: Role;
   /** The company's main logo (back office `me.workspace.logoUrl`), shown at the top of the menu. */
   logo_url?: string | null;
+  /** The company's main color (back office `me.workspace.brandColor`, #rrggbb), when it has one. */
+  brand_color?: string | null;
 }
 
 export interface WorkspaceMember {
