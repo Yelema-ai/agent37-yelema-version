@@ -140,7 +140,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
       {att.dragOver && <DropOverlay label="Déposez vos fichiers pour les joindre" />}
       <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          {profile && <ChatSessionsPanel />}
+          <ChatSessionsPanel />
           {/* On a phone the expert's photo and name already head the page: shown once. */}
           {face && <ExpertAvatar expert={face} size="sm" className="max-sm:hidden" />}
           <div className="min-w-0">

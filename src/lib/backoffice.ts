@@ -85,9 +85,17 @@ export interface BoInstanceView {
   tools: "yelema" | "agent37";
   /**
    * `profile` is the name to send to the instance; `key` joins the public catalogue. `displayName`
-   * and `avatarUrl` are what the member chose for it, null when they kept the catalogue's.
+   * and `avatarUrl` are what the member chose for it, null when they kept the catalogue's. `cycle`
+   * is the cycle the company subscribed that brought it, when it came with one (back office, to come).
    */
-  experts: { profile: string; key: string; version: string | null; displayName?: string | null; avatarUrl?: string | null }[];
+  experts: {
+    profile: string;
+    key: string;
+    version: string | null;
+    displayName?: string | null;
+    avatarUrl?: string | null;
+    cycle?: { key: string; label: string } | null;
+  }[];
   /** Where a channel that receives by webhook is reached: the address to give Microsoft for Teams. */
   channels?: { teams?: { endpoint: string | null } };
 }

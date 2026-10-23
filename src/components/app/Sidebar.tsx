@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowRight, Blocks, Lock, PanelLeftClose, Search, Settings2, SquarePen } from "lucide-react";
+import { ArrowRight, Blocks, ChevronDown, Lock, PanelLeftClose, Search, Settings2, SquarePen } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { AccountMenu } from "@/components/AccountMenu";
@@ -14,6 +14,7 @@ import { useOwnAgentId } from "@/components/conversations/useAllConversations";
 import { openSearch } from "@/components/conversations/SearchDialog";
 import type { ChatSession } from "@/components/chat/types";
 import { apiFetch } from "@/lib/api";
+import type { Expert } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // Le haut du menu : « Nouvelle conversation » (l'accueil et sa barre de chat), en couleur, puis
@@ -31,6 +32,21 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
   // Djénéba heads « Mes Experts », the others follow in their order.
   const experts = [...installed].sort((a, b) => Number(isDjeneba(b)) - Number(isDjeneba(a)));
   const ownAgentId = useOwnAgentId();
+  // Cycles folded by the member, remembered per browser.
+  const [foldedCycles, setFoldedCycles] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      setFoldedCycles(JSON.parse(localStorage.getItem("yelema.cycles-folded") ?? "[]"));
+    } catch {}
+  }, []);
+  const toggleCycle = (key: string) =>
+    setFoldedCycles((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      try {
+        localStorage.setItem("yelema.cycles-folded", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
 
   return (
     <aside
@@ -111,16 +127,38 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
         <div className="px-2.5 pt-4 pb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-3">Mes Experts</div>
       )}
 
-      {experts.map((e) => (
-        <ExpertItem
-          // Keyed on instance and profile: a profile name alone is not unique across instances.
-          key={`${e.agentId}:${e.profileId}`}
-          expert={e}
-          active={pathname === `/experts/${e.agentId}/${e.profileId}` || pathname.startsWith(`/experts/${e.agentId}/${e.profileId}/`)}
-          compact={collapsed}
-          onNavigate={onNavigate}
-        />
-      ))}
+      {groupByCycle(experts).map((g) => {
+        const folded = !collapsed && g.cycle !== null && foldedCycles.includes(g.cycle.key);
+        return (
+          <div key={g.cycle?.key ?? "_"} className="flex flex-col gap-0.5">
+            {/* The cycle a group of Experts came with: one quiet line, folding the group. */}
+            {g.cycle && !collapsed && (
+              <button
+                type="button"
+                onClick={() => toggleCycle(g.cycle!.key)}
+                aria-expanded={!folded}
+                className="flex min-h-8 items-center gap-1 rounded-lg px-2.5 pt-2 text-left text-[12px] font-semibold text-ink-3 hover:text-ink"
+              >
+                <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", folded && "-rotate-90")} />
+                <span className="min-w-0 flex-1 truncate">{g.cycle.label}</span>
+                <span className="font-medium">{g.experts.length}</span>
+              </button>
+            )}
+            {!folded &&
+              g.experts.map((e) => (
+                <ExpertItem
+                  // Keyed on instance and profile: a profile name alone is not unique across instances.
+                  key={`${e.agentId}:${e.profileId}`}
+                  expert={e}
+                  active={pathname === `/experts/${e.agentId}/${e.profileId}` || pathname.startsWith(`/experts/${e.agentId}/${e.profileId}/`)}
+                  compact={collapsed}
+                  onNavigate={onNavigate}
+                  className={g.cycle && !collapsed ? "pl-4" : undefined}
+                />
+              ))}
+          </div>
+        );
+      })}
 
       {/* Une instance illisible ne doit pas raccourcir la liste en silence. */}
       {!collapsed && unreadable > 0 && (
@@ -209,6 +247,7 @@ function CompanyChats({ agentId, pathname, onNavigate }: { agentId: string; path
         <Lock className="size-3.5" strokeWidth={2.2} />
         Chat d’entreprise
       </Link>
+      {sessions.length === 0 && <p className="px-2.5 pb-1 text-[13px] text-ink-3">Vos conversations apparaîtront ici.</p>}
       {sessions.map((s) => (
         <Link
           key={s.session_id}
@@ -222,4 +261,15 @@ function CompanyChats({ agentId, pathname, onNavigate }: { agentId: string; path
       ))}
     </>
   );
+}
+
+// Experts without a cycle first (Djénéba heads them), then one group per cycle, in the order met.
+function groupByCycle(experts: Expert[]): { cycle: { key: string; label: string } | null; experts: Expert[] }[] {
+  const groups: { cycle: { key: string; label: string } | null; experts: Expert[] }[] = [{ cycle: null, experts: [] }];
+  for (const e of experts) {
+    const g = e.cycle ? groups.find((x) => x.cycle?.key === e.cycle!.key) : groups[0];
+    if (g) g.experts.push(e);
+    else groups.push({ cycle: e.cycle!, experts: [e] });
+  }
+  return groups.filter((g) => g.experts.length > 0);
 }

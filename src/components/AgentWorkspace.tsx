@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Copy, FolderOpen, History, Mail, MessageSquare, Pencil, Repeat, Phone } from "lucide-react";
+import { Copy, FolderOpen, Mail, MessageSquare, Pencil, Repeat, Phone } from "lucide-react";
 import { agentTabPath, parseAgentRoute, type AgentTab } from "@/lib/expert-tabs";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useMyAgents } from "@/components/useMyAgents";
@@ -19,7 +19,6 @@ import { useMailInboxes } from "@/components/experts/useMailInboxes";
 import { expertDisplayName } from "@/lib/experts";
 import { DRIVE_ROOT } from "@/lib/drive-paths";
 import { ChatProvider } from "@/components/chat/ChatProvider";
-import { setRailOpen, useRailOpen } from "@/components/chat/rail-store";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatView } from "@/components/chat/ChatView";
 import { FilesTab } from "@/components/files/FilesTab";
@@ -63,7 +62,6 @@ export function AgentWorkspace({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const railOpen = useRailOpen();
   const { setCurrentId } = useWorkspace();
 
   // Deep-linking to an agent scopes the WorkspaceProvider to its workspace, so the fleet/switcher
@@ -245,22 +243,6 @@ export function AgentWorkspace({
                   </button>
                 );
               })}
-              {/* On a computer, the column of conversations beside the chat opens and closes here
-                  (phones and tablets: the panel in the chat's header). */}
-              {isChat && (
-                <button
-                  type="button"
-                  onClick={() => setRailOpen(!railOpen)}
-                  aria-pressed={railOpen}
-                  className={cn(
-                    "ml-auto hidden min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold lg:inline-flex",
-                    railOpen ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft"
-                  )}
-                >
-                  <History className="size-4" />
-                  Conversations
-                </button>
-              )}
             </nav>
             {callee && voiceOn && <VoiceButton expert={callee} open={voiceOpen} onOpenChange={setVoiceOpen} />}
           </div>
@@ -271,19 +253,11 @@ export function AgentWorkspace({
                   Discussion, and close to give the chat its whole width (phones and tablets: a panel).
                   Under 1280 px a column would leave the chat a strip: it floats over the chat instead,
                   like the phone's panel, and closes once a conversation is picked. */}
-              {railOpen && (
-                <>
-                  <button
-                    type="button"
-                    aria-label="Fermer les conversations"
-                    onClick={() => setRailOpen(false)}
-                    className="absolute inset-0 z-20 hidden bg-ink/20 lg:block xl:hidden"
-                  />
-                  <div className="absolute inset-y-0 left-0 z-30 hidden w-[320px] flex-col border-r border-line bg-surface px-2.5 py-3 shadow-[8px_0_30px_rgba(0,0,0,0.12)] lg:flex xl:static xl:z-auto xl:w-[288px] xl:shrink-0 xl:shadow-none">
-                    <ChatSidebar onNavigate={() => !matchMedia("(min-width: 1280px)").matches && setRailOpen(false)} />
-                  </div>
-                </>
-              )}
+              {/* The conversations of this space, always beside the chat on a wide screen (search, Tout /
+                  Non lues / Routines, periods). Narrower, the chat's header opens them in a panel. */}
+              <div className="hidden w-[288px] shrink-0 flex-col border-r border-line bg-surface px-2.5 py-3 xl:flex">
+                <ChatSidebar />
+              </div>
               <div className="min-w-0 flex-1">
                 <ChatView initialMessage={initialMessage} driveFolder={driveFolder ?? (profileId ? `${DRIVE_ROOT}/${expertName}` : DRIVE_ROOT)} />
               </div>

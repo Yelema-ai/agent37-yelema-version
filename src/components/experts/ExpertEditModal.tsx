@@ -15,6 +15,10 @@ import { apiFetch, readApiError } from "@/lib/api";
 import type { ExpertAvatarDraft, ExpertLook } from "@/lib/backoffice";
 import { EXPERT_NAME_MAX, EXPERT_NAME_RULE, expertName } from "@/lib/expert-looks";
 import { MAX_UPLOAD_BYTES, TOO_LARGE } from "@/lib/upload-limit";
+import { useVoices } from "@/components/voice/useVoices";
+import { useVoiceExpert } from "@/components/voice/useVoiceExpert";
+import { loadVoicePrefs } from "@/lib/voice-prefs";
+import { chosenVoice, expertDefaultVoice, type VoicePrefs } from "@/lib/voice";
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
@@ -55,6 +59,21 @@ export function ExpertEditModal({
   const [resetOpen, setResetOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const url = `/api/experts/${encodeURIComponent(expertKey)}`;
+  // The voice it speaks with now, shown before any change: the one chosen, else its default.
+  const voices = useVoices();
+  const voiceExpert = useVoiceExpert();
+  const [voicePrefs, setVoicePrefs] = useState<VoicePrefs | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (open && onVoice) void loadVoicePrefs(expertKey).then((p) => live && setVoicePrefs(p), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [open, onVoice, expertKey]);
+  const voiceNow = voicePrefs ? chosenVoice(voices, voicePrefs, voiceExpert(expertKey)) : null;
+  const voiceIsDefault = Boolean(
+    voiceNow && voicePrefs && voiceNow.key === (expertDefaultVoice(voices, voicePrefs.language, voiceExpert(expertKey)) ?? voices.find((v) => v.language === voicePrefs.language && v.default))?.key
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -189,6 +208,38 @@ export function ExpertEditModal({
                 {note && <p className="text-xs font-medium text-ink-2">{note}</p>}
               </form>
 
+              {onVoice && (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="min-w-0">
+                    <Label>Sa voix</Label>
+                    <span className="mt-1 flex items-center gap-1.5 text-sm text-ink">
+                      {voiceNow ? (
+                        <>
+                          <b className="font-semibold">{voiceNow.label}</b>
+                          {voiceIsDefault && <span className="rounded-full bg-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-2">par défaut</span>}
+                        </>
+                      ) : (
+                        <span className="text-ink-3">Chargement…</span>
+                      )}
+                    </span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={busy !== null}
+                    onClick={() => {
+                      onOpenChange(false);
+                      onVoice();
+                    }}
+                    className="gap-1.5"
+                  >
+                    <AudioLines className="size-4" />
+                    Changer
+                  </Button>
+                </div>
+              )}
+
               <div className="flex flex-col gap-3">
                 <Label>Son portrait</Label>
                 <div className="flex items-center gap-4">
@@ -215,26 +266,6 @@ export function ExpertEditModal({
                 </div>
                 <p className="text-xs text-ink-3">Le studio garde son visage et change la pose, la tenue, l’accessoire et le fond. PNG, JPEG ou WebP de 4 Mo au plus pour une image importée.</p>
               </div>
-
-              {onVoice && (
-                <div className="flex items-center justify-between gap-3">
-                  <Label>Sa voix</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={busy !== null}
-                    onClick={() => {
-                      onOpenChange(false);
-                      onVoice();
-                    }}
-                    className="gap-1.5"
-                  >
-                    <AudioLines className="size-4" />
-                    Choisir sa voix
-                  </Button>
-                </div>
-              )}
 
               {customized && (
                 <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-soft px-3 py-2.5">
