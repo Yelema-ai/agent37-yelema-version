@@ -67,6 +67,7 @@ export async function resolveDashboardAccess(request: NextRequest): Promise<Reso
 
   let agentWorkspaceId: string | null = pinned || null;
   let isWorkspaceMember = false;
+  let isWorkspaceAdmin = false;
   let currentUserEmail: string | null = null;
 
   if (!isBackoffice) {
@@ -102,13 +103,16 @@ export async function resolveDashboardAccess(request: NextRequest): Promise<Reso
       if (agentWorkspaceId) {
         const { data: membership } = await db
           .from("memberships")
-          .select("workspace_id")
+          .select("workspace_id, role")
           .eq("user_id", user.id)
           .eq("workspace_id", agentWorkspaceId)
           .maybeSingle();
 
         if (membership) {
           isWorkspaceMember = true;
+          if (membership.role === "admin" || membership.role === "owner") {
+            isWorkspaceAdmin = true;
+          }
         }
       }
     }
@@ -120,6 +124,9 @@ export async function resolveDashboardAccess(request: NextRequest): Promise<Reso
       const currentUserWorkspaceId = me.workspace.id || null;
       if (pinned && currentUserWorkspaceId === pinned) {
         isWorkspaceMember = true;
+        if (me.user.role === "admin") {
+          isWorkspaceAdmin = true;
+        }
       }
     }
   }
@@ -152,6 +159,7 @@ export async function resolveDashboardAccess(request: NextRequest): Promise<Reso
     isBackoffice,
     currentUserEmail,
     isWorkspaceMember,
+    isWorkspaceAdmin,
   });
 
   if (!evalResult.allowed) {

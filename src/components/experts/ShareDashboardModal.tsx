@@ -123,7 +123,12 @@ export function ShareDashboardModal() {
   // Changement de mode de visibilité (enregistré immédiatement)
   const handleModeChange = (mode: "public" | "workspace" | "emails") => {
     setAccesMode(mode);
-    void persistSharing(mode, emails);
+    let nextEmails = emails;
+    if (mode === "emails" && nextEmails.length === 0 && workspaceCtx?.userEmail) {
+      nextEmails = [workspaceCtx.userEmail.toLowerCase().trim()];
+      setEmails(nextEmails);
+    }
+    void persistSharing(mode, nextEmails);
   };
 
   // Lien protégé via Mstudio : indispensable pour imposer la vérification d'authentification et de workspace

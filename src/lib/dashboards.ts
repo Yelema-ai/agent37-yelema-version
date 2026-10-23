@@ -213,6 +213,7 @@ export interface DashboardAccessCheckParams {
   isBackoffice: boolean;
   currentUserEmail?: string | null;
   isWorkspaceMember: boolean;
+  isWorkspaceAdmin?: boolean;
 }
 
 export type DashboardAccessResult =
@@ -274,6 +275,11 @@ export function evaluateDashboardAccess(params: DashboardAccessCheckParams): Das
   }
 
   if (acces === "emails") {
+    // Les administrateurs de l'espace de travail propriétaire ont toujours accès à leurs tableaux
+    if (params.isWorkspaceAdmin) {
+      return { allowed: true };
+    }
+
     if (!currentUserEmail) {
       return {
         allowed: false,
@@ -285,6 +291,10 @@ export function evaluateDashboardAccess(params: DashboardAccessCheckParams): Das
     const normalizedCurrentUser = currentUserEmail.toLowerCase().trim();
     const hasEmail = allowedEmails.some((e) => e.toLowerCase().trim() === normalizedCurrentUser);
     if (!hasEmail) {
+      // Si la liste blanche d'adresses est encore vide, ne pas bloquer les collaborateurs du workspace
+      if (allowedEmails.length === 0 && isWorkspaceMember) {
+        return { allowed: true };
+      }
       return {
         allowed: false,
         status: 403,

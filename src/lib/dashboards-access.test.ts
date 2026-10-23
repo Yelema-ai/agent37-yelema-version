@@ -222,6 +222,31 @@ test("evaluateDashboardAccess: mode emails (liste blanche)", () => {
     isWorkspaceMember: true,
   });
   assert.equal(authorizedUser.allowed, true);
+
+  // 4. Administrateur du workspace propriétaire -> toujours autorisé
+  const adminUser = evaluateDashboardAccess({
+    acces: "emails",
+    allowedEmails: allowed,
+    stateWorkspaceId: "ws_123",
+    pinnedWorkspaceId: "ws_123",
+    isBackoffice: true,
+    currentUserEmail: "admin@acme.ci",
+    isWorkspaceMember: true,
+    isWorkspaceAdmin: true,
+  });
+  assert.equal(adminUser.allowed, true);
+
+  // 5. Liste blanche vide + membre du workspace -> autorisé pour éviter le verrouillage accidentel
+  const emptyListMember = evaluateDashboardAccess({
+    acces: "emails",
+    allowedEmails: [],
+    stateWorkspaceId: "ws_123",
+    pinnedWorkspaceId: "ws_123",
+    isBackoffice: true,
+    currentUserEmail: "collab@acme.ci",
+    isWorkspaceMember: true,
+  });
+  assert.equal(emptyListMember.allowed, true);
 });
 
 test("validation du profil dans les routes d'API : rejet strict de toute traversée", () => {
