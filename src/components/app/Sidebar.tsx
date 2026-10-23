@@ -3,18 +3,22 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Blocks, House, PanelLeftClose, Settings2, UserPlus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Blocks, Lock, PanelLeftClose, Settings2, SquarePen, UserPlus } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { AccountMenu } from "@/components/AccountMenu";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { ExpertItem } from "@/components/experts/ExpertItem";
+import { useMyAgents } from "@/components/useMyAgents";
+import type { ChatSession } from "@/components/chat/types";
+import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-// Pas de « Chat entreprise » : chaque membre a sa propre instance, il n'y a pas de discussion
-// commune. Une entrée n'apparaît ici que lorsque son écran existe.
+// « Nouvelle conversation » ouvre l'accueil et sa barre de chat. Une entrée n'apparaît ici que
+// lorsque son écran existe.
 const NAV = [
-  { href: "/", label: "Accueil", icon: House, exact: true },
+  { href: "/", label: "Nouvelle conversation", icon: SquarePen, exact: true },
   { href: "/recruter", label: "Recruter", icon: UserPlus, exact: false },
   { href: "/integrations", label: "Intégrations", icon: Blocks, exact: false },
 ] as const;
@@ -26,7 +30,12 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
   // Never the Yelema Y here: it is only the tab icon (favicon), Yelema stays in « Powered by ».
   const deploymentLogo = usePublicConfig().logoUrl;
   const logoUrl = current?.logo_url ?? deploymentLogo;
-  const { experts, unreadable } = useExpertsContext();
+  const { experts: installed, unreadable } = useExpertsContext();
+  // Djénéba heads « Mes Experts », the others follow in their order.
+  const experts = [...installed].sort((a, b) => Number(isDjeneba(b)) - Number(isDjeneba(a)));
+  // The chat d'entreprise is the member's own instance with no Expert chosen (its default home).
+  const { agents } = useMyAgents(current?.id);
+  const ownAgentId = agents[0]?.agent37_id ?? installed[0]?.agentId ?? null;
 
   return (
     <aside
@@ -86,7 +95,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
       })}
 
       {!collapsed && (
-        <div className="px-2.5 pt-4 pb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-3">Mon équipe</div>
+        <div className="px-2.5 pt-4 pb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-3">Mes Experts</div>
       )}
 
       {experts.map((e) => (
@@ -106,6 +115,8 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
           {unreadable === 1 ? "1 instance illisible" : `${unreadable} instances illisibles`}
         </p>
       )}
+
+      {!collapsed && ownAgentId && <CompanyChats agentId={ownAgentId} pathname={pathname} onNavigate={onNavigate} />}
 
       <div className="mt-auto flex w-full flex-col gap-0.5 border-t border-line pt-3">
         <Link
@@ -138,5 +149,51 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
         </a>
       </div>
     </aside>
+  );
+}
+
+const isDjeneba = (e: { catalogueKey?: string | null; profileId: string }) =>
+  (e.catalogueKey ?? e.profileId).toLowerCase().includes("djeneba");
+
+// The latest conversations of the chat d'entreprise, under a lock: private to the company. An
+// Expert's conversations stay in its space. A failed read shows nothing rather than an error here.
+function CompanyChats({ agentId, pathname, onNavigate }: { agentId: string; pathname: string; onNavigate?: () => void }) {
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  useEffect(() => {
+    let live = true;
+    apiFetch<{ sessions: ChatSession[] }>(`/api/agents/${agentId}/chat/sessions`).then(
+      (r) => live && setSessions(r.sessions.filter((s) => !s.routine).slice(0, 6)),
+      () => undefined
+    );
+    return () => {
+      live = false;
+    };
+  }, [agentId, pathname]);
+  const home = `/experts/${agentId}/chat`;
+  return (
+    <>
+      <Link
+        href={home}
+        onClick={onNavigate}
+        className={cn(
+          "mt-3 flex items-center gap-1.5 rounded-[11px] px-2.5 pt-1 pb-1.5 text-xs font-semibold uppercase tracking-wide",
+          pathname === home ? "text-ink" : "text-ink-3 hover:text-ink"
+        )}
+      >
+        <Lock className="size-3.5" strokeWidth={2.2} />
+        Chat d’entreprise
+      </Link>
+      {sessions.map((s) => (
+        <Link
+          key={s.session_id}
+          href={`${home}?session=${encodeURIComponent(s.session_id)}`}
+          onClick={onNavigate}
+          title={s.title || "Nouvelle conversation"}
+          className="flex min-h-9 items-center rounded-[11px] px-2.5 text-[13px] font-medium text-ink-2 hover:bg-soft"
+        >
+          <span className="truncate">{s.title || "Nouvelle conversation"}</span>
+        </Link>
+      ))}
+    </>
   );
 }

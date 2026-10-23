@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Palette, RotateCcw, Upload } from "lucide-react";
+import { AudioLines, Loader2, Palette, RotateCcw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -33,7 +33,18 @@ function identityNote(look: ExpertLook): string | null {
  * import, or to have drawn by the studio from the expert's face. The drive folder and the e-mail
  * sender keep the catalogue's name.
  */
-export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: string; open: boolean; onOpenChange: (open: boolean) => void }) {
+export function ExpertEditModal({
+  expertKey,
+  open,
+  onOpenChange,
+  onVoice,
+}: {
+  expertKey: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** « Sa voix » opens the voice window, where voice is on. */
+  onVoice?: () => void;
+}) {
   const { reload, applyLook } = useExpertsContext();
   const [look, setLook] = useState<ExpertLook | null>(null);
   const [name, setName] = useState("");
@@ -204,6 +215,26 @@ export function ExpertEditModal({ expertKey, open, onOpenChange }: { expertKey: 
                 </div>
                 <p className="text-xs text-ink-3">Le studio garde son visage et change la pose, la tenue, l’accessoire et le fond. PNG, JPEG ou WebP de 4 Mo au plus pour une image importée.</p>
               </div>
+
+              {onVoice && (
+                <div className="flex items-center justify-between gap-3">
+                  <Label>Sa voix</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={busy !== null}
+                    onClick={() => {
+                      onOpenChange(false);
+                      onVoice();
+                    }}
+                    className="gap-1.5"
+                  >
+                    <AudioLines className="size-4" />
+                    Choisir sa voix
+                  </Button>
+                </div>
+              )}
 
               {customized && (
                 <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-soft px-3 py-2.5">

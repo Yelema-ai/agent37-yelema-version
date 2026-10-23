@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo, useState, type KeyboardEvent } from "react";
-import Link from "next/link";
+import { useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, MessageCircle, Mic, Send } from "lucide-react";
+import { Loader2, Lock, Mic, Send } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { DictationBar } from "@/components/chat/ChatComposer";
@@ -11,11 +10,11 @@ import { useDictation } from "@/components/chat/useDictation";
 import { useVoices } from "@/components/voice/useVoices";
 import { CompanyProfileCard } from "@/components/company/CompanyProfileCard";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
-import { ExpertMedia } from "@/components/experts/ExpertMedia";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
-import { useCatalogue } from "@/components/experts/useCatalogue";
+import { useMyAgents } from "@/components/useMyAgents";
+import { RecentDeliverables } from "@/components/home/RecentDeliverables";
 import { agentTabPath } from "@/lib/expert-tabs";
-import type { CatalogueExpert, Expert } from "@/lib/types";
+import type { Expert } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function today(): string {
@@ -23,46 +22,11 @@ function today(): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-// How wide a team card is at each breakpoint (1, 2, 3 then 4 per row).
-const CARD_SIZES = "(min-width: 80rem) 300px, (min-width: 64rem) 33vw, (min-width: 40rem) 50vw, 100vw";
 
-const expertId = (e: Expert) => `${e.agentId}:${e.profileId}`;
-
-// One expert's card: full-body portrait (the looping video on hover), name, title, tagline,
-// "Écrire". The portrait comes from the catalogue; without one the card shows the expert's initial.
-function ExpertCard({ expert, entry }: { expert: Expert; entry: CatalogueExpert | null }) {
-  const href = agentTabPath(expert.agentId, "chat", expert.profileId);
-  const [hovered, setHovered] = useState(false);
-  return (
-    <div className="group flex flex-col overflow-hidden rounded-card border border-line bg-surface transition-shadow hover:shadow-[0_20px_40px_-26px_rgba(23,17,43,.45)]">
-      <Link
-        href={href}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        className="relative block aspect-[4/5] overflow-hidden bg-[#8D68FA]/30"
-      >
-        <ExpertMedia
-          name={expert.displayName}
-          image={entry?.portraitUrl ?? expert.photoUrl ?? null}
-          videoUrl={entry?.videoUrl}
-          hovered={hovered}
-          sizes={CARD_SIZES}
-        />
-      </Link>
-      <div className="flex flex-1 flex-col p-4">
-        <h3 className="font-display text-[22px] font-bold tracking-tight text-ink">{expert.displayName}</h3>
-        <p className="text-sm text-ink-3">{expert.title ?? expert.role ?? expert.agentName ?? ""}</p>
-        <p className="mt-3 line-clamp-2 flex-1 text-sm text-ink-2">{expert.tagline ?? ""}</p>
-        <Link
-          href={href}
-          className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-line text-[15px] font-semibold text-ink hover:bg-soft"
-        >
-          <MessageCircle className="h-4 w-4" /> Écrire
-        </Link>
-      </div>
-    </div>
-  );
-}
+// Four openers that suit any company, whoever the message goes to. A click puts the start of the
+// request in the field, to finish before sending.
+const SHORTCUTS = ["Point du matin", "Préparer une réunion", "Résumer mes emails", "Suivre un dossier"] as const;
+const isDjeneba = (e: Expert) => (e.catalogueKey ?? e.profileId).toLowerCase().includes("djeneba");
 
 // The back office says the installation failed: said at once, with the experts concerned when it
 // names them. Why it failed is Yelema's to see; nothing technical is shown.
@@ -116,22 +80,21 @@ function Installing() {
   );
 }
 
-// Accueil: greeting, "Demander à mon équipe" (chips pick the expert; sending opens that expert's
-// chat with the message on its way), then the team. Everything shown is what is installed for
-// this user; the catalogue only dresses it.
+// Accueil: greeting, the chat bar (to the chat d'entreprise, or to Djénéba for who has her; sending
+// opens that chat with the message on its way), four shortcuts, then the latest deliverables. The
+// team itself is in the menu; here only where its installation stands.
 export function HomeView() {
   const router = useRouter();
   const { current, userEmail, userFirstName } = useWorkspace();
   const { experts, loading, unreadable, installing, stalled, failed, failedExperts } = useExpertsContext();
-  const { catalogue } = useCatalogue(current?.id);
-  const [picked, setPicked] = useState<string | null>(null);
+  // The chat d'entreprise is the member's own instance with no Expert chosen; who has Djénéba may
+  // write to her instead.
+  const { agents } = useMyAgents(current?.id);
+  const ownAgentId = agents[0]?.agent37_id ?? experts[0]?.agentId ?? null;
+  const djeneba = experts.find(isDjeneba) ?? null;
+  const [picked, setPicked] = useState<"entreprise" | "djeneba">("entreprise");
   const [text, setText] = useState("");
-
-  const entries = useMemo(() => new Map(catalogue.experts.map((e) => [e.key, e])), [catalogue]);
-  // The expert addressed by default: the catalogue's, when it is installed, else the first one.
-  const fallback = experts.find((e) => e.catalogueKey && e.catalogueKey === catalogue.defaultExpertKey) ?? experts[0];
-  const to = experts.find((e) => expertId(e) === picked) ?? fallback ?? null;
-  const suggestions = (to?.catalogueKey && entries.get(to.catalogueKey)?.suggestions) || [];
+  const to = picked === "djeneba" && djeneba ? djeneba : null;
   const hello = userFirstName || userEmail.split("@")[0];
 
   // The microphone of the chat, here too: what is said lands in the field, sent with Envoyer.
@@ -144,8 +107,9 @@ export function HomeView() {
 
   function send(message: string) {
     const m = message.trim();
-    if (!m || !to) return;
-    router.push(`${agentTabPath(to.agentId, "chat", to.profileId)}?q=${encodeURIComponent(m)}`);
+    if (!m) return;
+    const path = to ? agentTabPath(to.agentId, "chat", to.profileId) : ownAgentId ? agentTabPath(ownAgentId, "chat") : null;
+    if (path) router.push(`${path}?q=${encodeURIComponent(m)}`);
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -161,32 +125,41 @@ export function HomeView() {
       <h1 className="mt-1 font-display text-[34px] font-bold tracking-tight text-ink sm:text-[38px]">Bonjour {hello}</h1>
       <CompanyProfileCard />
 
-      {to && (
+      {ownAgentId && (
         <>
           <section className="mt-5 rounded-[22px] border border-line bg-surface p-4 shadow-[0_8px_30px_rgb(48_22_103_/_0.05)]">
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <span className="shrink-0 text-sm text-ink-3">À</span>
-              {experts.map((e) => (
+            {djeneba && (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <span className="shrink-0 text-sm text-ink-3">À</span>
                 <button
-                  key={expertId(e)}
                   type="button"
-                  onClick={() => setPicked(expertId(e))}
+                  onClick={() => setPicked("entreprise")}
                   className={cn(
-                    "flex h-9 shrink-0 items-center gap-2 rounded-full border pl-1 pr-3 text-[13px] font-semibold transition-colors",
-                    expertId(e) === expertId(to) ? "border-brand/40 bg-tint text-brand-ink" : "border-line bg-surface text-ink-2 hover:bg-soft"
+                    "flex h-9 shrink-0 items-center gap-2 rounded-full border px-3 text-[13px] font-semibold transition-colors",
+                    !to ? "border-brand/40 bg-tint text-brand-ink" : "border-line bg-surface text-ink-2 hover:bg-soft"
                   )}
                 >
-                  <ExpertAvatar expert={{ ...e, gateway: null }} size="xs" />
-                  {e.displayName}
+                  <Lock className="size-3.5" /> Chat d’entreprise
                 </button>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setPicked("djeneba")}
+                  className={cn(
+                    "flex h-9 shrink-0 items-center gap-2 rounded-full border pl-1 pr-3 text-[13px] font-semibold transition-colors",
+                    to ? "border-brand/40 bg-tint text-brand-ink" : "border-line bg-surface text-ink-2 hover:bg-soft"
+                  )}
+                >
+                  <ExpertAvatar expert={{ ...djeneba, gateway: null }} size="xs" />
+                  {djeneba.displayName}
+                </button>
+              </div>
+            )}
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={onKeyDown}
               rows={3}
-              placeholder={`Que voulez-vous confier à ${to.displayName} ?`}
+              placeholder={to ? `Que voulez-vous confier à ${to.displayName} ?` : "Que puis-je faire pour vous ?"}
               className="mt-3 w-full resize-none bg-transparent px-1 text-[16px] text-ink placeholder:text-ink-3 focus:outline-none"
             />
             {dictation.state !== "idle" ? (
@@ -216,26 +189,21 @@ export function HomeView() {
             )}
           </section>
 
-          {suggestions.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {suggestions.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => send(s)}
-                  className="rounded-full border border-dashed border-line bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:border-brand/30 hover:text-ink"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {SHORTCUTS.map((label) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setText(`${label} : `)}
+                className="rounded-full border border-dashed border-line bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink-2 hover:border-brand/30 hover:text-ink"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </>
       )}
 
-      <h2 className="mt-10 font-display text-[22px] font-bold tracking-tight text-ink">
-        Mon équipe{experts.length > 0 ? ` (${experts.length})` : ""}
-      </h2>
       {installing && experts.length > 0 && (
         <p role="status" className="mt-2 flex items-center gap-2 text-sm text-ink-3">
           {stalled ? (
@@ -262,13 +230,8 @@ export function HomeView() {
             ? "Votre équipe n’est pas joignable pour le moment. Réessayez dans un instant."
             : "Votre équipe s’installe. Vos experts apparaîtront ici dès qu’ils seront prêts."}
         </p>
-      ) : (
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {experts.map((e) => (
-            <ExpertCard key={expertId(e)} expert={e} entry={(e.catalogueKey && entries.get(e.catalogueKey)) || null} />
-          ))}
-        </div>
-      )}
+      ) : null}
+      {ownAgentId && <RecentDeliverables agentId={ownAgentId} />}
     </div>
   );
 }

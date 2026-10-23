@@ -66,7 +66,7 @@ export function VaultView() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Identifiants des experts</h2>
+          <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Clés des experts</h2>
           <p className="mt-1 max-w-xl text-sm text-ink-3">Confiez à un expert l’accès à un site : il s’y connecte pour vous, sans jamais voir le mot de passe.</p>
         </div>
         <Button onClick={() => setAdding(true)} disabled={!data} className="self-start sm:self-auto">
