@@ -2,9 +2,23 @@ import type { IntegrationToolkit } from "@/lib/types";
 
 // Composio serves a logo per toolkit slug at a fixed URL scheme, so the catalog below can resolve
 // app icons without a remote round-trip. Live search results carry their own `logo` from the API.
+// The catalog's own logos are copied in public/logos/composio (scripts/logos-composio.mjs) and served
+// by the app, with the page: logos.composio.dev answered slowly. Any other slug keeps Composio's address.
+const LOCAL_LOGOS = new Set([
+  "gmail", "googledrive", "googlecalendar", "googlesheets", "googledocs", "outlook", "microsoft_teams",
+  "one_drive", "slack", "notion", "canva", "facebook", "instagram", "linkedin", "hubspot", "airtable",
+  "quickbooks", "calendly", "zoom", "dropbox", "trello",
+]);
+
+export const COMPOSIO_LOGOS_ORIGIN = "https://logos.composio.dev";
+
 export function composioLogoUrl(slug: string) {
-  return `https://logos.composio.dev/api/${slug}`;
+  const key = slug.toLowerCase();
+  return LOCAL_LOGOS.has(key) ? `/logos/composio/${key}.svg` : `${COMPOSIO_LOGOS_ORIGIN}/api/${slug}`;
 }
+
+/** A logo the app serves itself (no reason to wait for it to scroll into view). */
+export const isLocalLogo = (url: string | null | undefined): boolean => !!url && url.startsWith("/logos/");
 
 function toolkit(slug: string, name: string, description: string): IntegrationToolkit {
   return {

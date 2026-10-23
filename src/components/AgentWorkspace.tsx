@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { toast } from "sonner";
-import { AudioLines, ChevronRight, FolderOpen, Mail, MessageSquare, MoreHorizontal, Pencil, Repeat, Phone, Wrench } from "lucide-react";
+import { AudioLines, ChevronDown, ChevronRight, FolderOpen, Mail, MessageSquare, MoreHorizontal, Pencil, Repeat, Phone, Wrench } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { agentTabPath, parseAgentRoute, type AgentTab } from "@/lib/expert-tabs";
 import { useWorkspace } from "@/components/WorkspaceProvider";
@@ -67,6 +67,25 @@ export function AgentWorkspace({
 }) {
   const pathname = usePathname();
   const railOpen = useRailOpen();
+  // A small arrow on Discussion shows or hides « Conversations » under it. Until the member chooses,
+  // it follows the column (open by default on a computer); folding it also closes the column, which
+  // would otherwise stay open with nothing left to close it. The choice is remembered per browser.
+  const [discussionKept, setDiscussionKept] = useState<boolean | null>(null);
+  useEffect(() => {
+    try {
+      const kept = localStorage.getItem("yelema.discussion-unfolded");
+      if (kept) setDiscussionKept(kept === "1");
+    } catch {}
+  }, []);
+  const discussionOpen = discussionKept ?? railOpen;
+  const toggleDiscussion = () => {
+    const next = !discussionOpen;
+    try {
+      localStorage.setItem("yelema.discussion-unfolded", next ? "1" : "0");
+    } catch {}
+    setDiscussionKept(next);
+    if (!next) setRailOpen(false);
+  };
   const { setCurrentId } = useWorkspace();
 
   // Deep-linking to an agent scopes the WorkspaceProvider to its workspace, so the fleet/switcher
@@ -105,10 +124,11 @@ export function AgentWorkspace({
   // Only an expert of the catalogue can be called: the back office opens the call by its key.
   const callee = expert?.catalogueKey ? { key: expert.catalogueKey, name: expertName, photoUrl: portrait } : null;
 
-  // A message typed on the home page rides the URL as ?q= and is sent once the chat is up.
-  const [initialMessage] = useState<string | null>(() =>
-    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("q")
-  );
+  // A message typed on the home page rides the URL as ?q= and is sent once the chat is up. Read once
+  // mounted, like ?session= below: on a client navigation from the home page the first render still
+  // sees the home page's URL, so reading it during render lost the message.
+  const [initialMessage, setInitialMessage] = useState<string | null>(null);
+  useEffect(() => setInitialMessage(new URLSearchParams(window.location.search).get("q")), []);
 
   // The open tab follows the URL (history.pushState updates usePathname in the App Router). Fall
   // back to the server-resolved initialTab on the first paint before the path is parsed.
@@ -228,7 +248,23 @@ export function AgentWorkspace({
               const Icon = t.icon;
               const isActive = currentTab === t.id;
               return [
-                <button
+                t.id === "chat" ? (
+                  <div key={t.id} className={cn("flex min-h-10 items-center rounded-[11px] transition-colors", isActive ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft")}>
+                    <button type="button" onClick={() => selectTab(t.id)} aria-current={isActive ? "page" : undefined} className="flex min-h-10 flex-1 items-center gap-2.5 px-2.5 text-left text-sm font-semibold">
+                      <Icon className="h-[18px] w-[18px]" />
+                      {t.label}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={toggleDiscussion}
+                      aria-expanded={discussionOpen}
+                      aria-label={discussionOpen ? "Replier les conversations" : "Déplier les conversations"}
+                      className="mr-1 grid size-9 place-items-center rounded-lg text-ink-3 hover:bg-soft-2 hover:text-ink"
+                    >
+                      <ChevronDown className={cn("size-4 transition-transform", discussionOpen && "rotate-180")} />
+                    </button>
+                  </div>
+                ) : <button
                   key={t.id}
                   type="button"
                   onClick={() => selectTab(t.id)}
@@ -243,7 +279,7 @@ export function AgentWorkspace({
                 </button>,
                 // Under Discussion, on a computer: opens and closes the column of conversations beside
                 // the chat (from another tab, it goes back to the chat with the column open).
-                t.id === "chat" ? (
+                t.id === "chat" && discussionOpen ? (
                   <button
                     key="conversations"
                     type="button"
@@ -329,13 +365,23 @@ export function AgentWorkspace({
           </div>
           {/* Chat owns its full height and stays MOUNTED (just hidden) across tab switches. */}
           {chatOpened && (
-            <div className={cn("flex min-h-0 flex-1", !isChat && "hidden")}>
+            <div className={cn("relative flex min-h-0 flex-1", !isChat && "hidden")}>
               {/* The conversations open in their own column beside the chat from « Conversations » under
-                  Discussion, and close to give the chat its whole width (phones and tablets: a panel). */}
+                  Discussion, and close to give the chat its whole width (phones and tablets: a panel).
+                  Under 1280 px a column would leave the chat a strip: it floats over the chat instead,
+                  like the phone's panel, and closes once a conversation is picked. */}
               {railOpen && (
-                <div className="hidden w-[288px] shrink-0 flex-col border-r border-line bg-surface px-2.5 py-3 lg:flex">
-                  <ChatSidebar />
-                </div>
+                <>
+                  <button
+                    type="button"
+                    aria-label="Fermer les conversations"
+                    onClick={() => setRailOpen(false)}
+                    className="absolute inset-0 z-20 hidden bg-ink/20 lg:block xl:hidden"
+                  />
+                  <div className="absolute inset-y-0 left-0 z-30 hidden w-[320px] flex-col border-r border-line bg-surface px-2.5 py-3 shadow-[8px_0_30px_rgba(0,0,0,0.12)] lg:flex xl:static xl:z-auto xl:w-[288px] xl:shrink-0 xl:shadow-none">
+                    <ChatSidebar onNavigate={() => !matchMedia("(min-width: 1280px)").matches && setRailOpen(false)} />
+                  </div>
+                </>
               )}
               <div className="min-w-0 flex-1">
                 <ChatView initialMessage={initialMessage} driveFolder={driveFolder ?? (profileId ? `${DRIVE_ROOT}/${expertName}` : DRIVE_ROOT)} />

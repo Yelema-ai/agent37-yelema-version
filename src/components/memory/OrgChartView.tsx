@@ -59,7 +59,8 @@ export function OrgChartView() {
     }
   };
 
-  const ordered = useMemo(() => (chart ? orderUnits(chart.units) : []), [chart]);
+  // Level by level: the top of the company first, then the departments under it, then theirs.
+  const ordered = useMemo(() => (chart ? orderUnits(chart.units).sort((a, b) => a.depth - b.depth) : []), [chart]);
   const counts = useMemo(() => (chart ? countsByUnit(chart) : new Map()), [chart]);
 
   if (!chart) {
@@ -135,7 +136,7 @@ export function OrgChartView() {
           onDelete={setRemoving}
         />
       ) : (
-        <div className="mt-6 grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
+        <div className="mt-6 grid gap-4 md:auto-rows-fr md:grid-cols-2 2xl:grid-cols-3">
           {ordered.map(({ unit }) => (
             <DepartmentCard
               key={unit.id}
@@ -215,7 +216,7 @@ function Header({ editable, onAdd, view, onView }: { editable: boolean; onAdd: (
       <div className="min-w-0">
         <h1 className="font-display text-[28px] font-bold tracking-tight text-ink">Organigramme</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-2">
-          Chaque département a sa mémoire. Ses membres et leurs experts la lisent ; un responsable lit aussi celle des départements qui dépendent du sien.
+          Chaque département a sa mémoire, lue par ses membres et leurs Experts. Un responsable lit aussi celle des départements sous le sien.
         </p>
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-2 self-start">

@@ -4,7 +4,7 @@ import { MyInstance } from "@/components/MyInstance";
 import { PageBody } from "@/components/app/PageBody";
 import { IntegrationsOverview } from "@/components/integrations/IntegrationsOverview";
 
-// Intégrations · Aperçu : ce qui est branché sur les experts de la personne connectée, et ce qui leur manque.
+// Intégrations · Aperçu : ce qui est branché sur les experts de la personne connectée, et ce qui reste à régler.
 export default function Page() {
   return (
     <PageBody>

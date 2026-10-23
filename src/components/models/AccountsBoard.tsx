@@ -107,7 +107,7 @@ export function AccountsBoard({ setup, scope, title, picker, scopeLabel, catalog
           </h2>
           {picker}
         </div>
-        <Button size="sm" onClick={() => setAdding(true)} className="h-8 gap-1.5 rounded-full px-3.5 text-xs">
+        <Button size="sm" onClick={() => setAdding(true)} className="h-8 gap-1.5 rounded-full px-3.5 text-xs max-sm:h-10 max-sm:text-[13px]">
           <Plus className="h-3.5 w-3.5" /> Ajouter un compte
         </Button>
       </div>
@@ -115,7 +115,7 @@ export function AccountsBoard({ setup, scope, title, picker, scopeLabel, catalog
       {groups.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-[22px] border border-dashed border-line bg-surface/40 p-6 text-center">
           <p className="text-sm text-ink-2">Vos experts utilisent le moteur Yelema.</p>
-          <Button size="sm" variant="outline" onClick={() => setAdding(true)} className="h-8 gap-1.5 rounded-full px-3.5 text-xs">
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)} className="h-8 gap-1.5 rounded-full px-3.5 text-xs max-sm:h-10 max-sm:text-[13px]">
             <Plus className="h-3.5 w-3.5" /> Ajouter un compte
           </Button>
         </div>
@@ -166,16 +166,16 @@ function GroupCard({ group, rank, info, options, disabled, onModels, children }:
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("space-y-2.5 rounded-[22px] border border-line bg-surface p-3 sm:p-4", rank === 0 && "border-brand/40 ring-1 ring-brand/20", isDragging && "relative z-10 shadow-xl")}>
       <div className="flex flex-wrap items-center gap-2.5">
-        <button type="button" aria-label={`Déplacer ${info.name}`} className="grid h-8 w-6 cursor-grab touch-none place-items-center text-ink-3 hover:text-ink active:cursor-grabbing" {...attributes} {...listeners}>
+        <button type="button" aria-label={`Déplacer ${info.name}`} className="grid h-8 w-6 max-sm:h-10 max-sm:w-9 cursor-grab touch-none place-items-center text-ink-3 hover:text-ink active:cursor-grabbing" {...attributes} {...listeners}>
           <GripVertical className="h-4 w-4" />
         </button>
         {info.family === "custom" ? <span className="grid h-9 w-9 place-items-center rounded-xl bg-soft text-ink-3"><Server className="h-4 w-4" /></span> : <ProviderLogo family={info.family} name={info.name} />}
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-1.5 text-[15px] font-semibold text-ink">
             {info.name}
-            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", rank === 0 ? "bg-tint text-brand-ink" : "bg-soft text-ink-3")}>{rank === 0 ? "Principal" : `Secours ${rank}`}</span>
+            <span className={cn("rounded-full px-2 py-0.5 text-[10px] max-sm:text-[12px] font-semibold", rank === 0 ? "bg-tint text-brand-ink" : "bg-soft text-ink-3")}>{rank === 0 ? "Principal" : `Secours ${rank}`}</span>
           </p>
-          <p className="text-[11px] text-ink-3">{group.accounts.length} compte{group.accounts.length > 1 ? "s" : ""}, essayé{group.accounts.length > 1 ? "s" : ""} dans l’ordre</p>
+          <p className="text-[11px] max-sm:text-[12px] text-ink-3">{group.accounts.length} compte{group.accounts.length > 1 ? "s" : ""}, essayé{group.accounts.length > 1 ? "s" : ""} dans l’ordre</p>
         </div>
         <GroupModels provider={group.provider} options={options} model={group.model} fallbacks={group.fallbacks} onChange={onModels} disabled={disabled} />
       </div>

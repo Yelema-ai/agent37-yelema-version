@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Pause, Play } from "lucide-react";
+import { AudioLines, Pause, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   chosenVoice,
   countryFlag,
+  expertDefaultVoice,
   countryName,
   filterVoices,
   voiceFacets,
   VOICE_LANGUAGES,
+  type VoiceExpert,
   type VoiceFilter,
   type VoiceOption,
   type VoicePrefs,
@@ -19,13 +21,43 @@ const ALL: VoiceFilter = { gender: null, country: null };
 const GENDER_LABEL = { female: "Femme", male: "Homme", neutral: "Neutre" } as const;
 
 /** Language and voice of the user's calls, chosen ahead so "Appeler" calls at once. */
-export function VoiceSettings({ voices, prefs, onChange }: { voices: VoiceOption[]; prefs: VoicePrefs; onChange: (prefs: VoicePrefs) => void }) {
+export function VoiceSettings({
+  voices,
+  prefs,
+  onChange,
+  expert,
+}: {
+  voices: VoiceOption[];
+  prefs: VoicePrefs;
+  onChange: (prefs: VoicePrefs) => void;
+  /** The Expert whose own default voice is shown chosen until another is picked. */
+  expert?: VoiceExpert;
+}) {
   const [filter, setFilter] = useState<VoiceFilter>(ALL);
-  const chosen = chosenVoice(voices, prefs);
+  const chosen = chosenVoice(voices, prefs, expert);
   const ofLanguage = voices.filter((v) => v.language === prefs.language);
   const facets = voiceFacets(ofLanguage, filter);
+  // The voice the Expert takes when nobody chose one: named « par défaut », shown before any change.
+  const fallback = expertDefaultVoice(voices, prefs.language, expert) ?? ofLanguage.find((v) => v.default) ?? null;
+  const isDefault = Boolean(chosen && fallback && chosen.key === fallback.key);
   return (
     <div className="flex min-w-0 flex-col gap-2">
+      {chosen && (
+        <div className="flex items-center gap-3 rounded-xl border border-brand/30 bg-tint px-3 py-2.5">
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand text-on-brand">
+            <AudioLines className="size-4" />
+          </span>
+          <span className="min-w-0 grow">
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-ink-3">{isDefault ? "Sa voix par défaut" : "Sa voix"}</span>
+            <span className="block truncate text-sm font-semibold text-ink">
+              {chosen.label}{" "}
+              <span className="font-normal text-ink-3">
+                {GENDER_LABEL[chosen.gender]}, {countryFlag(chosen.country)} {countryName(chosen.country)}
+              </span>
+            </span>
+          </span>
+        </div>
+      )}
       <div className="flex gap-1 rounded-xl bg-soft p-1">
         {VOICE_LANGUAGES.map((l) => (
           <button
@@ -55,6 +87,7 @@ export function VoiceSettings({ voices, prefs, onChange }: { voices: VoiceOption
       <VoicePicker
         voices={filterVoices(ofLanguage, filter)}
         value={chosen?.key ?? null}
+        defaultKey={fallback?.key ?? null}
         onChange={(key) => onChange({ ...prefs, voices: { ...prefs.voices, [prefs.language]: key } })}
       />
     </div>
@@ -79,10 +112,15 @@ function Chips<T extends string>({ label, options, value, onChange }: { label: s
 }
 
 /** The voices of one language, each with its sample. */
-function VoicePicker({ voices, value, onChange }: { voices: VoiceOption[]; value: string | null; onChange: (key: string) => void }) {
+function VoicePicker({ voices, value, defaultKey, onChange }: { voices: VoiceOption[]; value: string | null; defaultKey: string | null; onChange: (key: string) => void }) {
   const audio = useRef<HTMLAudioElement | null>(null);
+  const list = useRef<HTMLDivElement | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   useEffect(() => () => audio.current?.pause(), []);
+  // The chosen voice in sight on opening, even far down the list.
+  useEffect(() => {
+    list.current?.querySelector<HTMLElement>("[aria-pressed=true]")?.scrollIntoView({ block: "nearest" });
+  }, [value]);
   const listen = (v: VoiceOption) => {
     audio.current?.pause();
     if (playing === v.key) return setPlaying(null);
@@ -93,12 +131,13 @@ function VoicePicker({ voices, value, onChange }: { voices: VoiceOption[]; value
     a.play().catch(() => setPlaying(null));
   };
   return (
-    <div className="max-h-56 overflow-y-auto rounded-xl border border-line">
+    <div ref={list} className="max-h-56 overflow-y-auto rounded-xl border border-line">
       {voices.map((v) => (
         <div key={v.key} className={cn("flex items-center gap-2 border-b border-line px-3 py-2 last:border-b-0", value === v.key && "bg-tint")}>
           <button type="button" onClick={() => onChange(v.key)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-pressed={value === v.key}>
             <span className={cn("size-3.5 shrink-0 rounded-full border-2", value === v.key ? "border-brand bg-brand" : "border-line")} />
             <span className="truncate text-sm font-semibold text-ink">{v.label}</span>
+            {v.key === defaultKey && <span className="shrink-0 rounded-full bg-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-2">par défaut</span>}
             <span className="shrink-0 text-[11px] text-ink-3">
               {GENDER_LABEL[v.gender]} · <span title={countryName(v.country)}>{countryFlag(v.country)} {countryName(v.country)}</span>
             </span>

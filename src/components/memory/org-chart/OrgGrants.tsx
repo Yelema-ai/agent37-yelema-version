@@ -3,9 +3,10 @@
 import { useState } from "react";
 import type { OrgChart, OrgGrant } from "@/lib/memory";
 import { Button } from "@/components/ui/button";
+import { Picker } from "@/components/ui/picker";
 import { cn } from "@/lib/utils";
 import { memberName, type Change } from "./context";
-import { CARD, FIELD } from "./styles";
+import { CARD } from "./styles";
 
 const NONE = "";
 
@@ -42,32 +43,31 @@ export function OrgGrants({ chart, editable, change }: { chart: OrgChart; editab
         ))}
       </ul>
       {editable && chart.units.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-end gap-2">
-          <select aria-label="Bénéficiaire" className={FIELD} value={grantee} onChange={(e) => setGrantee(e.target.value)}>
-            <option value={NONE}>Qui…</option>
-            {chart.members.map((m) => (
-              <option key={m.id} value={`user:${m.id}`}>
-                {memberName(m)}
-              </option>
-            ))}
-            {chart.units.map((u) => (
-              <option key={u.id} value={`unit:${u.id}`}>
-                Département {u.name}
-              </option>
-            ))}
-          </select>
-          <select aria-label="Droit" className={FIELD} value={right} onChange={(e) => setRight(e.target.value as OrgGrant["right"])}>
-            <option value="read">lit</option>
-            <option value="write">lit et dépose dans</option>
-          </select>
-          <select aria-label="Département ouvert" className={FIELD} value={grantUnit} onChange={(e) => setGrantUnit(e.target.value)}>
-            <option value={NONE}>Quel département…</option>
-            {chart.units.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
+        <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap sm:items-end">
+          <Picker
+            label="Qui"
+            placeholder="Qui…"
+            value={grantee}
+            onChange={setGrantee}
+            groups={[
+              { label: "Personnes", options: chart.members.map((m) => ({ value: `user:${m.id}`, label: memberName(m) })) },
+              { label: "Départements", options: chart.units.map((u) => ({ value: `unit:${u.id}`, label: `Département ${u.name}` })) },
+            ]}
+          />
+          <Picker
+            label="Droit"
+            placeholder="lit"
+            value={right}
+            onChange={(v) => setRight(v as OrgGrant["right"])}
+            groups={[{ options: [{ value: "read", label: "lit" }, { value: "write", label: "lit et dépose dans" }] }]}
+          />
+          <Picker
+            label="Département ouvert"
+            placeholder="Quel département…"
+            value={grantUnit}
+            onChange={setGrantUnit}
+            groups={[{ options: chart.units.map((u) => ({ value: u.id, label: u.name })) }]}
+          />
           <Button
             variant="outline"
             size="sm"

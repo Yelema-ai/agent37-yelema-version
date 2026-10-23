@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState, type DragEvent } from "react";
-import { ChevronDown, ChevronRight, Minus, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { ChevronDown, ChevronRight, FileText, Minus, MoreHorizontal, Network, Pencil, Plus, Sparkles, Trash2, Users } from "lucide-react";
 import type { OrgUnit } from "@/lib/memory";
 import { canDrop, childrenByParent, countsByUnit, initialCollapsed, type UnitCounts } from "@/lib/org-chart";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { Org } from "./context";
+import { initials, memberName, type Org } from "./context";
 import { PeoplePalette } from "./PeoplePalette";
 import { count } from "./styles";
 import { UnitPanel } from "./UnitPanel";
@@ -39,6 +39,13 @@ export function OrgTree({ org, company, ...act }: { org: Org; company: string } 
   const [over, setOver] = useState<string | null | undefined>(undefined);
   // The box whose panel is open (`null`: the company's); undefined: none.
   const [selected, setSelected] = useState<string | null | undefined>(undefined);
+
+  // A tree wider than its frame (a phone) opens on its top, centred, not on its left edge.
+  const frame = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = frame.current;
+    if (el && el.scrollWidth > el.clientWidth) el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+  }, []);
 
   const folders = chart.units.filter((u) => (children.get(u.id)?.length ?? 0) > 0).map((u) => u.id);
   const allOpen = collapsed.size === 0;
@@ -99,7 +106,8 @@ export function OrgTree({ org, company, ...act }: { org: Org; company: string } 
   return (
     <div className="mt-6 flex flex-col items-start gap-4 lg:flex-row">
       <PeoplePalette org={org} />
-      <section aria-label="Organigramme en arborescence" className="w-full min-w-0 flex-1 overflow-hidden rounded-[22px] border border-line bg-soft">
+      {/* On a phone the tree comes first, the palette (for dragging, a computer's gesture) under it. */}
+      <section aria-label="Organigramme en arborescence" className="-order-1 w-full min-w-0 flex-1 overflow-hidden rounded-[22px] border border-line bg-soft lg:order-none">
         <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-3 py-2">
           <button type="button" className={TOOL} aria-label="Dézoomer" disabled={zoom === 0} onClick={() => setZoom((z) => Math.max(0, z - 1))}>
             <Minus className="size-4" />
@@ -116,7 +124,7 @@ export function OrgTree({ org, company, ...act }: { org: Org; company: string } 
             </button>
           )}
         </div>
-        <div className="max-h-[640px] overflow-auto p-6">
+        <div ref={frame} className="max-h-[640px] overflow-auto p-6">
           <div style={{ zoom: ZOOMS[zoom] ?? 1 }} className="w-max min-w-full">
             <TreeNode unit={null} t={t} />
           </div>
@@ -155,6 +163,21 @@ function TreeNode({ unit, t }: { unit: OrgUnit | null; t: Tree }) {
   const folded = id != null && collapsed.has(id);
   const c = counts.get(id) ?? NONE;
   const lit = over === id || (id != null && org.target === id);
+  // Who leads it, named in the box (else its first person): the first person placed there as head.
+  const placed = id ? chart.members.filter((m) => m.units.some((p) => p.unit === id && p.profile == null)) : [];
+  const head = placed.find((m) => m.units.some((p) => p.unit === id && p.profile == null && p.role === "head")) ?? placed[0];
+  const facts = (
+    unit
+      ? [
+          { icon: Users, label: count(c.members, "personne") },
+          c.experts ? { icon: Sparkles, label: count(c.experts, "Expert") } : null,
+          c.documents ? { icon: FileText, label: count(c.documents, "document") } : null,
+        ]
+      : [
+          { icon: Network, label: count(chart.units.length, "département") },
+          c.documents ? { icon: FileText, label: `${count(c.documents, "document")} pour tous` } : null,
+        ]
+  ).filter(Boolean) as { icon: typeof Users; label: string }[];
   return (
     <div className="flex flex-col items-center">
       <div
@@ -166,8 +189,9 @@ function TreeNode({ unit, t }: { unit: OrgUnit | null; t: Tree }) {
         onDrop={(e) => drag.drop(e, id)}
         data-unit={id ?? "root"}
         className={cn(
-          "rounded-2xl border px-3.5 py-2.5 text-left shadow-sm transition-shadow",
-          unit ? "w-[220px] bg-surface" : "w-[244px] bg-tint",
+          // Every box the same size, so the tree reads as one chart.
+          "flex h-[132px] w-[228px] flex-col rounded-2xl border px-3.5 py-2.5 text-left shadow-sm transition-shadow",
+          unit ? "bg-surface" : "bg-tint",
           org.editable && id != null && "cursor-grab",
           lit ? "border-brand ring-2 ring-brand/30" : selected === id ? "border-brand shadow-md" : "border-line",
         )}
@@ -182,10 +206,12 @@ function TreeNode({ unit, t }: { unit: OrgUnit | null; t: Tree }) {
             >
               {unit?.name ?? company}
             </button>
-            <p className="mt-0.5 text-[12px] tabular-nums text-ink-3">
-              {unit
-                ? [count(c.members, "membre"), c.experts ? count(c.experts, "expert") : null, c.documents ? count(c.documents, "document") : null].filter(Boolean).join(", ")
-                : `${count(chart.units.length, "département")}${c.documents ? `, ${count(c.documents, "document")} pour tous` : ""}`}
+            <p className="mt-1 flex flex-wrap gap-x-2.5 text-[12px] tabular-nums text-ink-3">
+              {facts.map(({ icon: Icon, label }) => (
+                <span key={label} className="inline-flex items-center gap-1" title={label}>
+                  <Icon className="size-3.5" /> {label}
+                </span>
+              ))}
             </p>
           </div>
           {org.editable && (
@@ -215,12 +241,18 @@ function TreeNode({ unit, t }: { unit: OrgUnit | null; t: Tree }) {
             </DropdownMenu>
           )}
         </div>
+        {head && (
+          <p className="mt-2 flex min-w-0 items-center gap-1.5 text-[12.5px]">
+            <span className="grid size-6 shrink-0 place-items-center rounded-full bg-tint text-[10px] font-bold text-brand-ink">{initials(memberName(head))}</span>
+            <span className="truncate font-semibold text-ink">{memberName(head)}</span>
+          </p>
+        )}
         {id != null && kids.length > 0 && (
           <button
             type="button"
             aria-expanded={!folded}
             onClick={() => toggle(id)}
-            className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-ink hover:underline"
+            className="mt-auto inline-flex items-center gap-1 self-start pt-1 text-[12px] font-semibold text-brand-ink hover:underline"
           >
             {folded ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
             {count(kids.length, "sous-département")}

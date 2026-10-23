@@ -5,7 +5,8 @@ import { useNotifications } from "@/components/activity/ActivityProvider";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { expertKey, type NotificationItem } from "@/lib/activity";
+import { expertKey, routineDoneTitle, type NotificationItem } from "@/lib/activity";
+import { isAccountToTopUp } from "@/lib/chat-errors";
 import { expertDisplayName } from "@/lib/experts";
 import { relativeFr } from "@/lib/fr-dates";
 import { cn } from "@/lib/utils";
@@ -40,7 +41,11 @@ export function NotificationBell() {
         <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
           <span className="text-sm font-bold text-ink">Notifications</span>
           {unread > 0 && (
-            <button type="button" onClick={markAllRead} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-ink hover:underline">
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-brand-ink hover:underline pointer-coarse:-my-3 pointer-coarse:min-h-11"
+            >
               <CheckCheck className="size-3.5" />
               Tout marquer comme lu
             </button>
@@ -54,9 +59,11 @@ export function NotificationBell() {
               const who = face(i);
               const title =
                 i.kind === "routine"
-                  ? `Routine ${i.routine ? `« ${i.routine} » ` : ""}terminée`
+                  ? routineDoneTitle(i.routine)
                   : i.kind === "failed"
-                    ? `${who.displayName} : la réponse a échoué`
+                    ? isAccountToTopUp(i.text)
+                      ? "Votre compte d’IA est à recharger"
+                      : `${who.displayName} : la réponse a échoué`
                     : `${who.displayName} a fini`;
               const detail = i.kind === "routine" ? who.displayName : i.text;
               return (

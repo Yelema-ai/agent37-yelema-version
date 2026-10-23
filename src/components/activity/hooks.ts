@@ -35,9 +35,10 @@ export function useTurnReporter(agentId: string, profile: string | null) {
         const id = idOf(run);
         if (id) actions?.bind(id, run.sessionId, run.responseId);
       },
-      end(run: ReportedRun, outcome: Outcome) {
+      // A failure carries its French sentence, so the bell can say why (an account to top up).
+      end(run: ReportedRun, outcome: Outcome, reason?: string) {
         const id = idOf(run);
-        if (id) actions?.finish(id, outcome, run.assistant.content);
+        if (id) actions?.finish(id, outcome, outcome === "failed" && reason ? reason : run.assistant.content);
       },
       detach(run: ReportedRun) {
         const id = idOf(run);

@@ -19,7 +19,7 @@ const NAV = [
   { href: "/integrations", label: "Intégrations", icon: Blocks, exact: false },
 ] as const;
 
-export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolean; onToggle: () => void; onNavigate?: () => void }) {
   const pathname = usePathname();
   const { current } = useWorkspace();
   // The company's main logo first (« Entreprise »), then the deployment's, then the initial.
@@ -36,13 +36,14 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       )}
     >
       <div className={cn("flex items-center gap-1", collapsed && "flex-col")}>
-        <Link href="/" className="flex min-w-0 items-center gap-2.5 px-2 pt-1.5 pb-3.5">
+        <Link href="/" className={cn("flex min-w-0 items-center gap-2.5 px-2 pt-1.5 pb-3.5", !collapsed && "flex-1")}>
           {logoUrl ? (
-            // Le logo du client. Yelema reste en pied, en « Powered by ».
+            // Le logo du client. Yelema reste en pied, en « Powered by ». Entier, jamais rogné : contenu dans
+            // sa case, avec une petite marge, menu ouvert ou replié.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="" className="size-[38px] shrink-0 rounded-xl object-contain" />
+            <img src={logoUrl} alt="" className="size-10 shrink-0 rounded-xl bg-surface object-contain p-0.5" />
           ) : (
-            <span className="grid size-[38px] shrink-0 place-items-center rounded-xl bg-brand font-display text-lg font-bold text-on-brand">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand font-display text-lg font-bold text-on-brand">
               {(current?.name?.trim()[0] ?? "?").toUpperCase()}
             </span>
           )}
@@ -57,9 +58,9 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           onClick={onToggle}
           aria-label={collapsed ? "Déplier le menu" : "Replier le menu"}
           title={collapsed ? "Déplier le menu" : "Replier le menu"}
-          className="grid size-[34px] shrink-0 place-items-center rounded-[10px] text-ink-3 hover:bg-soft"
+          className={cn("grid size-10 shrink-0 place-items-center rounded-[11px] text-ink-2 hover:bg-soft hover:text-ink", !collapsed && "mb-2")}
         >
-          <PanelLeftClose className={cn("size-[18px]", collapsed && "-scale-x-100")} />
+          <PanelLeftClose className={cn("size-5", collapsed && "-scale-x-100")} />
         </button>
       </div>
 
@@ -95,6 +96,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
           expert={e}
           active={pathname === `/experts/${e.agentId}/${e.profileId}` || pathname.startsWith(`/experts/${e.agentId}/${e.profileId}/`)}
           compact={collapsed}
+          onNavigate={onNavigate}
         />
       ))}
 

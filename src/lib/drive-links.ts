@@ -105,15 +105,19 @@ const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"));
  * The cards of one reply: the files its text names first, then the files of the drive written
  * during its turn, newest first; each file once. The memory folder and hidden files are not
  * deliverables. A named file missing from a folder the listing covers does not exist (a path the
- * expert made up): no card for it.
+ * expert made up): no card for it. Technical files (JSON, scripts, logs) get no card either.
  */
+/** Working files (data, code, logs) are the Expert's own kitchen, never a deliverable shown under a reply. */
+const TECHNICAL = /\.(json|jsonl|py|js|mjs|ts|sh|yaml|yml|toml|log|lock|env|ini|cfg|pyc|sqlite|db)$/i;
+export const isTechnicalFile = (name: string) => TECHNICAL.test(name);
+
 export function turnDocs(text: string, listing: readonly DriveFile[], window: { start: number; end: number }): TurnDoc[] {
   const byPath = new Map(listing.map((f) => [normDrivePath(f.path), f]));
   const listed = new Set([...byPath.keys()].map(parentOf));
   const out: TurnDoc[] = [];
   const seen = new Set<string>();
   const add = (path: string, f?: DriveFile) => {
-    if (seen.has(path)) return;
+    if (seen.has(path) || isTechnicalFile(path)) return;
     seen.add(path);
     const name = path.split("/").pop() ?? path;
     out.push({ name, path, size: f?.size ?? null, modified: f?.modified ?? null, kind: docKind(name) });

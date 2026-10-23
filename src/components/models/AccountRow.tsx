@@ -28,20 +28,20 @@ export function AccountRow({ account, rank, kind, isLogin, onChanged }: { accoun
 
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface px-2 py-2", isDragging && "relative z-10 shadow-lg")}>
-      <button type="button" aria-label={`Déplacer ${name}`} className="grid h-7 w-6 cursor-grab touch-none place-items-center text-ink-3 hover:text-ink active:cursor-grabbing" {...attributes} {...listeners}>
+      <button type="button" aria-label={`Déplacer ${name}`} className="grid h-7 w-6 cursor-grab max-sm:h-10 max-sm:w-9 touch-none place-items-center text-ink-3 hover:text-ink active:cursor-grabbing" {...attributes} {...listeners}>
         <GripVertical className="h-4 w-4" />
       </button>
-      <span className="w-5 text-center text-[11px] font-semibold tabular-nums text-ink-3">{rank}</span>
+      <span className="w-5 text-center text-[11px] max-sm:text-[12px] font-semibold tabular-nums text-ink-3">{rank}</span>
       <div className="min-w-0 flex-1">
         <p className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-ink">
           <span className="truncate">{name}</span>
         </p>
-        <p className="truncate font-mono text-[11px] text-ink-3">{account.name && account.baseUrl ? `${account.baseUrl}` : account.hint || (isLogin ? "Connexion par compte" : "")}</p>
+        <p className="truncate font-mono text-[11px] max-sm:text-[12px] text-ink-3">{account.name && account.baseUrl ? `${account.baseUrl}` : account.hint || (isLogin ? "Connexion par compte" : "")}</p>
       </div>
-      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", TONE[account.state])}>{ACCOUNT_STATE_LABELS[account.state]}</span>
+      <span className={cn("rounded-full px-2 py-0.5 text-[10px] max-sm:text-[12px] font-semibold", TONE[account.state])}>{ACCOUNT_STATE_LABELS[account.state]}</span>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" aria-label={`Options pour ${name}`} className="grid h-7 w-7 place-items-center rounded-full text-ink-3 hover:bg-soft hover:text-ink">
+          <button type="button" aria-label={`Options pour ${name}`} className="grid h-7 w-7 max-sm:size-10 place-items-center rounded-full text-ink-3 hover:bg-soft hover:text-ink">
             <MoreHorizontal className="h-4 w-4" />
           </button>
         </DropdownMenuTrigger>

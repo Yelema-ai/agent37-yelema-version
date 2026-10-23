@@ -75,7 +75,8 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
         <CallProvider>
         <div
           className="min-h-screen md:grid"
-          style={{ gridTemplateColumns: `${collapsed ? 72 : 272}px minmax(0,1fr)` }}
+          // --shell-nav: where the working area starts, for what covers it (an enlarged dashboard).
+          style={{ gridTemplateColumns: `${collapsed ? 72 : 272}px minmax(0,1fr)`, ["--shell-nav" as string]: `${collapsed ? 72 : 272}px` }}
         >
           {drawerOpen && (
             <button
@@ -91,7 +92,7 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
               drawerOpen ? "translate-x-0" : "-translate-x-full"
             )}
           >
-            <Sidebar collapsed={collapsed && !drawerOpen} onToggle={toggle} />
+            <Sidebar collapsed={collapsed && !drawerOpen} onToggle={toggle} onNavigate={() => setDrawerOpen(false)} />
           </div>
           {/* Le <main> est la zone qui défile : la hauteur est bornée à l'écran pour que le chat et les
               fichiers gardent leur barre de saisie en bas, les pages longues défilant à l'intérieur. */}

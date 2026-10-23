@@ -33,6 +33,7 @@ export async function GET(request: Request, { params }: Ctx) {
       allowedEmails: [] as string[],
       pdfPath: null as string | null,
       htmlPath: null as string | null,
+      pptxPath: null as string | null,
     };
 
     const capitalizedProfile = profile.charAt(0).toUpperCase() + profile.slice(1).toLowerCase();
@@ -63,6 +64,7 @@ export async function GET(request: Request, { params }: Ctx) {
               allowedEmails: parsedEmails,
               pdfPath: null,
               htmlPath: null,
+              pptxPath: null,
             };
 
             if (typeof parsed.fichiers === "string" && parsed.fichiers.trim()) {
@@ -122,6 +124,9 @@ export async function GET(request: Request, { params }: Ctx) {
                   if (!state.htmlPath && sub.name.toLowerCase().endsWith(".html")) {
                     state.htmlPath = sub.path;
                   }
+                  if (!state.pptxPath && sub.name.toLowerCase().endsWith(".pptx")) {
+                    state.pptxPath = sub.path;
+                  }
                 }
               } catch {}
             } else if (entry.type === "file") {
@@ -131,9 +136,12 @@ export async function GET(request: Request, { params }: Ctx) {
               if (!state.htmlPath && entry.name.toLowerCase().endsWith(".html")) {
                 state.htmlPath = entry.path;
               }
+              if (!state.pptxPath && entry.name.toLowerCase().endsWith(".pptx")) {
+                state.pptxPath = entry.path;
+              }
             }
           }
-          if (state.pdfPath && state.htmlPath) break;
+          if (state.pdfPath && state.htmlPath && state.pptxPath) break;
         } catch {}
       }
     } catch {
@@ -204,6 +212,7 @@ export async function GET(request: Request, { params }: Ctx) {
       acces: state.acces,
       allowedEmails: state.allowedEmails,
       pdfPath: state.pdfPath,
+      pptxPath: state.pptxPath,
       htmlPath: state.htmlPath,
       previewUrl,
       isDjeneba,

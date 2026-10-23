@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { callDuration, callHeaders, chosenVoice, countryFlag, countryName, filterVoices, isCallTranscript, parseVoicePrefs, signalingStep, transcriptOf, findInText, summarySections, frenchSpacing, voiceFacets, type VoiceOption } from "./voice.ts";
+import { callDuration, callHeaders, chosenVoice, expertDefaultVoice, countryFlag, countryName, filterVoices, isCallTranscript, parseVoicePrefs, signalingStep, transcriptOf, findInText, summarySections, frenchSpacing, voiceFacets, type VoiceOption } from "./voice.ts";
 
 test("a relayed step is only one the SDK sends, with its own method", () => {
   assert.equal(signalingStep("conv_abc-1", "offer", "POST"), "offer");
@@ -39,6 +39,23 @@ test("the voice of a call: the one chosen for the language, else its default, el
   assert.equal(chosenVoice(voices, { language: "fr", voices: { fr: "retiree" } })?.key, "akissi");
   assert.equal(chosenVoice(voices, { language: "en", voices: { fr: "adjoua" } })?.key, "amelia");
   assert.equal(chosenVoice([], { language: "fr", voices: {} }), null);
+});
+
+test("an Expert's own default voice: one of the new French voices of its gender, always the same", () => {
+  const v = (key: string, label: string, isDefault = false) => ({ key, label, language: "fr" as const, gender: "female" as const, country: "FR", previewUrl: "", default: isDefault });
+  const voices = [v("aicha", "Aïcha", true), v("v1", "Adele"), v("v2", "Emma"), v("v3", "Céline"), v("v4", "Léo"), v("v5", "Raphaël"), v("v6", "Clément"), v("v7", "Louise")];
+  const her = expertDefaultVoice(voices, "fr", { key: "fatima", pronoun: "elle" });
+  assert.ok(her && ["v1", "v2", "v3"].includes(her.key));
+  assert.equal(expertDefaultVoice(voices, "fr", { key: "fatima", pronoun: "elle" })?.key, her?.key);
+  assert.ok(["v4", "v5", "v6"].includes(expertDefaultVoice(voices, "fr", { key: "kouassi", pronoun: "il" })?.key ?? ""));
+  assert.equal(expertDefaultVoice(voices, "fr", { key: "kouassi", pronoun: null }), null);
+  // By rank, the voices in turn.
+  assert.deepEqual([0, 1, 2, 3].map((rank) => expertDefaultVoice(voices, "fr", { key: "x", pronoun: "il", rank })?.key), ["v4", "v5", "v6", "v4"]);
+  assert.equal(expertDefaultVoice(voices, "en", { key: "kouassi", pronoun: "il" }), null);
+  // A voice chosen wins; without a gender, the language's default.
+  assert.equal(chosenVoice(voices, { language: "fr", voices: { fr: "v7" } }, { key: "fatima", pronoun: "elle" })?.key, "v7");
+  assert.equal(chosenVoice(voices, { language: "fr", voices: {} }, { key: "fatima", pronoun: "elle" })?.key, her?.key);
+  assert.equal(chosenVoice(voices, { language: "fr", voices: {} }, { key: "x", pronoun: null })?.key, "aicha");
 });
 
 test("stored voice settings: read leniently, anything unreadable is no setting", () => {

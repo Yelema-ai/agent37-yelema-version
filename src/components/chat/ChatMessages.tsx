@@ -14,11 +14,12 @@ import type { Expert } from "@/lib/types";
 import { useChatContext } from "./ChatProvider";
 import { DocumentCards, useDriveListing } from "./DocumentCards";
 import { Markdown } from "./Markdown";
+import { cleanReply } from "@/lib/chat-errors";
 import { LiveStep, StepsList } from "./ChatSteps";
 import type { ChatMessage, MessageAttachment } from "./types";
 
 // Files that rode along with a user turn, shown as compact chips above the message bubble.
-function MessageAttachments({ attachments }: { attachments: MessageAttachment[] }) {
+export function MessageAttachments({ attachments }: { attachments: MessageAttachment[] }) {
   return (
     <div className="flex flex-wrap justify-end gap-1.5">
       {attachments.map((a, k) => (
@@ -175,10 +176,10 @@ export function ChatMessages({
           const attachments = m.attachments ?? [];
           return (
             <div key={m.id} className="flex justify-end">
-              <div className="flex max-w-[85%] flex-col items-end gap-1.5">
+              <div className="flex min-w-0 max-w-[85%] flex-col items-end gap-1.5">
                 {attachments.length > 0 && <MessageAttachments attachments={attachments} />}
                 {m.content && (
-                  <div className={cn("whitespace-pre-wrap break-words rounded-[18px] rounded-br-md bg-brand px-4 py-2.5 text-[15px] text-on-brand", m.queued && "opacity-60", m.steered && !m.queued && "bg-brand/80")}>
+                  <div className={cn("max-w-full whitespace-pre-wrap rounded-[18px] rounded-br-md bg-brand [overflow-wrap:anywhere] px-4 py-2.5 text-[15px] text-on-brand", m.queued && "opacity-60", m.steered && !m.queued && "bg-brand/80")}>
                     {m.content}
                   </div>
                 )}
@@ -207,7 +208,7 @@ export function ChatMessages({
               {routineThread && !live && isSilentRun(m.content) ? (
                 <p className="text-sm italic text-ink-3">{SILENT_RUN_LABEL}</p>
               ) : m.content ? (
-                <Markdown content={m.content} agentId={agentId} />
+                <Markdown content={cleanReply(m.content)} agentId={agentId} />
               ) : showDots ? (
                 <TypingDots />
               ) : null}

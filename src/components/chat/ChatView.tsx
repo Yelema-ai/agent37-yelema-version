@@ -141,10 +141,11 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
       <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           {profile && <ChatSessionsPanel />}
-          {face && <ExpertAvatar expert={face} size="sm" />}
+          {/* On a phone the expert's photo and name already head the page: shown once. */}
+          {face && <ExpertAvatar expert={face} size="sm" className="max-sm:hidden" />}
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold leading-tight text-ink">{headerTitle}</h1>
-            <p className="truncate text-xs text-ink-3">{agentName}</p>
+            <p className={cn("truncate text-xs text-ink-3", profile && "max-sm:hidden")}>{agentName}</p>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -179,7 +180,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
           <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} />
         ) : (
           <>
-            {face && <ExpertAvatar expert={face} size="lg" className="mb-4" />}
+            {face && <ExpertAvatar expert={face} size="lg" className="mb-4 max-sm:hidden" />}
           <h1 className="text-center font-display text-[26px] font-bold tracking-tight text-ink sm:text-[30px]">
             {profile ? `Que voulez-vous confier à ${agentName} ?` : "Que puis-je faire pour vous ?"}
           </h1>
@@ -188,9 +189,9 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
         )}
       </div>
 
-      {/* Composer wrapper — the STABLE 2nd child. Its chrome (docked vs bare centered) is a
+      {/* Composer wrapper — the STABLE 2nd child. Docked, it leaves the bottom-right corner to Yélé. Its chrome (docked vs bare centered) is a
           className swap so the ChatComposer inside never changes tree position. */}
-      <div className={cn("relative", showWelcome ? "w-full px-4 sm:px-6" : "bg-background px-4 py-3 sm:px-6 sm:py-4")}>
+      <div className={cn("relative", showWelcome ? "w-full px-4 sm:px-6" : "bg-background px-4 py-3 sm:py-4 sm:pl-6 sm:pr-24")}>
         {/* No hard divider — a short fade dissolves the transcript into the composer instead. */}
         {!showWelcome && (
           <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-background to-transparent" />

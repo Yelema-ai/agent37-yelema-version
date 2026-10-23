@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import type { VoicePrefs } from "@/lib/voice";
 import { loadVoicePrefs, saveVoicePrefs } from "@/lib/voice-prefs";
+import { useVoiceExpert } from "./useVoiceExpert";
 import { useVoices } from "./useVoices";
 import { VoiceSettings } from "./VoiceSettings";
 
@@ -26,6 +27,7 @@ export function VoiceButton({
   onOpenChange?: (open: boolean) => void;
 }) {
   const voices = useVoices();
+  const voiceExpert = useVoiceExpert();
   const [openOwn, setOpenOwn] = useState(false);
   const controlled = openProp !== undefined;
   const open = controlled ? openProp : openOwn;
@@ -62,7 +64,7 @@ export function VoiceButton({
         <DialogContent className="max-w-md">
           <DialogTitle>Voix de {expert.name}</DialogTitle>
           <DialogDescription>La langue et la voix de {expert.name} quand vous l’appelez ; la dictée de son chat suit la même langue.</DialogDescription>
-          <VoiceSettings voices={voices} prefs={prefs} onChange={setPrefs} />
+          <VoiceSettings voices={voices} prefs={prefs} onChange={setPrefs} expert={voiceExpert(expert.key)} />
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="ghost" onClick={() => setOpen(false)}>
               Annuler

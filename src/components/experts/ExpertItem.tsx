@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
+import { useNotifications } from "@/components/activity/ActivityProvider";
 import { useExpertActivity } from "@/components/activity/hooks";
+import { expertKey } from "@/lib/activity";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { agentTabPath } from "@/lib/expert-tabs";
 import type { Expert } from "@/lib/types";
@@ -12,26 +14,45 @@ import { cn } from "@/lib/utils";
  * Le sous-titre suit ce qu'on sait : le métier que donne le catalogue, sinon le nom de l'instance.
  *
  * `compact` n'affiche que le visage (menu replié).
+ *
+ * Avec une réponse non lue, un clic ouvre directement la conversation la plus récente qui l'attend,
+ * pas le dernier fil ouvert : un clic au lieu de deux.
  */
 export function ExpertItem({
   expert,
   active = false,
   compact = false,
   className,
+  onNavigate,
 }: {
   expert: Expert;
   active?: boolean;
   compact?: boolean;
   className?: string;
+  onNavigate?: () => void;
 }) {
   // Never the profile or instance id: a member has no use for either.
   const subtitle = expert.title ?? expert.role ?? expert.agentName ?? "";
   const { running, unread } = useExpertActivity(expert.agentId, expert.profileId);
+  const bell = useNotifications();
+  const waiting = unread
+    ? bell.items.find((i) => i.unread && expertKey(i.agentId, i.profile) === expertKey(expert.agentId, expert.profileId))
+    : undefined;
   const hint = unread ? (unread === 1 ? "1 nouvelle réponse" : `${unread} nouvelles réponses`) : running ? "En cours" : null;
 
   return (
     <Link
-      href={agentTabPath(expert.agentId, "chat", expert.profileId)}
+      href={
+        waiting
+          ? `${agentTabPath(expert.agentId, "chat", expert.profileId)}?session=${encodeURIComponent(waiting.sessionId)}`
+          : agentTabPath(expert.agentId, "chat", expert.profileId)
+      }
+      onClick={(e) => {
+        onNavigate?.();
+        if (!waiting || e.metaKey || e.ctrlKey || e.shiftKey) return;
+        e.preventDefault();
+        bell.open(waiting);
+      }}
       title={hint ? `${expert.displayName} · ${hint}` : expert.displayName}
       className={cn(
         "flex min-h-12 items-center gap-2.5 rounded-[11px] px-2 text-sm font-semibold transition-colors",
@@ -42,8 +63,9 @@ export function ExpertItem({
     >
       <span className="relative shrink-0">
         <ExpertAvatar expert={expert} />
+        {/* At work: a green dot that breathes; a new answer: the violet dot; nothing: no dot. */}
         {compact && (unread > 0 || running) && (
-          <span className={cn("absolute -right-0.5 -top-0.5 size-2.5 rounded-full ring-2 ring-surface", unread ? "bg-brand" : "animate-pulse bg-ink-3")} aria-hidden />
+          <span className={cn("absolute -right-0.5 -top-0.5 size-3 rounded-full ring-2 ring-surface", unread ? "bg-brand" : "animate-pulse bg-ok")} aria-hidden />
         )}
       </span>
       {!compact && (
@@ -57,7 +79,7 @@ export function ExpertItem({
           {unread}
         </span>
       )}
-      {!compact && !unread && running && <Loader2 className="size-3.5 shrink-0 animate-spin text-ink-3" aria-label="En cours" />}
+      {!compact && !unread && running && <Loader2 className="size-4 shrink-0 animate-spin text-ok" aria-label="En cours" />}
     </Link>
   );
 }
