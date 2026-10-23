@@ -18,7 +18,9 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
+  Search,
   Trash2,
+  X,
   Upload,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -257,6 +259,43 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
             <HiddenFileInput inputRef={folderUploadRef} onFiles={fb.uploadFolder} />
           </div>
         </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md border bg-card px-3 shadow-sm sm:max-w-md">
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <input
+              type="search"
+              value={fb.query}
+              onChange={(e) => fb.setQuery(e.target.value)}
+              placeholder="Rechercher dans ce dossier"
+              aria-label="Rechercher dans ce dossier"
+              className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
+            />
+            {fb.query && (
+              <button type="button" onClick={() => fb.setQuery("")} aria-label="Effacer la recherche" className="grid size-7 place-items-center rounded text-muted-foreground hover:bg-secondary">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </label>
+          <div role="radiogroup" aria-label="Trier" className="flex h-10 shrink-0 items-center rounded-md border bg-card p-1 text-sm">
+            {(
+              [
+                ["recent", "Plus récent"],
+                ["name", "A à Z"],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                role="radio"
+                aria-checked={fb.sortBy === v}
+                onClick={() => fb.setSortBy(v)}
+                className={cn("h-full rounded px-3 font-medium transition-colors", fb.sortBy === v ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground")}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -270,7 +309,9 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
           </div>
         ) : (
           <div className="w-full p-4 md:p-6 lg:p-8" onClick={clearSelection}>
-            {fb.visibleEntries.length === 0 ? (
+            {fb.visibleEntries.length === 0 && fb.query.trim() ? (
+              <p className="px-3 py-10 text-center text-sm text-muted-foreground">Aucun fichier ne correspond à « {fb.query.trim()} ».</p>
+            ) : fb.visibleEntries.length === 0 ? (
               <EmptyFolder
                 canCreate={!!fb.path}
                 uploading={fb.uploading}
