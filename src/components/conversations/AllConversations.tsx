@@ -2,15 +2,18 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCheck, Lock, Repeat, Search } from "lucide-react";
+import { ArchiveRestore, CheckCheck, Lock, Pin, Repeat, Search } from "lucide-react";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { useNotifications } from "@/components/activity/ActivityProvider";
 import { Picker } from "@/components/ui/picker";
 import { cn } from "@/lib/utils";
+import { convKey } from "@/lib/activity";
+import { arrange } from "@/lib/chat-marks";
 import { fold, useAllConversations, useOwnAgentId, type ConversationRow } from "./useAllConversations";
+import { useChatMarks } from "./useChatMarks";
 
-type Filter = "tout" | "non-lues" | "routines";
+type Filter = "tout" | "non-lues" | "routines" | "archivees";
 const DAY = 86_400_000;
 const DATES = [
   { value: "", label: "Toutes les dates" },
@@ -35,8 +38,9 @@ const time = (at: number) =>
     : new Date(at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 
 // Toutes les conversations: the chat d'entreprise's and every Expert's in one list, by period,
-// with a search, Tout / Non lues / Routines, the Expert and the dates. A row opens the
-// conversation in its space; « Tout marquer comme lu » clears the bell's marks.
+// with a search, Tout / Non lues / Routines / Archivées, the Expert and the dates. Pinned ones head
+// the list; archived ones only show under « Archivées », where they can be brought back. A row opens
+// the conversation in its space; « Tout marquer comme lu » clears the bell's marks.
 export function AllConversations() {
   const ownAgentId = useOwnAgentId();
   const { experts } = useExpertsContext();
@@ -46,6 +50,9 @@ export function AllConversations() {
   const [filter, setFilter] = useState<Filter>("tout");
   const [who, setWho] = useState("");
   const [since, setSince] = useState("");
+  const { marks, mark } = useChatMarks();
+  const keyOf = (r: ConversationRow) => convKey(r.expert?.agentId ?? ownAgentId ?? "", r.expert?.profileId ?? null, r.session.session_id);
+  const archivedKeys = new Set(marks.archived);
 
   const unreadIds = useMemo(() => new Set(bell.items.filter((i) => i.unread).map((i) => i.sessionId)), [bell.items]);
   const needle = fold(q.trim());
@@ -57,24 +64,31 @@ export function AllConversations() {
         (filter !== "non-lues" || unreadIds.has(r.session.session_id)) &&
         (filter !== "routines" || Boolean(r.session.routine)) &&
         (!who || (who === "entreprise" ? r.expert === null : r.expert?.profileId === who)) &&
-        r.at >= from
+        r.at >= from &&
+        (filter === "archivees") === archivedKeys.has(keyOf(r))
     );
-  }, [rows, needle, filter, unreadIds, who, since]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, needle, filter, unreadIds, who, since, marks, ownAgentId]);
+  const pinnedKeys = new Set(marks.pinned);
   const groups = useMemo(() => {
-    const out: { label: string; rows: ConversationRow[] }[] = [];
-    for (const r of shown) {
+    // `shown` is already split between archived and not: only the pins matter here.
+    const { pinned, rest } = arrange(shown, keyOf, { ...marks, archived: [] });
+    const out: { label: string; rows: ConversationRow[] }[] = pinned.length ? [{ label: "Épinglées", rows: pinned }] : [];
+    for (const r of rest) {
       const label = period(r.at);
       const last = out.at(-1);
       if (last?.label === label) last.rows.push(r);
       else out.push({ label, rows: [r] });
     }
     return out;
-  }, [shown]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown, marks]);
 
   const chips: { id: Filter; label: string }[] = [
     { id: "tout", label: "Tout" },
     { id: "non-lues", label: unreadIds.size ? `Non lues ${unreadIds.size}` : "Non lues" },
     { id: "routines", label: "Routines" },
+    { id: "archivees", label: "Archivées" },
   ];
 
   return (
@@ -136,7 +150,7 @@ export function AllConversations() {
       {rows === null ? (
         <p className="mt-8 text-sm text-ink-3">Chargement des conversations…</p>
       ) : groups.length === 0 ? (
-        <p className="mt-8 text-sm text-ink-3">Aucune conversation ne correspond.</p>
+        <p className="mt-8 text-sm text-ink-3">{filter === "archivees" && !needle ? "Aucune conversation archivée." : "Aucune conversation ne correspond."}</p>
       ) : (
         groups.map((g) => (
           <section key={g.label} className="mt-6">
@@ -147,8 +161,10 @@ export function AllConversations() {
             <div className="overflow-hidden rounded-card border border-line bg-surface">
               {g.rows.map((r) => {
                 const unread = unreadIds.has(r.session.session_id);
+                const key = keyOf(r);
                 return (
-                  <Link key={r.href} href={r.href} className="flex min-h-14 items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0 hover:bg-soft">
+                  <div key={r.href} className="flex items-center border-b border-line last:border-b-0 hover:bg-soft">
+                  <Link href={r.href} className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-4 py-2.5">
                     {r.expert ? (
                       <ExpertAvatar expert={{ ...r.expert, gateway: null }} size="sm" />
                     ) : (
@@ -164,8 +180,19 @@ export function AllConversations() {
                       <span className="block truncate text-xs text-ink-3">{r.expert ? r.expert.displayName : "Chat d’entreprise"}</span>
                     </span>
                     {unread && <span className="size-2.5 shrink-0 rounded-full bg-brand" aria-label="Non lue" />}
+                    {pinnedKeys.has(key) && <Pin className="size-3.5 shrink-0 text-ink-3" aria-label="Épinglée" />}
                     <span className="shrink-0 text-xs text-ink-3">{time(r.at)}</span>
                   </Link>
+                  {archivedKeys.has(key) && (
+                    <button
+                      type="button"
+                      onClick={() => mark(key, "archived", false)}
+                      className="mr-3 inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[13px] font-semibold text-ink-2 hover:text-ink"
+                    >
+                      <ArchiveRestore className="size-4" /> Désarchiver
+                    </button>
+                  )}
+                  </div>
                 );
               })}
             </div>
