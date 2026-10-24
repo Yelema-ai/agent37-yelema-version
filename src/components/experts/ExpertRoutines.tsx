@@ -115,8 +115,8 @@ export function ExpertRoutines({ agentId, expert }: { agentId: string; expert: R
     <div>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="font-display text-[26px] font-bold tracking-tight text-ink">Routines de {expert.name}</h1>
-          <p className="mt-1 max-w-xl text-sm text-ink-3">
+          <h1 className="sr-only">Routines de {expert.name}</h1>
+          <p className="max-w-xl text-sm text-ink-3">
             Ce que {expert.name} fait sans qu’on le demande. Le résultat arrive dans tous ses canaux.
           </p>
         </div>

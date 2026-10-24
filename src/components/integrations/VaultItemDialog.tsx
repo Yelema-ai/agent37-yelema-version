@@ -51,13 +51,13 @@ export function VaultItemDialog({ open, onOpenChange, profiles, nameOf, onSave }
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Ajouter un accès</DialogTitle>
-            <DialogDescription>Les experts choisis pourront se connecter à ce site sans jamais voir le mot de passe.</DialogDescription>
+            <DialogDescription>Les Experts choisis pourront se connecter à ce site sans jamais voir le mot de passe.</DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
             <Label>Pour</Label>
             <div role="radiogroup" className="flex gap-1 rounded-xl bg-soft p-1">
               {[
-                { on: true, label: "Tous les experts" },
+                { on: true, label: "Tous les Experts" },
                 { on: false, label: "Certains experts" },
               ].map((o) => (
                 <button key={o.label} type="button" role="radio" aria-checked={everyone === o.on} onClick={() => setEveryone(o.on)} className={cn("flex-1 rounded-[10px] py-1.5 text-[13px] font-semibold", everyone === o.on ? "bg-surface text-ink shadow-sm" : "text-ink-2")}>
@@ -113,7 +113,7 @@ export function VaultItemDialog({ open, onOpenChange, profiles, nameOf, onSave }
           <div className="space-y-1.5">
             <Label htmlFor="v-purpose">À quoi sert cet accès</Label>
             <textarea id="v-purpose" value={draft.purpose} maxLength={300} rows={3} placeholder="Déclarer les salariés à la CNPS chaque mois" onChange={(e) => set("purpose", e.target.value)} className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand" />
-            <p className="text-xs text-ink-3">L’expert lit cette description pour savoir quand utiliser cet accès.</p>
+            <p className="text-xs text-ink-3">L’Expert lit cette description pour savoir quand utiliser cet accès.</p>
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}>

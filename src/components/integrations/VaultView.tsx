@@ -62,13 +62,13 @@ export function VaultView() {
 
   const all = experts_(data);
   const rows = data ? groupKeys(entriesOf(data.items, null)).filter((g) => !only || g.entries.some((e) => e.profile === only)) : [];
-  const holders = (g: KeyGroup) => (all.length > 1 && all.every((p) => g.entries.some((e) => e.profile === p)) ? "Tous les experts" : g.entries.map((e) => nameOf(e.profile)).join(", "));
+  const holders = (g: KeyGroup) => (all.length > 1 && all.every((p) => g.entries.some((e) => e.profile === p)) ? "Tous les Experts" : g.entries.map((e) => nameOf(e.profile)).join(", "));
   const shown = paginate(rows, page, PER_PAGE);
 
   // One call per expert: the vault has no shared key.
   async function add(targets: string[], draft: VaultDraft) {
     for (const t of targets) await apiFetch(vaultUrl(t), { method: "POST", body: JSON.stringify(draft) });
-    toast.success(`Accès « ${draft.label} » confié à ${targets.length === all.length && all.length > 1 ? "tous les experts" : targets.map(nameOf).join(", ")}`);
+    toast.success(`Accès « ${draft.label} » confié à ${targets.length === all.length && all.length > 1 ? "tous les Experts" : targets.map(nameOf).join(", ")}`);
     setAdding(false);
     await load();
   }
@@ -84,8 +84,8 @@ export function VaultView() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Accès aux sites</h2>
-          <p className="mt-1 max-w-xl text-sm text-ink-3">Confiez à un expert l’accès à un site : il s’y connecte pour vous, sans jamais voir le mot de passe.</p>
+          <h2 className="sr-only">Accès aux sites</h2>
+          <p className="mt-1 max-w-xl text-sm text-ink-3">Confiez à un Expert l’accès à un site : il s’y connecte pour vous, sans jamais voir le mot de passe.</p>
         </div>
         <Button onClick={() => setAdding(true)} disabled={!data || all.length === 0} className="self-start sm:self-auto">
           <Plus /> Ajouter un accès
@@ -95,13 +95,13 @@ export function VaultView() {
 
       <Picker
         label="Experts"
-        placeholder="Tous les experts"
+        placeholder="Tous les Experts"
         value={only}
         onChange={(v) => {
           setOnly(v);
           setPage(1);
         }}
-        groups={[{ options: [{ value: "", label: "Tous les experts" }, ...all.map((p) => ({ value: p, label: nameOf(p) }))] }]}
+        groups={[{ options: [{ value: "", label: "Tous les Experts" }, ...all.map((p) => ({ value: p, label: nameOf(p) }))] }]}
         className="w-full max-w-xs"
       />
 
@@ -110,7 +110,7 @@ export function VaultView() {
           <Lock className="h-5 w-5" />
         </div>
         <p className="text-xs leading-relaxed text-ink-3">
-          Les mots de passe sont chiffrés dans le coffre de votre instance. Yelema ne les garde pas et ne les affiche jamais. Pas de double authentification : choisissez un compte qui n’en demande pas. L’expert ne remplit que les pages du site exact enregistré.
+          Les mots de passe restent chiffrés dans votre instance : ni Yelema ni l’Expert ne les voient. Choisissez un compte sans double authentification.
         </p>
       </div>
 
@@ -123,7 +123,7 @@ export function VaultView() {
         </div>
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-line px-6 py-12 text-center">
-          <p className="text-sm font-semibold text-ink">{only ? `Aucun accès confié à ${nameOf(only)}` : "Aucun accès confié à vos experts"}</p>
+          <p className="text-sm font-semibold text-ink">{only ? `Aucun accès confié à ${nameOf(only)}` : "Aucun accès confié à vos Experts"}</p>
           <p className="mt-1 max-w-sm text-xs text-ink-3">Ajoutez l’accès à un site (portail administratif, banque, outil métier) et dites à quoi il sert.</p>
           <Button onClick={() => setAdding(true)} variant="outline" size="sm" className="mt-4">
             <Plus /> Ajouter un accès
@@ -154,7 +154,7 @@ export function VaultView() {
                       </span>
                     </td>
                     <td className="max-w-[180px] px-4 py-3 text-ink-2">{holders(it)}</td>
-                    <td className="max-w-[220px] truncate px-4 py-3 font-mono text-[12px] text-ink-2" title={it.origin}>{it.origin}</td>
+                    <td className="max-w-[220px] truncate px-4 py-3 text-ink-2" title={it.origin}>{siteName(it.origin)}</td>
                     <td className="max-w-[260px] px-4 py-3 text-ink-3">{it.purpose || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-ink-3">{day(it.createdAt)}</td>
                     <td className="px-4 py-3 text-right">
@@ -177,11 +177,23 @@ export function VaultView() {
         open={Boolean(removing)}
         onOpenChange={(open) => !open && setRemoving(null)}
         title="Retirer la connexion"
-        description={`Retirer « ${removing?.label ?? ""} » ? ${removing ? holders(removing) : "Les experts"} ne pourront plus se connecter à ce site.`}
+        description={`Retirer « ${removing?.label ?? ""} » ? ${removing ? holders(removing) : "Les Experts"} ne pourront plus se connecter à ce site.`}
         confirmText="Retirer"
         destructive
         onConfirm={remove}
       />
     </div>
   );
+}
+
+// The site as a member names it: « facebook.com » for https://business.facebook.com/…, the full
+// address kept in the tooltip.
+function siteName(origin: string): string {
+  try {
+    const host = new URL(origin).hostname.replace(/^www\./, "");
+    const parts = host.split(".");
+    return parts.length > 2 ? parts.slice(-2).join(".") : host;
+  } catch {
+    return origin;
+  }
 }

@@ -52,7 +52,7 @@ function InstallStalled() {
     <section role="status" className="mt-4 max-w-2xl rounded-[22px] border border-line bg-surface p-5 sm:p-6">
       <h3 className="font-display text-lg font-bold text-ink">L’installation prend plus de temps que prévu</h3>
       <p className="mt-1 text-sm text-ink-2">
-        Vos experts ne sont pas encore prêts. Contactez Yelema pour que nous regardions ce qui bloque ; vous pouvez
+        Vos Experts ne sont pas encore prêts. Contactez Yelema pour que nous regardions ce qui bloque ; vous pouvez
         aussi recharger cette page plus tard.
       </p>
     </section>
@@ -71,7 +71,7 @@ function Installing() {
         <div className="min-w-0">
           <h3 className="font-display text-lg font-bold text-ink">Votre équipe s’installe</h3>
           <p className="mt-1 text-sm text-ink-2">
-            Nous préparons vos experts. Cela prend quelques minutes : ils apparaîtront ici dès qu’ils seront prêts,
+            Nous préparons vos Experts. Cela prend quelques minutes : ils apparaîtront ici dès qu’ils seront prêts,
             sans que vous ayez à recharger la page.
           </p>
         </div>
@@ -237,7 +237,7 @@ export function HomeView() {
         <p className="mt-4 max-w-xl text-sm text-ink-2">
           {unreadable > 0
             ? "Votre équipe n’est pas joignable pour le moment. Réessayez dans un instant."
-            : "Votre équipe s’installe. Vos experts apparaîtront ici dès qu’ils seront prêts."}
+            : "Votre équipe s’installe. Vos Experts apparaîtront ici dès qu’ils seront prêts."}
         </p>
       ) : null}
       {ownAgentId && <RecentDeliverables agentId={ownAgentId} />}

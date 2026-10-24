@@ -156,7 +156,7 @@ export function OrgChartView() {
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
         title={`Supprimer le département « ${removing?.name ?? ""} » ?`}
-        description="Ses sous-départements remontent d’un cran. Un département qui a encore des membres, des experts ou des documents ne peut pas être supprimé."
+        description="Ses sous-départements remontent d’un cran. Un département qui a encore des membres, des Experts ou des documents ne peut pas être supprimé."
         confirmText="Supprimer"
         destructive
         onConfirm={async () => {
@@ -171,7 +171,7 @@ function Header({ editable, onAdd }: { editable: boolean; onAdd: () => void }) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
-        <h1 className="font-display text-[28px] font-bold tracking-tight text-ink">Organigramme</h1>
+        <h1 className="sr-only">Organigramme</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-2">
           Chaque département a sa mémoire, lue par ses membres et leurs Experts. Un responsable lit aussi celle des départements sous le sien.
         </p>

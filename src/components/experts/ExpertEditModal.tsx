@@ -29,7 +29,7 @@ const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 function identityNote(look: ExpertLook): string | null {
   const name = look.displayName ?? look.defaultName;
   if (look.identity.state === "pending") return `${name} apprend son nom. Cela prend une minute.`;
-  if (look.identity.state === "failed") return `Le nom n’a pas encore pu être transmis à l’expert : enregistrez-le à nouveau dans un moment.`;
+  if (look.identity.state === "failed") return `Le nom n’a pas encore pu être transmis à l’Expert : enregistrez-le à nouveau dans un moment.`;
   return null;
 }
 
@@ -151,7 +151,7 @@ export function ExpertEditModal({
         const displayName = cleaned === look.defaultName ? null : cleaned;
         changed(await apiFetch<ExpertLook>(url, { method: "PATCH", body: JSON.stringify({ displayName }) }));
       }
-      toast.success(nameChanged && cleaned ? `C’est enregistré : l’expert s’appelle désormais ${cleaned}.` : "C’est enregistré : le nouveau portrait est en place.");
+      toast.success(nameChanged && cleaned ? `C’est enregistré : l’Expert s’appelle désormais ${cleaned}.` : "C’est enregistré : le nouveau portrait est en place.");
       onOpenChange(false);
     } catch (err) {
       toast.error(pictureSaved ? `Le portrait est enregistré, mais pas le nom : ${(err as Error).message}` : (err as Error).message);
@@ -194,7 +194,7 @@ export function ExpertEditModal({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-lg">
-          <DialogTitle>Personnaliser {look ? (look.displayName ?? look.defaultName) : "l’expert"}</DialogTitle>
+          <DialogTitle>Personnaliser {look ? (look.displayName ?? look.defaultName) : "l’Expert"}</DialogTitle>
           <DialogDescription>
             {look ? `${look.role ?? "Expert"} · nom d’origine : ${look.defaultName}` : "Chargement…"}
           </DialogDescription>

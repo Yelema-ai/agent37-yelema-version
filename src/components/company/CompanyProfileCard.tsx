@@ -38,7 +38,7 @@ export function CompanyProfileCard() {
         <h2 className="font-display text-lg font-bold text-ink">
           Complétez votre entreprise ({profile.done}/{profile.total})
         </h2>
-        <p className="mt-1 text-sm text-ink-2">Ajoutez votre logo, une présentation et vos documents : vos experts répondront avec le contexte de votre entreprise.</p>
+        <p className="mt-1 text-sm text-ink-2">Ajoutez votre logo, une présentation et vos documents : vos Experts répondront avec le contexte de votre entreprise.</p>
       </div>
       <Link
         href="/administration/entreprise"

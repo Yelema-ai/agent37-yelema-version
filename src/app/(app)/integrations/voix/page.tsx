@@ -8,7 +8,7 @@ export default function Page() {
   return (
     <PageBody>
       <div className="max-w-5xl space-y-8">
-        <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Voix</h2>
+        <h2 className="sr-only">Voix</h2>
         <ExpertVoices />
         <VoiceKeysView />
       </div>

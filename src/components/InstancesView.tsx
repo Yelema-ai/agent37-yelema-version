@@ -59,7 +59,7 @@ export function InstancesView() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Instances</h1>
+        <h1 className="sr-only">Instances</h1>
         <p className="text-sm text-muted-foreground">
           {current.name} · une instance par membre, créée et gérée par votre administrateur Yelema.
         </p>

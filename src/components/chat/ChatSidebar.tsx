@@ -239,18 +239,6 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           >
             <RotateCw className={`h-4 w-4${refreshingSessions ? " animate-spin" : ""}`} />
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              startNewChat();
-              onNavigate?.();
-            }}
-            aria-label="Nouvelle conversation"
-            title="Nouvelle conversation"
-            className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-on-brand hover:opacity-90"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
           </span>
         </div>
         {sessionsError ? (

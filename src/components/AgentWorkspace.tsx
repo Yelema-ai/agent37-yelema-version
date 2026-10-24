@@ -194,9 +194,9 @@ export function AgentWorkspace({
                       onClick={() => (canEdit ? setEditOpen(true) : setVoiceOpen(true))}
                       title={`Personnaliser ${expertName}`}
                       aria-label={`Personnaliser ${expertName}`}
-                      className="absolute -bottom-1 -right-1 grid size-5 place-items-center rounded-full bg-ink text-surface ring-2 ring-surface hover:opacity-85 lg:size-7"
+                      className="absolute -bottom-0.5 -right-0.5 grid size-4 place-items-center lg:-bottom-1 lg:-right-1 rounded-full bg-ink text-surface ring-2 ring-surface hover:opacity-85 lg:size-7"
                     >
-                      <Pencil className="size-2.5 lg:size-3.5" />
+                      <Pencil className="size-2 lg:size-3.5" />
                     </button>
                   )}
                 </span>
@@ -223,7 +223,7 @@ export function AgentWorkspace({
                 {callee && <CallButton expert={callee} className="h-11 shrink-0 rounded-full bg-brand px-5 text-[15px] text-on-brand hover:bg-brand/90 max-lg:hidden" />}
               </div>
             )}
-            <nav ref={pillsRef} className="flex items-center gap-1 overflow-x-auto px-4 py-2 [scrollbar-width:none] lg:gap-2 lg:px-8 lg:py-0 [&::-webkit-scrollbar]:hidden">
+            <nav ref={pillsRef} className="flex items-center gap-1 overflow-x-auto px-4 py-2 max-lg:[mask-image:linear-gradient(to_right,black_82%,transparent)] [scrollbar-width:none] lg:gap-2 lg:px-8 lg:py-0 [&::-webkit-scrollbar]:hidden">
               {tabs.map((t) => {
                 const Icon = t.icon;
                 const on = currentTab === t.id || (t.id === "chat" && isChat);

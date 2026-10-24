@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { RowMenu, Switch, type RoutineActions } from "./RoutinesTable";
 
-// The expert's routines as two white cards, as in the mockup: its own (switch, state, menu), then
+// The expert's routines as two white cards, as in the mockup: its own (the switch says its state), then
 // the ones it proposes (« Voir la consigne » and « Activer »). Same actions as the table, no columns.
 export function RoutinesList({ routines, expertName, ...act }: { routines: Routine[]; expertName: string } & RoutineActions) {
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -58,7 +58,8 @@ export function RoutinesList({ routines, expertName, ...act }: { routines: Routi
 
   const next = (r: Routine) => {
     const at = r.nextRunAt ? Date.parse(r.nextRunAt) : Number.NaN;
-    return r.enabled && !Number.isNaN(at) ? ` · prochaine ${relativeFr(at)}` : "";
+    if (!r.enabled) return " · en pause";
+    return !Number.isNaN(at) ? ` · prochaine ${relativeFr(at)}` : "";
   };
 
   return (
@@ -81,14 +82,6 @@ export function RoutinesList({ routines, expertName, ...act }: { routines: Routi
                     </p>
                   </div>
                   <span className="max-sm:hidden">{voir(r)}</span>
-                  <span
-                    className={cn(
-                      "inline-flex h-7 items-center rounded-full px-2.5 text-[12px] font-semibold max-sm:hidden",
-                      r.enabled ? "bg-[#E5F5EC] text-[#1f7a4d]" : "bg-soft text-ink-3"
-                    )}
-                  >
-                    {r.enabled ? "Active" : "En pause"}
-                  </span>
                   <Switch on={r.enabled} label={`${r.enabled ? "Mettre en pause" : "Activer"} ${r.name}`} disabled={busy} onChange={() => act.onToggle(r, !r.enabled)} />
                   <RowMenu routine={r} busy={busy} {...act} />
                 </div>
