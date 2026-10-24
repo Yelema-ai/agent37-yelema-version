@@ -78,7 +78,7 @@ export function ModelsView() {
   const title = scope.kind === "member" ? `Comptes de l’instance de ${who}` : "Comptes de l’instance";
   const scopeLabel = scope.kind === "member" ? `l’instance de ${who}` : "votre instance";
   const refused = (scope.kind === "member" ? member?.state : data.mine?.state) === "refused";
-  const catalogues = { catalogue: data.catalogue, logins: data.logins ?? [] };
+  const catalogues = { catalogue: data.catalogue ?? [], logins: data.logins ?? [] };
 
   return (
     <div className="space-y-6">
