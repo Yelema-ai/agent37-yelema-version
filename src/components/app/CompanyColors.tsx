@@ -70,8 +70,10 @@ export function CompanyColors() {
   const c = given ?? fromLogo;
   if (!c) return null;
   // Light: the color as fill and as text, its pale mixes as tints. Dark: the same fill, a lighter
-  // text and deep tints. `html:root` and `html.dark` outrank the theme's own `:root` and `.dark`.
-  const css = `html:root{--brand:${c};--brand-ink:${c};--primary:${c};--ring:${c};--link:${c};--tint:color-mix(in srgb,${c} 9%,#fff);--tint-2:color-mix(in srgb,${c} 16%,#fff)}
-html.dark{--brand:${c};--brand-ink:color-mix(in srgb,${c} 45%,#fff);--primary:${c};--ring:${c};--link:color-mix(in srgb,${c} 45%,#fff);--tint:color-mix(in srgb,${c} 18%,#17112b);--tint-2:color-mix(in srgb,${c} 26%,#17112b)}`;
+  // text and deep tints. The theme's greys lean violet (Yelema's): they turn neutral, with a trace
+  // of the company's color, so no Yelema background is left. `html:root` and `html.dark` outrank
+  // the theme's own `:root` and `.dark`.
+  const css = `html:root{--brand:${c};--brand-ink:${c};--primary:${c};--ring:${c};--link:${c};--tint:color-mix(in srgb,${c} 9%,#fff);--tint-2:color-mix(in srgb,${c} 16%,#fff);--bg:color-mix(in srgb,${c} 2%,#f6f6f6);--soft:color-mix(in srgb,${c} 3%,#f2f2f2);--soft-2:color-mix(in srgb,${c} 4%,#e8e8e8);--line:rgba(20,16,20,.1);--ink:#171417;--ink-2:#4a464b;--ink-3:#646066}
+html.dark{--brand:${c};--brand-ink:color-mix(in srgb,${c} 45%,#fff);--primary:${c};--ring:${c};--link:color-mix(in srgb,${c} 45%,#fff);--tint:color-mix(in srgb,${c} 18%,#171417);--tint-2:color-mix(in srgb,${c} 26%,#171417);--bg:#111011;--soft:#1f1d20;--soft-2:#29272a;--surface:#19171a;--ink:#f3f2f3;--ink-2:#c9c5ca;--ink-3:#a19ca3}`;
   return <style>{css}</style>;
 }
