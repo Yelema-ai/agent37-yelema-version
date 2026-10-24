@@ -46,8 +46,11 @@ function instanceBaseUrl(id: string, port?: number): string {
   return `https://${urlId(id)}${suffix}.${INSTANCE_DOMAIN}`;
 }
 
-/** What the hub of a Claude Code instance publishes; `hub: null` = no bot on it yet. */
-export type TelegramHubStatus = { connected: boolean; hub: { bot?: string; mode?: "topics" | "single"; started?: boolean; topics?: { profile: string; thread: number }[]; current?: string | null } | null };
+/** The Telegram of an instance, as the runtime gateway publishes it; `state: null` = no bot yet. */
+export type TelegramHubStatus = {
+  connected: boolean;
+  state: { phase: "awaiting_group" | "needs_topics" | "ready"; bot: string; chatTitle?: string; topics?: Record<string, string>; inviteLink?: string | null; groupUrl?: string } | null;
+};
 
 function requireGateway(): RuntimeGateway {
   const gw = runtimeGateway();
@@ -308,12 +311,13 @@ export const agent37 = {
     return instanceFetch(id, `/v1/files/content?path=${encodeURIComponent(`~/.hermes/profiles/${profile}/${name}`)}`);
   },
 
-  // Telegram of a Claude Code instance, through the runtime gateway's managed-bot manager: a t.me link
-  // that has the member create their own bot, then what the instance's hub publishes (bot, topics).
+  // Telegram of an instance (Hermes or Claude Code), through the runtime gateway: a t.me link that has the
+  // member create their own bot, then its forum group with one topic per expert.
   telegramHub: {
-    link: async (id: string, name: string): Promise<{ url: string; expiresAt: string }> =>
+    link: async (id: string, name: string): Promise<{ url: string; groupUrl?: string; expiresAt: string }> =>
       parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram/link`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) })),
     status: async (id: string): Promise<TelegramHubStatus> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram`)),
+    sync: async (id: string): Promise<{ ok: true; topics: number }> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram/sync`, { method: "POST" })),
     disconnect: async (id: string): Promise<{ ok: true }> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram`, { method: "DELETE" })),
   },
 

@@ -54,6 +54,9 @@ export function ChannelsTab({
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  // Le bot du membre et son groupe à sujets, par la passerelle d'exécution ; masqué là où elle ne l'offre pas.
+  const [hubShown, setHubShown] = useState(true);
+  const hideHub = useCallback(() => setHubShown(false), []);
 
   const load = useCallback(
     async (quiet = false) => {
@@ -124,6 +127,7 @@ export function ChannelsTab({
 
   return (
     <div className="space-y-6">
+      {hubShown && <TelegramHub agentId={agentId} canManage={canManage} onUnavailable={hideHub} />}
       <div className="flex items-start justify-between gap-4">
         <Header />
         <Button variant="ghost" size="sm" disabled={loading} onClick={() => load()} aria-label="Actualiser les canaux" className="max-sm:size-10">

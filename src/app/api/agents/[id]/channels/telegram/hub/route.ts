@@ -4,7 +4,7 @@ import { handleError, json, readJson } from "@/lib/http";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// Telegram of a Claude Code instance (`/api/agents/{id}/channels/telegram/hub`): GET what its hub
+// Telegram of an instance (`/api/agents/{id}/channels/telegram/hub`): GET what the runtime gateway
 // publishes, POST a t.me link that has the member create their own bot in one tap, DELETE to unplug it.
 // The bot's token goes from Telegram to the instance through the runtime gateway, never through here.
 export async function GET(_request: Request, { params }: Ctx) {
