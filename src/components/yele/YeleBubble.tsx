@@ -38,7 +38,7 @@ function pageShortcuts(path: string): Shortcut[] {
     return [{ label: "Brancher ma clé d’IA", desc: "OpenAI, Anthropic, Gemini…", prompt: "Comment je branche la clé d'IA de mon entreprise sur mes Experts ?", icon: KeyRound }];
   if (path.startsWith("/integrations"))
     return [{ label: "Brancher Gmail", desc: "Pour que vos Experts lisent vos e-mails", prompt: "Comment je branche Gmail à mes Experts ?", icon: Plug }];
-  if (path.startsWith("/administration/facturation"))
+  if (path.startsWith("/parametres/facturation"))
     return [{ label: "Ma dernière facture", desc: "Ce qu’elle contient", prompt: "Explique-moi ma dernière facture.", icon: Receipt }];
   if (path.startsWith("/recruter"))
     return [{ label: "Quel Expert pour moi ?", desc: "Selon votre besoin", prompt: "Aide-moi à choisir l'Expert qu'il me faut.", icon: Users }];
@@ -57,7 +57,7 @@ const PAGES: { word: RegExp; label: string; href: string }[] = [
   { word: /\bmod[eè]les\b/i, label: "Modèles", href: "/integrations/modeles" },
   { word: /\bMCP\b/, label: "MCP", href: "/integrations/mcp" },
   { word: /\bint[eé]grations\b/i, label: "Intégrations", href: "/integrations" },
-  { word: /\bfacturation\b/i, label: "Facturation", href: "/administration/facturation" },
+  { word: /\bfacturation\b/i, label: "Facturation", href: "/parametres/facturation" },
   { word: /\brecruter\b/i, label: "Recruter", href: "/recruter" },
 ];
 function pagesIn(text: string, here: string) {

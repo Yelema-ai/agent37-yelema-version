@@ -109,17 +109,17 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
 
       <div className="mt-auto flex w-full flex-col gap-0.5 border-t border-line pt-3">
         <Link
-          href="/administration"
+          href="/parametres"
           className={cn(
             "flex min-h-10 items-center gap-2.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors",
-            pathname.startsWith("/administration")
+            pathname.startsWith("/parametres")
               ? "bg-soft-2 text-ink"
               : "text-ink-2 hover:bg-soft",
             collapsed && "justify-center px-0"
           )}
         >
           <Settings2 className="size-5 shrink-0" strokeWidth={1.9} />
-          {!collapsed && "Administration"}
+          {!collapsed && "Paramètres"}
         </Link>
 
         <AccountMenu collapsed={collapsed} />

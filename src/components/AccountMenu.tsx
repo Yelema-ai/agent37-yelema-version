@@ -85,9 +85,9 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
           </DropdownMenuItem>
         )}
         <DropdownMenuItem asChild className={cn("gap-2.5 rounded-[10px] px-2.5 py-2 text-sm", !editable && "mt-1.5")}>
-          <Link href="/administration">
+          <Link href="/parametres">
             <Settings2 className="size-4" />
-            Administration
+            Paramètres
           </Link>
         </DropdownMenuItem>
 
