@@ -21,6 +21,7 @@ import { ChannelCredentialsForm } from "@/components/channels/ChannelCredentials
 import { SlackConnect } from "@/components/channels/SlackConnect";
 import { TeamsConnect } from "@/components/channels/TeamsConnect";
 import { TelegramConnect } from "@/components/channels/TelegramConnect";
+import { RelayChannel } from "@/components/channels/RelayChannel";
 import { TelegramHub } from "@/components/channels/TelegramHub";
 import { TelegramTopics } from "@/components/channels/TelegramTopics";
 import { WhatsAppConnect } from "@/components/channels/WhatsAppConnect";
@@ -92,6 +93,8 @@ export function ChannelsTab({
       <div className="space-y-6">
         <Header />
         <TelegramHub agentId={agentId} canManage={canManage} />
+        <RelayChannel agentId={agentId} channel="slack" canManage={canManage} />
+        <RelayChannel agentId={agentId} channel="teams" canManage={canManage} />
       </div>
     );
   }

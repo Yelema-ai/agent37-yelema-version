@@ -52,6 +52,10 @@ export type TelegramHubStatus = {
   state: { phase: "awaiting_group" | "needs_topics" | "ready"; bot: string; chatTitle?: string; topics?: Record<string, string>; inviteLink?: string | null; groupUrl?: string } | null;
 };
 
+export type RelayChannel = "slack" | "teams";
+export type RelayLink = { code: string; expiresAt: string; installUrl?: string; appUrl?: string | null };
+export type RelayStatus = { enabled: boolean; accounts: number };
+
 function requireGateway(): RuntimeGateway {
   const gw = runtimeGateway();
   if (!gw) throw new Agent37Error(501, "unsupported", "Telegram for this runtime needs the runtime gateway");
@@ -319,6 +323,14 @@ export const agent37 = {
     status: async (id: string): Promise<TelegramHubStatus> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram`)),
     sync: async (id: string): Promise<{ ok: true; topics: number }> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram/sync`, { method: "POST" })),
     disconnect: async (id: string): Promise<{ ok: true }> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram`, { method: "DELETE" })),
+  },
+
+  // Slack and Teams of a Claude Code instance, relayed by the runtime gateway: a link code (and, for Slack,
+  // the « Add to Slack » install link), how many accounts are linked, unplug.
+  channelRelay: {
+    link: async (id: string, channel: RelayChannel): Promise<RelayLink> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/${channel}/link`, { method: "POST" })),
+    status: async (id: string, channel: RelayChannel): Promise<RelayStatus> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/${channel}`)),
+    unlink: async (id: string, channel: RelayChannel): Promise<{ ok: true }> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/${channel}`, { method: "DELETE" })),
   },
 
   // What the instance's runtime offers (the gateway's /capabilities); `null` direct, where every
