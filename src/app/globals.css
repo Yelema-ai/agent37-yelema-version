@@ -12,6 +12,9 @@
   --radius: 0.75rem;
 
   --brand: #301667;
+  /* The Expert's side of a call (halo, name, live bubble): Yelema's violet, the company's color once set. */
+  --call: #8d68fa;
+  --call-ink: #6a45e0;
   /* Brand-colored TEXT: the brand itself in light, a pale violet in dark where the brand is a fill. */
   --brand-ink: #301667;
   --on-brand: #ffffff;
@@ -58,6 +61,7 @@
 /* Dark theme (mockup app.css v4, html[data-mode="nuit"]), driven by the .dark class on <html>.
    Only the Yelema tokens change; the shadcn names above follow them. */
 .dark {
+  --call-ink: #b9a2ff;
   --brand: #7a5af0;
   --brand-ink: #cdbeff;
   --link: #bba6ff;

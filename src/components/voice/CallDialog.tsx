@@ -5,7 +5,7 @@ import { AudioLines, Loader2, Mic, MicOff, Minimize2, Phone, PhoneCall, PhoneOff
 import { Button } from "@/components/ui/button";
 import { DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { HALO_PULSE_MS, HALO_RGB, haloOf, type CallPhase, type Halo } from "@/lib/call-turns";
+import { HALO_COLOR, HALO_PULSE_MS, haloOf, tint, type CallPhase, type Halo } from "@/lib/call-turns";
 import type { Caption } from "./useVoiceCall";
 import { faceProps, FACE_PX } from "./face";
 
@@ -13,9 +13,10 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2,
 
 export const inCallPhase = (p: CallPhase) => p !== "idle" && p !== "ended" && p !== "unreachable";
 
-const VIOLET = HALO_RGB.parle;
-const GREEN = HALO_RGB.ecoute;
-const RED = "226,72,72";
+const VIOLET = HALO_COLOR.parle;
+const GREEN = HALO_COLOR.ecoute;
+const RED = "#e24848";
+const GREY = "#9696a0";
 
 /**
  * The call as shown, from its state alone: CallProvider wires it to the live call (Leslie, 23/10, as on
@@ -101,12 +102,12 @@ export function CallView(p: {
 /** What is happening, in a pill under the picture, in the colour of the halo. */
 function Status({ phase, halo, first, reason }: { phase: CallPhase; halo: Halo | null; first: string; reason: string | null }) {
   if (phase === "unreachable") return <p className="max-w-[260px] text-sm text-ko">{reason}</p>;
-  if (phase === "ended") return <Pill rgb="150,150,160" ink="text-ink-2" icon={PhoneOff} text="Appel terminé" />;
+  if (phase === "ended") return <Pill color={GREY} ink="text-ink-2" icon={PhoneOff} text="Appel terminé" />;
   if (!halo) return null;
   if (halo === "muet")
     return (
       <>
-        <Pill rgb={RED} ink="text-[#C83A3A] dark:text-[#FF8A8A]" icon={MicOff} text="Micro coupé" />
+        <Pill color={RED} ink="text-[#C83A3A] dark:text-[#FF8A8A]" icon={MicOff} text="Micro coupé" />
         <p className="max-w-[260px] text-[12.5px] leading-snug text-ink-3">
           {first} ne vous entend pas. Réactivez votre micro pour lui parler.
         </p>
@@ -115,7 +116,7 @@ function Status({ phase, halo, first, reason }: { phase: CallPhase; halo: Halo |
   if (halo === "ecoute")
     return (
       <>
-        <Pill rgb={GREEN} ink="text-[#14915A] dark:text-[#5BDDA0]" icon={Mic} text={`À vous, ${first} écoute`} />
+        <Pill color={GREEN} ink="text-[#14915A] dark:text-[#5BDDA0]" icon={Mic} text={`À vous, ${first} écoute`} />
         <span aria-hidden className="flex gap-1.5 pt-1" data-your-turn="">
           {[0, 1, 2].map((k) => (
             <span key={k} className="call-dot size-2 rounded-full bg-[#2EC780]" style={{ animationDelay: `${k * 160}ms` }} />
@@ -123,17 +124,17 @@ function Status({ phase, halo, first, reason }: { phase: CallPhase; halo: Halo |
         </span>
       </>
     );
-  const ink = "text-[#6A45E0] dark:text-[#B9A2FF]";
-  if (halo === "connexion") return <Pill rgb={VIOLET} ink={ink} icon={Loader2} spin text="Connexion…" />;
-  if (halo === "reco") return <Pill rgb="150,150,160" ink="text-ink-2" icon={WifiOff} text="Reconnexion…" />;
-  if (halo === "cherche") return <Pill rgb={VIOLET} ink={ink} icon={Search} text={`${first} cherche…`} />;
-  if (halo === "reflechit") return <Pill rgb={VIOLET} ink={ink} icon={Loader2} spin text={`${first} réfléchit…`} />;
-  return <Pill rgb={VIOLET} ink={ink} icon={phase === "speaking" ? AudioLines : PhoneCall} text={`${first} parle`} />;
+  const ink = "text-[var(--call-ink)]";
+  if (halo === "connexion") return <Pill color={VIOLET} ink={ink} icon={Loader2} spin text="Connexion…" />;
+  if (halo === "reco") return <Pill color={GREY} ink="text-ink-2" icon={WifiOff} text="Reconnexion…" />;
+  if (halo === "cherche") return <Pill color={VIOLET} ink={ink} icon={Search} text={`${first} cherche…`} />;
+  if (halo === "reflechit") return <Pill color={VIOLET} ink={ink} icon={Loader2} spin text={`${first} réfléchit…`} />;
+  return <Pill color={VIOLET} ink={ink} icon={phase === "speaking" ? AudioLines : PhoneCall} text={`${first} parle`} />;
 }
 
-function Pill({ rgb, ink, icon: Icon, text, spin }: { rgb: string; ink: string; icon: typeof Mic; text: string; spin?: boolean }) {
+function Pill({ color, ink, icon: Icon, text, spin }: { color: string; ink: string; icon: typeof Mic; text: string; spin?: boolean }) {
   return (
-    <span data-call-status="" className={cn("inline-flex min-h-9 max-w-full items-center gap-2 rounded-full px-4 text-[13px] font-semibold sm:whitespace-nowrap", ink)} style={{ backgroundColor: `rgba(${rgb},0.14)` }}>
+    <span data-call-status="" className={cn("inline-flex min-h-9 max-w-full items-center gap-2 rounded-full px-4 text-[13px] font-semibold sm:whitespace-nowrap", ink)} style={{ backgroundColor: tint(color, 0.14) }}>
       <Icon className={cn("size-4 shrink-0", spin && "animate-spin motion-reduce:animate-none")} strokeWidth={2} />
       {text}
     </span>
@@ -146,7 +147,7 @@ function Pill({ rgb, ink, icon: Icon, text, spin }: { rgb: string; ink: string; 
 const MARGIN = 34;
 
 function Portrait({ photoUrl, name, halo }: { photoUrl: string | null; name: string; halo: Halo | null }) {
-  const rgb = halo ? HALO_RGB[halo] : null;
+  const color = halo ? HALO_COLOR[halo] : null;
   const pulse = halo ? HALO_PULSE_MS[halo] : null;
   const breathe = halo === "parle" || halo === "ecoute";
   const turning = halo === "connexion" || halo === "reflechit";
@@ -154,22 +155,22 @@ function Portrait({ photoUrl, name, halo }: { photoUrl: string | null; name: str
   const size = FACE_PX + MARGIN * 2;
   return (
     <span className="relative grid place-items-center" style={{ width: size, height: size }} data-halo={halo ?? "aucun"}>
-      {rgb && (
+      {color && (
         <>
           <span
             aria-hidden
             className={cn("call-halo absolute inset-0 rounded-full transition-colors duration-300", breathe && "call-breathe")}
-            style={{ backgroundColor: `rgba(${rgb},${halo === "parle" ? 0.22 : 0.14})`, ...(pulse ? { animation: `call-halo ${pulse * 2}ms ease-in-out infinite` } : {}) }}
+            style={{ backgroundColor: tint(color, halo === "parle" ? 0.22 : 0.14), ...(pulse ? { animation: `call-halo ${pulse * 2}ms ease-in-out infinite` } : {}) }}
           />
-          {halo === "parle" && <span aria-hidden className="call-breathe absolute rounded-full" style={{ inset: MARGIN / 2, backgroundColor: `rgba(${rgb},0.28)`, animationDelay: "200ms" }} />}
-          <span aria-hidden className="absolute rounded-full transition-colors duration-300" style={{ inset: MARGIN - 6, border: `4px solid rgba(${rgb},${halo === "muet" || halo === "reco" ? 1 : 0.95})` }} />
+          {halo === "parle" && <span aria-hidden className="call-breathe absolute rounded-full" style={{ inset: MARGIN / 2, backgroundColor: tint(color, 0.28), animationDelay: "200ms" }} />}
+          <span aria-hidden className="absolute rounded-full transition-colors duration-300" style={{ inset: MARGIN - 6, border: `4px solid ${tint(color, halo === "muet" || halo === "reco" ? 1 : 0.95)}` }} />
         </>
       )}
-      {turning && rgb && (
+      {turning && color && (
         <span
           aria-hidden
           className="absolute animate-spin rounded-full border-4 border-transparent motion-reduce:animate-none"
-          style={{ inset: MARGIN / 2 - 2, borderTopColor: `rgb(${rgb})`, borderRightColor: `rgb(${rgb})`, animationDuration: "1.2s" }}
+          style={{ inset: MARGIN / 2 - 2, borderTopColor: color, borderRightColor: color, animationDuration: "1.2s" }}
         />
       )}
       <span
@@ -188,7 +189,7 @@ function Portrait({ photoUrl, name, halo }: { photoUrl: string | null; name: str
           data-call-badge={halo}
           aria-hidden
           className="absolute grid size-[58px] place-items-center rounded-full text-white ring-4 ring-surface"
-          style={{ right: MARGIN - 8, bottom: MARGIN - 8, backgroundColor: halo === "cherche" ? "#7B55F0" : "#E24848" }}
+          style={{ right: MARGIN - 8, bottom: MARGIN - 8, backgroundColor: halo === "cherche" ? VIOLET : RED }}
         >
           {halo === "cherche" ? <Search className="size-7" strokeWidth={2.4} /> : <MicOff className="size-7" strokeWidth={2.2} />}
         </span>
@@ -235,10 +236,10 @@ function Transcript({ captions, first, speaking, connecting, onMinimize }: { cap
             const live = !mine && speaking && k === count - 1;
             return (
               <div key={`${c.at}-${k}`} className={cn("flex max-w-[85%] flex-col gap-1", mine ? "items-end self-end" : "items-start")}>
-                <span className={cn("text-[11.5px] font-bold", mine ? "text-[#14915A] dark:text-[#5BDDA0]" : "text-[#6A45E0] dark:text-[#B9A2FF]")}>{mine ? "Vous" : first}</span>
+                <span className={cn("text-[11.5px] font-bold", mine ? "text-[#14915A] dark:text-[#5BDDA0]" : "text-[var(--call-ink)]")}>{mine ? "Vous" : first}</span>
                 <p
-                  className={cn("rounded-2xl px-3.5 py-2.5 text-[14px] leading-snug text-ink", mine ? "rounded-tr-md" : "rounded-tl-md", live && "ring-2 ring-[#8D68FA]")}
-                  style={{ backgroundColor: `rgba(${mine ? GREEN : VIOLET},0.12)` }}
+                  className={cn("rounded-2xl px-3.5 py-2.5 text-[14px] leading-snug text-ink", mine ? "rounded-tr-md" : "rounded-tl-md", live && "ring-2 ring-[var(--call)]")}
+                  style={{ backgroundColor: tint(mine ? GREEN : VIOLET, 0.12) }}
                 >
                   {c.text}
                 </p>

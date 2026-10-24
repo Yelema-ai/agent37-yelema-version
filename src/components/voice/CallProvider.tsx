@@ -6,7 +6,7 @@ import { Maximize2, Mic, MicOff, PhoneOff } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
-import { HALO_RGB, haloOf } from "@/lib/call-turns";
+import { HALO_COLOR, haloOf, tint } from "@/lib/call-turns";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { chosenVoice, type VoiceOption } from "@/lib/voice";
 import { useVoiceExpert } from "./useVoiceExpert";
@@ -217,7 +217,7 @@ function MiniCall(p: {
   onExpand: () => void;
 }) {
   const halo = haloOf(p.phase, p.muted, p.tool);
-  const rgb = halo ? HALO_RGB[halo] : null;
+  const color = halo ? HALO_COLOR[halo] : null;
   const face = p.expert.photoUrl ? faceProps(p.expert.photoUrl) : null;
   const ended = !inCallPhase(p.phase);
   const status = ended ? "Appel terminé" : halo === "muet" ? "Micro coupé" : halo === "cherche" ? "Cherche…" : (PHASE_SHORT[p.phase] ?? "");
@@ -266,7 +266,7 @@ function MiniCall(p: {
       )}
     >
       <span className="relative grid size-11 shrink-0 place-items-center sm:size-12" data-halo={halo ?? "aucun"}>
-        {rgb && <span aria-hidden className="absolute -inset-[3px] rounded-full transition-colors duration-300" style={{ backgroundColor: `rgba(${rgb},0.9)`, boxShadow: `0 0 14px rgba(${rgb},0.7)` }} />}
+        {color && <span aria-hidden className="absolute -inset-[3px] rounded-full transition-colors duration-300" style={{ backgroundColor: tint(color, 0.9), boxShadow: `0 0 14px ${tint(color, 0.7)}` }} />}
         <span className="relative grid size-full place-items-center overflow-hidden rounded-full bg-tint text-base font-bold text-brand-ink ring-2 ring-surface">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           {face ? <img {...face} className="size-full object-cover object-[50%_18%]" /> : p.expert.name.charAt(0)}

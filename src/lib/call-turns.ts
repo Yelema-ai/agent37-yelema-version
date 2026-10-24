@@ -17,15 +17,21 @@ export type CallPhase = "idle" | "connecting" | "listening" | "thinking" | "spea
  */
 export type Halo = "parle" | "ecoute" | "reflechit" | "cherche" | "connexion" | "reco" | "muet";
 
-export const HALO_RGB: Record<Halo, string> = {
-  parle: "141,104,250", // violet #8D68FA
-  ecoute: "46,199,128", // vert #2EC780
-  reflechit: "141,104,250",
-  cherche: "141,104,250",
-  connexion: "141,104,250",
-  reco: "201,200,212", // gris #C9C8D4, blinks (450 ms)
-  muet: "201,200,212",
+/** The Expert's side is `--call`: Yelema's violet, or the company's color. Green and grey are common. */
+export const HALO_COLOR: Record<Halo, string> = {
+  parle: "var(--call)",
+  ecoute: "#2ec780", // vert
+  reflechit: "var(--call)",
+  cherche: "var(--call)",
+  connexion: "var(--call)",
+  reco: "#c9c8d4", // gris, blinks (450 ms)
+  muet: "#c9c8d4",
 };
+
+/** A color at some opacity, for any CSS color (a variable included). */
+export function tint(color: string, alpha: number): string {
+  return `color-mix(in srgb, ${color} ${Math.round(alpha * 100)}%, transparent)`;
+}
 
 /** Half a pulse, in ms; null when the halo stays still. */
 export const HALO_PULSE_MS: Record<Halo, number | null> = { parle: null, ecoute: null, reflechit: null, cherche: null, connexion: null, reco: 450, muet: null };

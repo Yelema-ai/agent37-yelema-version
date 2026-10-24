@@ -27,7 +27,7 @@ export function DeliverableWatcher() {
     let live = true;
     const list = (path: string) =>
       apiFetch<FileListResponse>(`/api/agents/${agentId}/files/list?path=${encodeURIComponent(path)}`).then(
-        (r) => r.entries.filter((e) => !e.hidden),
+        (r) => (r.entries ?? []).filter((e) => !e.hidden),
         () => null
       );
     async function check() {
