@@ -54,6 +54,14 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
     setDrawerOpen(false);
   }, [pathname]);
 
+  // Échap referme le tiroir, comme toute fenêtre posée par-dessus la page.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawerOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerOpen]);
+
   function toggle() {
     // Dans le tiroir, le bouton du menu le referme au lieu de le replier.
     if (drawerOpen) {
