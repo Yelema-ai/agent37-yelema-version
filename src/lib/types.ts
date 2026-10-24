@@ -15,6 +15,8 @@ export interface WorkspaceWithRole extends Workspace {
   logo_url?: string | null;
   /** The company's main color (back office `me.workspace.brandColor`, #rrggbb), when it has one. */
   brand_color?: string | null;
+  /** `entreprise`: the company chat only (an agent on the company's instance): no Experts, no integrations. */
+  access?: "instance" | "entreprise";
 }
 
 export interface WorkspaceMember {

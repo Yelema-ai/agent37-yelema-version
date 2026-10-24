@@ -111,12 +111,22 @@ async function parseAgent37<T>(res: Response, augment402 = false): Promise<T> {
   return data as T;
 }
 
+// The signed-in account, named to the runtime gateway: on an enterprise instance it picks that member's
+// agent and confines the call to it. Outside a request (no session), nothing is added.
+async function asUser(init: RequestInit): Promise<RequestInit> {
+  const id = await import("./auth").then((m) => m.getSession()).then((s) => s.user?.id ?? null, () => null);
+  if (!id) return init;
+  const headers = new Headers(init.headers);
+  headers.set("X-Yelema-User", id);
+  return { ...init, headers };
+}
+
 // `gatewayPath`: the same call on the runtime gateway; absent = not offered there.
 async function call<T>(path: string, init?: RequestInit, gatewayPath?: string): Promise<T> {
   const gw = runtimeGateway();
   if (gw) {
     if (!gatewayPath) throw new Agent37Error(501, "unsupported", `${path} is not offered by the runtime gateway`);
-    const res = await gatewayFetch(gw, gatewayPath, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } });
+    const res = await gatewayFetch(gw, gatewayPath, await asUser({ ...init, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } }));
     return parseAgent37<T>(res, true);
   }
   const key = process.env.AGENT37_API_KEY;
@@ -155,7 +165,7 @@ export async function instanceFetch(id: string, path: string, init?: RequestInit
   // The gateway mirrors the instance's paths under /v1/instances/{id}/ (same verbs, same bodies).
   if (gw) {
     if (!path.startsWith("/v1/")) throw new Agent37Error(400, "invalid_request", "Invalid instance path");
-    return gatewayFetch(gw, gatewayInstancePath(urlId(id), path), { ...init, body });
+    return gatewayFetch(gw, gatewayInstancePath(urlId(id), path), await asUser({ ...init, body }));
   }
   const key = process.env.AGENT37_API_KEY;
   if (!key) {
@@ -175,7 +185,7 @@ export async function instanceFetch(id: string, path: string, init?: RequestInit
 export async function instancePortFetch(id: string, port: number, path: string, init?: RequestInit): Promise<Response> {
   const gw = runtimeGateway();
   if (gw) {
-    return gatewayFetch(gw, `/v1/instances/${urlId(id)}/ports/${Math.trunc(port)}${path}`, { ...init, headers: gatewayPortHeaders(init?.headers) });
+    return gatewayFetch(gw, `/v1/instances/${urlId(id)}/ports/${Math.trunc(port)}${path}`, await asUser({ ...init, headers: gatewayPortHeaders(init?.headers) }));
   }
   const key = process.env.AGENT37_API_KEY;
   if (!key) {

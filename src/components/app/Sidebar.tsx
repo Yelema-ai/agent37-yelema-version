@@ -130,7 +130,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
           </>
         )}
       </button>
-      <Link
+      {current?.access !== "entreprise" && <Link
         href="/integrations"
         onClick={onNavigate}
         className={cn(
@@ -141,7 +141,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
       >
         <Blocks className="size-5 shrink-0" strokeWidth={1.9} />
         {!collapsed && "Intégrations"}
-      </Link>
+      </Link>}
 
       {/* The Experts and the conversations scroll between the top of the menu and its foot, which stay put. */}
       <div className={cn("-mx-3 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3", collapsed && "-mx-2.5 items-center px-2.5")}>

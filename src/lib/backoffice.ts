@@ -76,6 +76,8 @@ export interface BoMe {
   user: { id: string; email: string; firstName: string | null; lastName: string | null; name: string | null; jobTitle: string | null; role: "admin" | "member"; avatarUrl?: string | null; /** Call voice per expert (`*` = all) and language, shared with the mobile app. */ voices?: Record<string, Partial<Record<"fr" | "en", string>>> };
   workspace: { id: string; name: string; logoUrl: string | null; brandColor?: string | null };
   instance: { id: string } | null;
+  /** `entreprise`: company chat only — no Experts, no instance of one's own. Absent on older back offices. */
+  access?: "instance" | "entreprise";
 }
 
 export interface BoInstanceView {
