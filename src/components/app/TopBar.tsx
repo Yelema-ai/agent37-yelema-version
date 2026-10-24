@@ -1,5 +1,6 @@
 "use client";
 
+import { settingsEntry } from "@/components/settings/settings-nav";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Menu } from "lucide-react";
 import { NotificationBell } from "@/components/app/NotificationBell";
@@ -23,12 +24,10 @@ function crumbs(pathname: string, experts: Expert[]): string[] {
   if (pathname.startsWith("/integrations/mcp")) return ["Intégrations", "MCP"];
   if (pathname.startsWith("/integrations/identifiants")) return ["Intégrations", "Accès aux sites"];
   if (pathname.startsWith("/integrations")) return ["Intégrations"];
-  if (pathname.startsWith("/administration/instances")) return ["Administration", "Instances"];
-  if (pathname.startsWith("/administration/facturation")) return ["Administration", "Facturation"];
-  if (pathname.startsWith("/administration/consommation")) return ["Administration", "Consommation"];
-  if (pathname.startsWith("/administration/entreprise")) return ["Administration", "Entreprise"];
-  if (pathname.startsWith("/administration/organigramme")) return ["Administration", "Organigramme"];
-  if (pathname.startsWith("/administration")) return ["Administration", "Membres"];
+  if (pathname.startsWith("/parametres")) {
+    const entry = settingsEntry(pathname);
+    return entry ? ["Paramètres", entry.label] : ["Paramètres"];
+  }
   if (pathname.startsWith("/experts/")) {
     const [, agentId, ...rest] = pathname.split("/").filter(Boolean);
     const profileId = parseAgentRoute(rest)?.profileId;

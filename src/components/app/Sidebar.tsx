@@ -16,7 +16,6 @@ import {
   Megaphone,
   PanelLeftClose,
   Search,
-  Settings2,
   SquarePen,
   TrendingUp,
   Users,
@@ -208,20 +207,8 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
       </div>
 
       <div className="flex w-full flex-col gap-0.5 border-t border-line pt-3">
-        <Link
-          href="/administration"
-          className={cn(
-            "flex min-h-10 items-center gap-2.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors",
-            pathname.startsWith("/administration")
-              ? "bg-soft-2 text-ink"
-              : "text-ink-2 hover:bg-soft",
-            collapsed && "justify-center px-0"
-          )}
-        >
-          <Settings2 className="size-5 shrink-0" strokeWidth={1.9} />
-          {!collapsed && "Administration"}
-        </Link>
-
+        {/* Paramètres (and the company's settings, for its admin) open from the account menu, as in
+            ChatGPT: no Administration button here any more (Leslie, 24/10). */}
         <AccountMenu collapsed={collapsed} />
 
         <a
