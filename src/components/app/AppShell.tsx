@@ -1,5 +1,6 @@
 "use client";
 
+import { DeliverableWatcher } from "@/components/activity/DeliverableWatcher";
 import { CompanyColors } from "@/components/app/CompanyColors";
 import { SearchDialog } from "@/components/conversations/SearchDialog";
 import { useEffect, useState } from "react";
@@ -76,6 +77,7 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
         {/* The call lives above the pages: it goes on, folded or not, while the member navigates. */}
         <CallProvider>
         <CompanyColors />
+        <DeliverableWatcher />
         <SearchDialog />
         <div
           className="min-h-screen md:grid"
