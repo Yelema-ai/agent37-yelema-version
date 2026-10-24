@@ -8,7 +8,6 @@ import { askNotificationPermission, notificationSupport, type NotificationSuppor
 import { signOutEverywhere, useSupabase } from "@/lib/supabase/client";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { usePublicConfig } from "@/components/PublicConfigProvider";
-import { ProfileDialog } from "@/components/ProfileDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,7 +25,6 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
   const { current, userEmail, userName, userAvatarUrl } = useWorkspace();
   // The profile is the back office's: only there can the user change their own name.
   const editable = usePublicConfig().authVia === "backoffice";
-  const [profileOpen, setProfileOpen] = useState(false);
   // Offered while the browser has not been asked yet; read after mount (no window on the server).
   const [notif, setNotif] = useState<NotificationSupport>("unsupported");
   useEffect(() => setNotif(notificationSupport()), []);
@@ -79,9 +77,11 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
         </div>
 
         {editable && (
-          <DropdownMenuItem onSelect={() => setProfileOpen(true)} className="mt-1.5 gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
-            <UserRound className="size-4" />
-            Mon profil
+          <DropdownMenuItem asChild className="mt-1.5 gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
+            <Link href="/parametres/profil">
+              <UserRound className="size-4" />
+              Mon profil
+            </Link>
           </DropdownMenuItem>
         )}
         <DropdownMenuItem asChild className={cn("gap-2.5 rounded-[10px] px-2.5 py-2 text-sm", !editable && "mt-1.5")}>
@@ -108,7 +108,6 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
           Se déconnecter
         </DropdownMenuItem>
       </DropdownMenuContent>
-      {editable && <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />}
     </DropdownMenu>
   );
 }

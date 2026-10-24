@@ -4,7 +4,7 @@ import { settingsEntry } from "@/components/settings/settings-nav";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Menu } from "lucide-react";
 import { NotificationBell } from "@/components/app/NotificationBell";
-import { ThemeMenu } from "@/components/app/ThemeMenu";
+import { AppearanceSync } from "@/components/app/AppearanceSync";
 import { YeleTopButton } from "@/components/yele/YeleBubble";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { parseAgentRoute } from "@/lib/expert-tabs";
@@ -62,7 +62,8 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
           </span>
         ))}
       </div>
-      <ThemeMenu />
+      <AppearanceSync />
+      <span className="ml-auto" />
       <YeleTopButton />
       <NotificationBell />
     </header>
