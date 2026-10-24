@@ -15,6 +15,7 @@ import { DEFAULT_NOTIFY_PREFS, readNotifyPrefs, saveNotifyPrefs, type NoticeKind
 const KINDS: { kind: NoticeKind; label: string; hint: string }[] = [
   { kind: "reply", label: "Réponses des Experts", hint: "Quand un Expert répond à votre message." },
   { kind: "routine", label: "Routines terminées", hint: "Quand une routine a livré son résultat." },
+  { kind: "deliverable", label: "Nouveaux livrables", hint: "Quand un fichier arrive dans les livrables." },
   { kind: "failed", label: "Problèmes", hint: "Une réponse qui échoue, un compte d’IA à recharger." },
 ];
 

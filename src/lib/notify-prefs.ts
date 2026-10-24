@@ -1,11 +1,11 @@
 // Which kinds of notice pop up (toast and system notification). The bell keeps every notice either way.
 // Stored in the browser until the back office keeps the user's preferences (then the mobile app shares them).
 
-export type NoticeKind = "reply" | "routine" | "failed";
+export type NoticeKind = "reply" | "routine" | "deliverable" | "failed";
 export type NotifyPrefs = Record<NoticeKind, boolean>;
 
 const KEY = "yelema.notify-prefs";
-export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = { reply: true, routine: true, failed: true };
+export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = { reply: true, routine: true, deliverable: true, failed: true };
 
 export function readNotifyPrefs(): NotifyPrefs {
   try {
