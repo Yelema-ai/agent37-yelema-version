@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
@@ -14,12 +14,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ChannelPanelHeader } from "@/components/channels/ChannelCredentialsForm";
+import { TelegramHub } from "@/components/channels/TelegramHub";
 import { TelegramQrConnect } from "@/components/channels/TelegramQrConnect";
+import type { TelegramHubStatus } from "@/lib/agent37";
 import { useAsyncAction } from "@/components/useAsyncAction";
 
 const OWNER_POLL_MS = 3000;
 
-type Step = "qr" | "token" | "owner" | "connected";
+type Step = "hub" | "qr" | "token" | "owner" | "connected";
 
 // Telegram is the channel worth building a real flow for: nobody has to install anything.
 //
@@ -38,7 +40,11 @@ export function TelegramConnect({
   channel: MessagingPlatform;
   onBack: () => void;
 }) {
-  const [step, setStep] = useState<Step>(isChannelConnected(channel) ? "connected" : "qr");
+  // Par défaut, le bot du membre et son groupe à sujets (passerelle) ; QR et jeton BotFather en autres méthodes.
+  const [step, setStep] = useState<Step>(isChannelConnected(channel) ? "connected" : "hub");
+  const [hubState, setHubState] = useState<TelegramHubStatus["state"] | undefined>(undefined);
+  const toQr = useCallback(() => setStep((s) => (s === "hub" ? "qr" : s)), []);
+  const noHub = useCallback(() => setHubState(null), []);
   const [qrBot, setQrBot] = useState<string | null>(null);
   const defaultBotName = (agentName ?? "").split("@")[0]?.trim() || "Mon assistant";
   const [token, setToken] = useState("");
@@ -127,6 +133,19 @@ export function TelegramConnect({
   return (
     <div className="space-y-5">
       <ChannelPanelHeader channel={channel} onBack={onBack} />
+
+      {step === "hub" && (
+        <div className="space-y-4">
+          <TelegramHub agentId={agentId} canManage onUnavailable={toQr} onState={setHubState} />
+          {!hubState && (
+            <Button variant="ghost" onClick={() => setStep("qr")}>
+              Autres méthodes (QR seul, jeton BotFather)
+            </Button>
+          )}
+        </div>
+      )}
+
+      {step === "connected" && hubState !== null && <TelegramHub agentId={agentId} canManage hideWhenEmpty onState={setHubState} onUnavailable={noHub} />}
 
       {step === "qr" && (
         <div className="space-y-4">
@@ -228,7 +247,7 @@ export function TelegramConnect({
         </div>
       )}
 
-      {step === "connected" && (
+      {step === "connected" && hubState === null && (
         <div className="space-y-4">
           <div className="flex items-start gap-2">
             <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />

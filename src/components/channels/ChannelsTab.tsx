@@ -13,6 +13,7 @@ import {
   type MessagingPlatform,
 } from "@/lib/channels";
 import type { MergedAgent } from "@/lib/types";
+import type { TelegramHubStatus } from "@/lib/agent37";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { channelBrand } from "@/components/channels/BrandIcons";
@@ -54,9 +55,16 @@ export function ChannelsTab({
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
-  // Le bot du membre et son groupe à sujets, par la passerelle d'exécution ; masqué là où elle ne l'offre pas.
-  const [hubShown, setHubShown] = useState(true);
-  const hideHub = useCallback(() => setHubShown(false), []);
+  // Un Telegram posé par la passerelle a déjà ses sujets : l'ancien bouton « Créer les sujets » (groupe /sethome) s'efface.
+  const [hubTelegram, setHubTelegram] = useState(false);
+  useEffect(() => {
+    if (hermesTools !== true) return;
+    let alive = true;
+    apiFetch<TelegramHubStatus>(`/api/agents/${agentId}/channels/telegram/hub`).then((r) => alive && setHubTelegram(Boolean(r.state)), () => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [agentId, hermesTools]);
 
   const load = useCallback(
     async (quiet = false) => {
@@ -128,7 +136,6 @@ export function ChannelsTab({
 
   return (
     <div className="space-y-6">
-      {hubShown && <TelegramHub agentId={agentId} canManage={canManage} onUnavailable={hideHub} />}
       <div className="flex items-start justify-between gap-4">
         <Header />
         <Button variant="ghost" size="sm" disabled={loading} onClick={() => load()} aria-label="Actualiser les canaux" className="max-sm:size-10">
@@ -162,7 +169,7 @@ export function ChannelsTab({
           </div>
 
           {/* One Telegram topic per expert, once the bot is connected. */}
-          {canManage && (
+          {canManage && !hubTelegram && (
             <TelegramTopics
               agentId={agentId}
               telegramConnected={(channels ?? []).some((c) => c.id === "telegram" && isChannelConnected(c))}

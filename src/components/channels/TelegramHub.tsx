@@ -13,7 +13,7 @@ const TG_LINK = /^https:\/\/t\.me\//;
 // Telegram d'une instance (Hermes ou Claude Code), par le bot gestionnaire de Yelema : le membre crée SON
 // bot en un geste, l'ajoute à un groupe à sujets, et chaque expert y reçoit son sujet. Tant qu'une étape
 // attend Telegram, l'état est relu ; `onUnavailable` masque le bloc là où la passerelle ne l'offre pas.
-export function TelegramHub({ agentId, canManage, onUnavailable }: { agentId: string; canManage: boolean; onUnavailable?: () => void }) {
+export function TelegramHub({ agentId, canManage, onUnavailable, onState, hideWhenEmpty }: { agentId: string; canManage: boolean; onUnavailable?: () => void; onState?: (state: TelegramHubStatus["state"]) => void; hideWhenEmpty?: boolean }) {
   const [status, setStatus] = useState<TelegramHubStatus | null>(null);
   const [waiting, setWaiting] = useState(false);
   const [busy, setBusy] = useState<"link" | "sync" | "off" | null>(null);
@@ -22,11 +22,13 @@ export function TelegramHub({ agentId, canManage, onUnavailable }: { agentId: st
 
   const load = useCallback(async () => {
     try {
-      setStatus(await apiFetch<TelegramHubStatus>(base));
+      const next = await apiFetch<TelegramHubStatus>(base);
+      setStatus(next);
+      onState?.(next.state);
     } catch {
       onUnavailable?.();
     }
-  }, [base, onUnavailable]);
+  }, [base, onUnavailable, onState]);
 
   useEffect(() => void load(), [load]);
 
@@ -75,8 +77,8 @@ export function TelegramHub({ agentId, canManage, onUnavailable }: { agentId: st
     setTimeout(() => setCopied(false), 1500);
   };
 
-  if (!status) return <div className="h-24 animate-pulse rounded-lg border bg-card" />;
-  if (!status.connected) return null;
+  if (!status) return hideWhenEmpty ? null : <div className="h-24 animate-pulse rounded-lg border bg-card" />;
+  if (!status.connected || (hideWhenEmpty && !status.state)) return null;
   const s = status.state;
 
   return (
