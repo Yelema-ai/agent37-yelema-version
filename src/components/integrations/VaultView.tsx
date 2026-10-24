@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Pager } from "@/components/Pager";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
+import { Picker } from "@/components/ui/picker";
 import { paginate } from "@/lib/paginate";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { IDENTIFIER_TYPES, INSTANCE_PROFILE, entriesOf, profileLabel, type VaultDraft, type VaultEntry, type VaultOverview } from "@/lib/vault";
@@ -31,9 +32,9 @@ function groupKeys(items: VaultEntry[]): KeyGroup[] {
 }
 const vaultUrl = (profile: string, handle?: string) => `/api/vault/own/${encodeURIComponent(profile)}${handle ? `/${encodeURIComponent(handle)}` : ""}`;
 
-// Intégrations · Clés : les connexions confiées aux experts de SA propre instance, en une liste (Leslie,
-// 24/10) : une clé pour tous les experts ou pour certains. Le coffre est par expert : une même clé
-// posée chez plusieurs y figure une fois par expert, et la liste la montre une fois, avec qui l'a.
+// Intégrations · Accès aux sites : les connexions confiées aux experts de SA propre instance, en une liste (Leslie,
+// 24/10) : un accès pour tous les experts ou pour certains. Le coffre est par expert : un même accès
+// posée chez plusieurs y figure une fois par expert, et la liste le montre une fois, avec qui l'a.
 export function VaultView() {
   // Each Expert by the name the member sees everywhere else (Djénéba, not « Djeneba »).
   const { experts } = useExpertsContext();
@@ -41,6 +42,8 @@ export function VaultView() {
   const [data, setData] = useState<VaultOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  // The Expert the list is narrowed to, chosen on the page itself (« » : every key).
+  const [only, setOnly] = useState("");
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<KeyGroup | null>(null);
 
@@ -58,14 +61,14 @@ export function VaultView() {
   }, [load]);
 
   const all = experts_(data);
-  const rows = data ? groupKeys(entriesOf(data.items, null)) : [];
+  const rows = data ? groupKeys(entriesOf(data.items, null)).filter((g) => !only || g.entries.some((e) => e.profile === only)) : [];
   const holders = (g: KeyGroup) => (all.length > 1 && all.every((p) => g.entries.some((e) => e.profile === p)) ? "Tous les experts" : g.entries.map((e) => nameOf(e.profile)).join(", "));
   const shown = paginate(rows, page, PER_PAGE);
 
   // One call per expert: the vault has no shared key.
   async function add(targets: string[], draft: VaultDraft) {
     for (const t of targets) await apiFetch(vaultUrl(t), { method: "POST", body: JSON.stringify(draft) });
-    toast.success(`Clé « ${draft.label} » confiée à ${targets.length === all.length && all.length > 1 ? "tous les experts" : targets.map(nameOf).join(", ")}`);
+    toast.success(`Accès « ${draft.label} » confié à ${targets.length === all.length && all.length > 1 ? "tous les experts" : targets.map(nameOf).join(", ")}`);
     setAdding(false);
     await load();
   }
@@ -73,7 +76,7 @@ export function VaultView() {
   async function remove() {
     if (!removing) return;
     for (const e of removing.entries) await apiFetch(vaultUrl(e.profile, e.id), { method: "DELETE" });
-    toast.success(`Clé « ${removing.label} » retirée`);
+    toast.success(`Accès « ${removing.label} » retiré`);
     await load();
   }
 
@@ -81,14 +84,26 @@ export function VaultView() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Clés des experts</h2>
+          <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Accès aux sites</h2>
           <p className="mt-1 max-w-xl text-sm text-ink-3">Confiez à un expert l’accès à un site : il s’y connecte pour vous, sans jamais voir le mot de passe.</p>
         </div>
         <Button onClick={() => setAdding(true)} disabled={!data || all.length === 0} className="self-start sm:self-auto">
-          <Plus /> Ajouter une clé
+          <Plus /> Ajouter un accès
         </Button>
       </div>
 
+
+      <Picker
+        label="Experts"
+        placeholder="Tous les experts"
+        value={only}
+        onChange={(v) => {
+          setOnly(v);
+          setPage(1);
+        }}
+        groups={[{ options: [{ value: "", label: "Tous les experts" }, ...all.map((p) => ({ value: p, label: nameOf(p) }))] }]}
+        className="w-full max-w-xs"
+      />
 
       <div className="flex items-start gap-3.5 rounded-[22px] border border-line bg-surface p-4 text-sm text-ink-2">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-tint text-brand">
@@ -108,10 +123,10 @@ export function VaultView() {
         </div>
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-line px-6 py-12 text-center">
-          <p className="text-sm font-semibold text-ink">Aucune clé confiée à vos experts</p>
+          <p className="text-sm font-semibold text-ink">{only ? `Aucun accès confié à ${nameOf(only)}` : "Aucun accès confié à vos experts"}</p>
           <p className="mt-1 max-w-sm text-xs text-ink-3">Ajoutez l’accès à un site (portail administratif, banque, outil métier) et dites à quoi il sert.</p>
           <Button onClick={() => setAdding(true)} variant="outline" size="sm" className="mt-4">
-            <Plus /> Ajouter une clé
+            <Plus /> Ajouter un accès
           </Button>
         </div>
       ) : (

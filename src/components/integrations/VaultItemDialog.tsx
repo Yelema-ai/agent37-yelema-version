@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 const EMPTY: VaultDraft = { label: "", origin: "", identifierType: "email", identifier: "", password: "", purpose: "" };
 const PLACEHOLDER: Record<IdentifierType, string> = { email: "rh@entreprise.ci", username: "acme-tresorerie", phone: "+225 07 00 00 00 00" };
 
-// Ajout d'une clé : ce que demande `hermes vault add`, plus une description pour l'expert. Pas de 2FA.
+// Ajout d'un accès : ce que demande `hermes vault add`, plus une description pour l'expert. Pas de 2FA.
 // Pour tous les experts (par défaut) ou pour certains, cochés. Le brouillon part au back-office ; un
 // dialogue refermé repart vide (le mot de passe ne reste pas).
 export function VaultItemDialog({ open, onOpenChange, profiles, nameOf, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; profiles: string[]; nameOf: (profile: string) => string; onSave: (profiles: string[], draft: VaultDraft) => Promise<void> }) {
@@ -50,7 +50,7 @@ export function VaultItemDialog({ open, onOpenChange, profiles, nameOf, onSave }
       <DialogContent className="max-w-lg">
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
-            <DialogTitle>Ajouter une clé</DialogTitle>
+            <DialogTitle>Ajouter un accès</DialogTitle>
             <DialogDescription>Les experts choisis pourront se connecter à ce site sans jamais voir le mot de passe.</DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
@@ -111,9 +111,9 @@ export function VaultItemDialog({ open, onOpenChange, profiles, nameOf, onSave }
             <Input id="v-password" type="password" value={draft.password} maxLength={1024} autoComplete="new-password" onChange={(e) => set("password", e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="v-purpose">À quoi sert cette clé</Label>
+            <Label htmlFor="v-purpose">À quoi sert cet accès</Label>
             <textarea id="v-purpose" value={draft.purpose} maxLength={300} rows={3} placeholder="Déclarer les salariés à la CNPS chaque mois" onChange={(e) => set("purpose", e.target.value)} className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand" />
-            <p className="text-xs text-ink-3">L’expert lit cette description pour savoir quand utiliser cette clé.</p>
+            <p className="text-xs text-ink-3">L’expert lit cette description pour savoir quand utiliser cet accès.</p>
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}>

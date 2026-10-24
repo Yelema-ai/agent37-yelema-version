@@ -16,7 +16,7 @@ const TABS = [
   { href: "/integrations/voix", label: "Voix", exact: false, adminOnly: false, backoffice: true },
   { href: "/integrations/modeles", label: "Modèles", exact: false, adminOnly: false, backoffice: true },
   { href: "/integrations/mcp", label: "MCP", exact: false, adminOnly: false },
-  { href: "/integrations/identifiants", label: "Clés", exact: false, adminOnly: false, backoffice: true },
+  { href: "/integrations/identifiants", label: "Accès aux sites", exact: false, adminOnly: false, backoffice: true },
 ];
 
 // Le cadre des intégrations : ce qui se branche sur les experts. Aperçu n'a plus d'onglet (ses chiffres iront dans
@@ -24,7 +24,7 @@ const TABS = [
 // règlent sa propre instance. E-mails, pour les admins, dit qui peut faire écrire chaque expert.
 // Modèles dit sur quel compte de modèle tournent les experts : un admin le règle pour l'entreprise
 // ou pour un membre, un membre pour lui-même si son admin l'a permis. MCP, aux mêmes portées, branche
-// sur les experts les serveurs d'outils du client. Clés (adresse /identifiants) confie à un expert l'accès à un site. Voix porte la clé de transcription du client.
+// sur les experts les serveurs d'outils du client. Accès aux sites (adresse /identifiants) confie à un expert l'accès à un site. Voix porte la clé de transcription du client.
 export default function IntegrationsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { current } = useWorkspace();
