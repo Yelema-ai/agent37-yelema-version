@@ -7,8 +7,6 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Pager } from "@/components/Pager";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
-import { ExpertImage } from "@/components/experts/ExpertImage";
-import { cn } from "@/lib/utils";
 import { paginate } from "@/lib/paginate";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { IDENTIFIER_TYPES, INSTANCE_PROFILE, entriesOf, profileLabel, type VaultDraft, type VaultEntry, type VaultOverview } from "@/lib/vault";
@@ -19,23 +17,32 @@ const typeLabel = (t: VaultEntry["identifierType"]) => IDENTIFIER_TYPES.find((x)
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 // The Experts only: the instance's own profile is not one to pick.
 const experts_ = (data: VaultOverview | null) => (data?.profiles ?? []).filter((p) => p !== INSTANCE_PROFILE);
+// The same key held by several experts: one row, its entries kept to remove it everywhere.
+type KeyGroup = VaultEntry & { key: string; entries: VaultEntry[] };
+function groupKeys(items: VaultEntry[]): KeyGroup[] {
+  const groups = new Map<string, KeyGroup>();
+  for (const it of items) {
+    const k = [it.label, it.origin, it.identifierType].join("|");
+    const g = groups.get(k);
+    if (g) g.entries.push(it);
+    else groups.set(k, { ...it, key: k, entries: [it] });
+  }
+  return [...groups.values()];
+}
 const vaultUrl = (profile: string, handle?: string) => `/api/vault/own/${encodeURIComponent(profile)}${handle ? `/${encodeURIComponent(handle)}` : ""}`;
 
-// Intégrations · Clés : les connexions confiées aux experts de SA propre instance, toujours un expert
-// à la fois (Leslie, 24/10) : on choisit l'expert en haut, on voit et on ajoute ses clés.
+// Intégrations · Clés : les connexions confiées aux experts de SA propre instance, en une liste (Leslie,
+// 24/10) : une clé pour tous les experts ou pour certains. Le coffre est par expert : une même clé
+// posée chez plusieurs y figure une fois par expert, et la liste la montre une fois, avec qui l'a.
 export function VaultView() {
   // Each Expert by the name the member sees everywhere else (Djénéba, not « Djeneba »).
   const { experts } = useExpertsContext();
   const nameOf = (p: string) => experts.find((e) => e.profileId === p)?.displayName ?? profileLabel(p);
   const [data, setData] = useState<VaultOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [chosen, setProfile] = useState<string | null>(null);
-  // An Expert is always chosen: the first one holding keys (else the first) until the member picks another.
-  const profile = chosen ?? experts_(data).find((p) => data && entriesOf(data.items, p).length > 0) ?? experts_(data)[0] ?? null;
-  const photoOf = (p: string) => experts.find((e) => e.profileId === p)?.photoUrl ?? null;
   const [page, setPage] = useState(1);
   const [adding, setAdding] = useState(false);
-  const [removing, setRemoving] = useState<VaultEntry | null>(null);
+  const [removing, setRemoving] = useState<KeyGroup | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -50,20 +57,23 @@ export function VaultView() {
     void load();
   }, [load]);
 
-  const rows = data ? entriesOf(data.items, profile) : [];
+  const all = experts_(data);
+  const rows = data ? groupKeys(entriesOf(data.items, null)) : [];
+  const holders = (g: KeyGroup) => (all.length > 1 && all.every((p) => g.entries.some((e) => e.profile === p)) ? "Tous les experts" : g.entries.map((e) => nameOf(e.profile)).join(", "));
   const shown = paginate(rows, page, PER_PAGE);
 
-  async function add(target: string, draft: VaultDraft) {
-    await apiFetch(vaultUrl(target), { method: "POST", body: JSON.stringify(draft) });
-    toast.success(`Connexion « ${draft.label} » confiée à ${nameOf(target)}`);
+  // One call per expert: the vault has no shared key.
+  async function add(targets: string[], draft: VaultDraft) {
+    for (const t of targets) await apiFetch(vaultUrl(t), { method: "POST", body: JSON.stringify(draft) });
+    toast.success(`Clé « ${draft.label} » confiée à ${targets.length === all.length && all.length > 1 ? "tous les experts" : targets.map(nameOf).join(", ")}`);
     setAdding(false);
     await load();
   }
 
   async function remove() {
     if (!removing) return;
-    await apiFetch(vaultUrl(removing.profile, removing.id), { method: "DELETE" });
-    toast.success(`Connexion « ${removing.label} » retirée`);
+    for (const e of removing.entries) await apiFetch(vaultUrl(e.profile, e.id), { method: "DELETE" });
+    toast.success(`Clé « ${removing.label} » retirée`);
     await load();
   }
 
@@ -71,43 +81,14 @@ export function VaultView() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">{profile ? `Clés de ${nameOf(profile)}` : "Clés des experts"}</h2>
+          <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Clés des experts</h2>
           <p className="mt-1 max-w-xl text-sm text-ink-3">Confiez à un expert l’accès à un site : il s’y connecte pour vous, sans jamais voir le mot de passe.</p>
         </div>
-        <Button onClick={() => setAdding(true)} disabled={!data || !profile} className="self-start sm:self-auto">
-          <Plus /> {profile ? `Ajouter une clé pour ${nameOf(profile)}` : "Ajouter une clé"}
+        <Button onClick={() => setAdding(true)} disabled={!data || all.length === 0} className="self-start sm:self-auto">
+          <Plus /> Ajouter une clé
         </Button>
       </div>
 
-      <div role="tablist" aria-label="Expert" className="flex flex-wrap gap-2">
-        {experts_(data).map((p) => {
-          const on = p === profile;
-          const n = data ? entriesOf(data.items, p).length : 0;
-          const photo = photoOf(p);
-          return (
-            <button
-              key={p}
-              type="button"
-              role="tab"
-              aria-selected={on}
-              onClick={() => {
-                setProfile(p);
-                setPage(1);
-              }}
-              className={cn(
-                "inline-flex h-11 items-center gap-2 rounded-full border py-1 pl-1 pr-3.5 text-[13.5px] font-semibold transition-colors",
-                on ? "border-brand bg-tint text-brand-ink" : "border-line bg-surface text-ink-2 hover:bg-soft"
-              )}
-            >
-              <span className="relative size-8 shrink-0 overflow-hidden rounded-full bg-soft">
-                {photo && <ExpertImage src={photo} size={32} className="absolute inset-0 size-full object-cover object-[50%_20%]" />}
-              </span>
-              {nameOf(p)}
-              {n > 0 && <span className="text-[12px] font-medium text-ink-3">{n}</span>}
-            </button>
-          );
-        })}
-      </div>
 
       <div className="flex items-start gap-3.5 rounded-[22px] border border-line bg-surface p-4 text-sm text-ink-2">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-tint text-brand">
@@ -127,7 +108,7 @@ export function VaultView() {
         </div>
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-line px-6 py-12 text-center">
-          <p className="text-sm font-semibold text-ink">{profile ? `Aucune clé confiée à ${nameOf(profile)}` : "Aucune clé confiée à vos experts"}</p>
+          <p className="text-sm font-semibold text-ink">Aucune clé confiée à vos experts</p>
           <p className="mt-1 max-w-sm text-xs text-ink-3">Ajoutez l’accès à un site (portail administratif, banque, outil métier) et dites à quoi il sert.</p>
           <Button onClick={() => setAdding(true)} variant="outline" size="sm" className="mt-4">
             <Plus /> Ajouter une clé
@@ -140,6 +121,7 @@ export function VaultView() {
               <thead className="bg-soft text-left text-xs text-ink-3">
                 <tr>
                   <th className="px-4 py-2.5 font-medium">Libellé</th>
+                  <th className="px-4 py-2.5 font-medium">Experts</th>
                   <th className="px-4 py-2.5 font-medium">Site</th>
                   <th className="px-4 py-2.5 font-medium">À quoi elle sert</th>
                   <th className="px-4 py-2.5 font-medium">Ajoutée le</th>
@@ -148,7 +130,7 @@ export function VaultView() {
               </thead>
               <tbody>
                 {shown.items.map((it) => (
-                  <tr key={`${it.profile}:${it.id}`} className="border-t border-line align-top">
+                  <tr key={it.key} className="border-t border-line align-top">
                     <td className="px-4 py-3 text-ink">
                       {it.label}
                       {/* Ni l'identifiant ni l'adresse : seulement leur nature, rien qui se lise par-dessus l'épaule. */}
@@ -156,6 +138,7 @@ export function VaultView() {
                         <Lock className="size-3" /> {typeLabel(it.identifierType)} enregistré
                       </span>
                     </td>
+                    <td className="max-w-[180px] px-4 py-3 text-ink-2">{holders(it)}</td>
                     <td className="max-w-[220px] truncate px-4 py-3 font-mono text-[12px] text-ink-2" title={it.origin}>{it.origin}</td>
                     <td className="max-w-[260px] px-4 py-3 text-ink-3">{it.purpose || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-ink-3">{day(it.createdAt)}</td>
@@ -173,13 +156,13 @@ export function VaultView() {
         </div>
       )}
 
-      <VaultItemDialog open={adding} onOpenChange={setAdding} profile={profile} profiles={experts_(data)} nameOf={nameOf} onSave={add} />
+      <VaultItemDialog open={adding} onOpenChange={setAdding} profiles={all} nameOf={nameOf} onSave={add} />
 
       <ConfirmDialog
         open={Boolean(removing)}
         onOpenChange={(open) => !open && setRemoving(null)}
         title="Retirer la connexion"
-        description={`Retirer « ${removing?.label ?? ""} » ? ${removing ? nameOf(removing.profile) : "L’expert"} ne pourra plus se connecter à ce site.`}
+        description={`Retirer « ${removing?.label ?? ""} » ? ${removing ? holders(removing) : "Les experts"} ne pourront plus se connecter à ce site.`}
         confirmText="Retirer"
         destructive
         onConfirm={remove}

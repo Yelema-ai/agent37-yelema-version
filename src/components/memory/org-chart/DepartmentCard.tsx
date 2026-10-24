@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, CornerDownRight, MoreHorizontal, Pencil, Plus, Sparkles, Star, Trash2 } from "lucide-react";
+import { Check, ChevronDown, CornerDownRight, MoreHorizontal, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import type { OrgMember, OrgPlacement, OrgRole, OrgUnit } from "@/lib/memory";
 import {
   DropdownMenu,
@@ -85,7 +85,7 @@ export function DepartmentCard({
   const expertOf = (r: Row) => r.member.experts.find((x) => x.profile === r.place.profile);
   const expertLabel = (r: Row) => expertOf(r)?.label ?? r.place.profile ?? "";
   const remove = (r: Row) => void org.change(`/api/org/assignments/${r.place.id}`, "DELETE", undefined, "Retiré du département.");
-  // A photo and a name: the head marked with a star, everything else in the row's « … ».
+  // A photo, a name and the role in the department under it; changing it or removing is in the row's « … ».
   const row = (r: Row, name: string, photo: string | null, expert: boolean, drag: DragItem) => (
     <li
       key={r.place.id}
@@ -94,9 +94,11 @@ export function DepartmentCard({
       className={cn("group flex min-h-12 items-center gap-2.5 rounded-xl px-2 py-1.5", editable && "cursor-grab hover:bg-soft")}
     >
       <Face name={name} photo={photo} expert={expert} />
-      <span className="flex min-w-0 grow items-center gap-1.5">
-        <span className="truncate text-[14px] font-semibold text-ink">{name}</span>
-        {r.place.role === "head" && <Star aria-label="Responsable" className="size-3.5 shrink-0 fill-brand text-brand" />}
+      <span className="min-w-0 grow leading-tight">
+        <span className="block truncate text-[14px] font-semibold text-ink">{name}</span>
+        <span className={cn("block truncate text-[12px]", r.place.role === "head" ? "font-semibold text-brand-ink" : "text-ink-3")}>
+          {expert ? (r.place.role === "head" ? "Expert, responsable" : "Expert") : ROLE_LABEL[r.place.role]}
+        </span>
       </span>
       {editable && <RowMenu role={r.place.role} label={name} onRole={(role) => void org.setRole(r.place.id, role)} onRemove={() => remove(r)} />}
     </li>
