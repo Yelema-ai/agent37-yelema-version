@@ -194,9 +194,9 @@ export function AgentWorkspace({
                       onClick={() => (canEdit ? setEditOpen(true) : setVoiceOpen(true))}
                       title={`Personnaliser ${expertName}`}
                       aria-label={`Personnaliser ${expertName}`}
-                      className="absolute -bottom-1 -left-1 grid size-6 place-items-center rounded-full bg-ink text-surface ring-2 ring-surface hover:opacity-85 lg:size-7"
+                      className="absolute -bottom-1 -right-1 grid size-5 place-items-center rounded-full bg-ink text-surface ring-2 ring-surface hover:opacity-85 lg:size-7"
                     >
-                      <Pencil className="size-3 lg:size-3.5" />
+                      <Pencil className="size-2.5 lg:size-3.5" />
                     </button>
                   )}
                 </span>

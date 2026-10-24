@@ -106,7 +106,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
         {!collapsed && (
           <>
             Rechercher
-            <kbd className="ml-auto rounded-md border border-line px-1.5 py-0.5 font-sans text-[11px] font-medium text-ink-3">Ctrl K</kbd>
+            <kbd className="ml-auto rounded-md max-md:hidden border border-line px-1.5 py-0.5 font-sans text-[11px] font-medium text-ink-3">Ctrl K</kbd>
           </>
         )}
       </button>

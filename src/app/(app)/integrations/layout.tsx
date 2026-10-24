@@ -43,11 +43,12 @@ export default function IntegrationsLayout({ children }: { children: React.React
 
   return (
     <>
+      <h1 className="mx-auto w-full max-w-[1280px] px-4 pt-6 font-display text-[30px] font-bold tracking-tight text-ink sm:px-8">Intégrations</h1>
       {tabs.length > 1 && (
         <nav
           ref={nav}
           aria-label="Intégrations"
-          className="mx-auto flex w-full max-w-[1280px] shrink-0 gap-1 overflow-x-auto border-b border-line px-4 pt-4 [scrollbar-width:none] sm:px-8 [&::-webkit-scrollbar]:hidden"
+          className="mx-auto flex w-full max-w-[1280px] shrink-0 gap-1 overflow-x-auto border-b border-line px-4 pt-2 [scrollbar-width:none] sm:px-8 [&::-webkit-scrollbar]:hidden"
         >
           {tabs.map((tab) => {
             const active = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);

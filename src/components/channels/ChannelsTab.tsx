@@ -219,7 +219,7 @@ function ChannelRow({
           {error || channel.description || channelStateLabel(channel)}
         </p>
       </div>
-      <Button variant="outline" size="sm" disabled={!canManage} onClick={onOpen} className="max-sm:h-10">
+      <Button variant="outline" size="sm" disabled={!canManage} onClick={onOpen} className="rounded-full max-sm:h-10">
         {connected ? "Gérer" : isFeaturedChannel(channel.id) ? `Connecter ${channel.name}` : "Connecter"}
       </Button>
     </div>

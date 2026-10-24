@@ -331,7 +331,7 @@ function ToolTile({
           En attente
         </Button>
       ) : (
-        <Button size="sm" className="shrink-0" onClick={onConnect}>
+        <Button size="sm" variant="outline" className="shrink-0 rounded-full" onClick={onConnect}>
           Connecter
         </Button>
       )}
