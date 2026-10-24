@@ -428,6 +428,13 @@ export function YeleBubble() {
     window.addEventListener(OPEN_EVENT, show);
     return () => window.removeEventListener(OPEN_EVENT, show);
   }, []);
+  // Escape closes the panel, as it closes any window laid over the page.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
   // A folded call floats in the same corner on a computer (on a phone it is a strip at the top).
   const { folded } = useCallState();
   if (!companion) return null;
