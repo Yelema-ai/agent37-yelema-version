@@ -13,7 +13,7 @@ import { DEFAULT_NOTIFY_PREFS, readNotifyPrefs, saveNotifyPrefs, type NoticeKind
 // Paramètres · Notifications : ce qui mérite d'interrompre, sur le web et dans l'app seulement.
 // Un type coupé reste dans la cloche ; il ne s'affiche plus en bulle ni en notification.
 const KINDS: { kind: NoticeKind; label: string; hint: string }[] = [
-  { kind: "reply", label: "Réponses des Experts", hint: "Quand un Expert répond à votre message." },
+  { kind: "reply", label: "Réponses", hint: "Quand le chat d’entreprise ou un Expert vous répond." },
   { kind: "routine", label: "Routines terminées", hint: "Quand une routine a livré son résultat." },
   { kind: "deliverable", label: "Nouveaux livrables", hint: "Quand un fichier arrive dans les livrables." },
   { kind: "failed", label: "Problèmes", hint: "Une réponse qui échoue, un compte d’IA à recharger." },

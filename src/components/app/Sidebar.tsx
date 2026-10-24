@@ -141,7 +141,8 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
 
       {/* The Experts and the conversations scroll between the top of the menu and its foot, which stay put. */}
       <div className={cn("-mx-3 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3", collapsed && "-mx-2.5 items-center px-2.5")}>
-      {!collapsed && (
+      {/* An employee with the company chat only has no Experts: no empty heading then. */}
+      {!collapsed && experts.length > 0 && (
         <div className="px-2.5 pt-4 pb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-3">Mes Experts</div>
       )}
 

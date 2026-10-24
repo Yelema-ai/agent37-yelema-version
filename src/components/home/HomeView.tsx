@@ -2,7 +2,7 @@
 
 import { useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, ChevronDown, ListChecks, Loader2, Lock, Mail, Mic, Send, Sun } from "lucide-react";
+import { CalendarDays, ChevronDown, FileText, ListChecks, Loader2, Lock, Mail, Mic, ReceiptText, Send, Sheet, Sun } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useWorkspace } from "@/components/WorkspaceProvider";
@@ -25,6 +25,14 @@ const SHORTCUTS = [
   { label: "Préparer une réunion", icon: CalendarDays },
   { label: "Résumer mes emails", icon: Mail },
   { label: "Suivre un dossier", icon: ListChecks },
+] as const;
+// Who has the chat d'entreprise only (no Djénéba to read their mail or agenda): openers on the
+// files they bring, as in the maquette of Serge's view.
+const CHAT_SHORTCUTS = [
+  { label: "Analyser un Excel", icon: Sheet },
+  { label: "Résumer un PDF", icon: FileText },
+  { label: "Rédiger un email", icon: Mail },
+  { label: "Vérifier une facture", icon: ReceiptText },
 ] as const;
 const isDjeneba = (e: Expert) => (e.catalogueKey ?? e.profileId).toLowerCase().includes("djeneba");
 
@@ -198,7 +206,7 @@ export function HomeView() {
           </section>
 
           <div className="mt-3 flex flex-wrap justify-center gap-2">
-            {SHORTCUTS.map(({ label, icon: Icon }) => (
+            {(djeneba ? SHORTCUTS : CHAT_SHORTCUTS).map(({ label, icon: Icon }) => (
               <button
                 key={label}
                 type="button"
@@ -233,7 +241,8 @@ export function HomeView() {
         )
       ) : loading && experts.length === 0 ? (
         <p className="mt-4 text-sm text-ink-3">Chargement de votre équipe…</p>
-      ) : experts.length === 0 ? (
+      ) : experts.length === 0 && (unreadable > 0 || !ownAgentId) ? (
+        // With nothing unreadable, a member who has their chat d'entreprise is not waiting for anyone.
         <p className="mt-4 max-w-xl text-sm text-ink-2">
           {unreadable > 0
             ? "Votre équipe n’est pas joignable pour le moment. Réessayez dans un instant."
