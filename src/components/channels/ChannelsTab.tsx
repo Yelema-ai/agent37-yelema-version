@@ -75,7 +75,8 @@ export function ChannelsTab({
   );
 
   useEffect(() => {
-    if (reachable && hermesTools !== false) void load();
+    // Only once the runtime is known: a Claude Code instance has no Hermes channel API to read.
+    if (reachable && hermesTools === true) void load();
   }, [reachable, hermesTools, load]);
 
   if (hermesTools === false) {
