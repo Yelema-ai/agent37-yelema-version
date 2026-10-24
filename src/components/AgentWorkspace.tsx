@@ -31,7 +31,6 @@ import { CallButton } from "@/components/voice/CallButton";
 import { VoiceButton } from "@/components/voice/VoiceButton";
 import { ExpertCalls } from "@/components/voice/ExpertCalls";
 import { useVoices } from "@/components/voice/useVoices";
-import { useRuntimeTools } from "@/components/experts/useRuntimeTools";
 
 const TABS: { id: AgentTab; label: string; icon: typeof MessageSquare }[] = [
   { id: "chat", label: "Discussion", icon: MessageSquare },
@@ -117,10 +116,8 @@ export function AgentWorkspace({
   // only for an expert that has an inbox.
   // Calls are offered where voice is on, for an expert of the catalogue.
   const voiceOn = useVoices().length > 0;
-  // Routines are Hermes's own scheduler: an instance on another runtime runs its pack's jobs itself.
-  const hermesTools = useRuntimeTools(agentId);
   const tabs = TABS.filter((t) =>
-    t.id === "routines" ? profileId !== null && hermesTools !== false
+    t.id === "routines" ? profileId !== null
     : t.id === "tools" ? profileId !== null
     : t.id === "emails" ? inbox !== null
     : t.id === "calls" ? voiceOn && Boolean(expert?.catalogueKey)

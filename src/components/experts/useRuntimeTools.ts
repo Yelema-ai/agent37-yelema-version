@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
-// Whether this instance's runtime serves the Hermes-only screens (routines, messaging channels).
+// Whether this instance's runtime serves the Hermes-only screens (messaging channels).
 // `null` while unknown; a read that failed counts as Hermes (as the route does without the gateway).
 export function useRuntimeTools(agentId: string | null): boolean | null {
   const [state, setState] = useState<{ agentId: string; hermesTools: boolean } | null>(null);

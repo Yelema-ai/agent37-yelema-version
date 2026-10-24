@@ -1,6 +1,6 @@
 import { agent37 } from "@/lib/agent37";
 import { requireAgentAccess } from "@/lib/auth";
-import { hermesCron } from "@/lib/hermes-cron";
+import { routinesOf } from "@/lib/routine-store";
 import { handleError, json } from "@/lib/http";
 import { profileQuery } from "@/lib/profiles";
 import { isRunOf, runOutcome, type RoutineRun } from "@/lib/routines";
@@ -21,7 +21,7 @@ export async function GET(request: Request, { params }: Ctx) {
     const { row } = await requireAgentAccess(id);
     const expert = await routineExpert(row, new URL(request.url).searchParams.get("expert"));
     const query = profileQuery(expert.profile);
-    const [hermesName, { data }] = await Promise.all([hermesCron.hermesName(id, expert.profile, routineId), agent37.listSessions(id, query)]);
+    const [hermesName, { data }] = await Promise.all([(await routinesOf(id)).hermesName(id, expert.profile, routineId), agent37.listSessions(id, query)]);
 
     const sessions = data
       .filter((s) => isRunOf(s, { id: routineId, hermesName }))
