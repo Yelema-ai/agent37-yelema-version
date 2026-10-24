@@ -100,7 +100,7 @@ export function ModelsView() {
   if (!("unsupported" in claude)) {
     return (
       <div className="space-y-6">
-        <p className="text-[15px] text-ink-2">Cette instance tourne sous Claude Code : connectez un abonnement Claude ou une clé API Anthropic.</p>
+        <p className="text-[15px] text-ink-2">Cette instance tourne sous Claude Code : connectez un abonnement Claude, ou ajoutez des clés API et des jetons d’abonnement.</p>
         <ClaudeCodeModel status={claude} member={claudeMember} picker={picker} onChanged={loadClaude} />
         {admin && data.members && <MemberSources members={data.members} onPick={(id) => setScope(data.members?.find((m) => m.id === id)?.self ? { kind: "own" } : { kind: "member", id })} />}
       </div>

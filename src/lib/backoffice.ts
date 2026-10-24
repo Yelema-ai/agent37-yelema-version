@@ -12,7 +12,7 @@ import { isPublicId, type MemoryList, type MemoryNote, type MemoryPatch, type Or
 import { backofficeUrl, resolverToken } from "@/lib/runtime-config";
 import { SIGNALING_METHOD, type CallRecord, type SignalingStep, type VoiceOption } from "@/lib/voice";
 import { pinnedWorkspaceId } from "@/lib/tenant";
-import type { ClaudeAuth, ClaudeAuthStatus, ClaudeLogin } from "@/lib/claude-code-auth";
+import type { ClaudeAuth, ClaudeAuthStatus, ClaudeLogin, ClaudeUsage } from "@/lib/claude-code-auth";
 
 // The Yelema back office's API for this app (`/api/v1/app/*`, guide: yelema-platform
 // docs/specs/client-api-v1/app.md). It signs users in and says what they may see: their account,
@@ -32,6 +32,7 @@ const SETTING_WRITE_TIMEOUT_MS = 30_000;
 // Le code de connexion attend la réponse de Claude sur l'instance (jusqu'à ~25 s).
 const CLAUDE_LOGIN_TIMEOUT_MS = 60_000;
 const memberQuery = (member: string | null): string => (member ? `?member=${encodeURIComponent(member)}` : "");
+const withQuery = (query: string, name: string, value: string | null): string => (value ? `${query}${query ? "&" : "?"}${name}=${encodeURIComponent(value)}` : query);
 // An OAuth start or return waits on Hermes inside the instance (up to 45 s, then 60 s and a gateway restart).
 const MCP_OAUTH_TIMEOUT_MS = 115_000;
 // A portrait is drawn by the image model, which takes up to a minute.
@@ -466,8 +467,10 @@ export const backoffice = {
   startClaudeAuth: (token: string, member: string | null) => call<ClaudeLogin>(`/app/claude-code/auth${memberQuery(member)}`, { method: "POST", token, body: { method: "subscription" }, timeoutMs: CLAUDE_LOGIN_TIMEOUT_MS }),
   logoutClaudeAuth: (token: string, member: string | null) => call<{ ok: true; auth: ClaudeAuth }>(`/app/claude-code/auth${memberQuery(member)}`, { method: "DELETE", token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   submitClaudeCode: (token: string, member: string | null, code: string) => call<ClaudeLogin>(`/app/claude-code/auth/code${memberQuery(member)}`, { method: "POST", token, body: { code }, timeoutMs: CLAUDE_LOGIN_TIMEOUT_MS }),
-  putClaudeKey: (token: string, member: string | null, key: string) => call<{ ok: true; auth: ClaudeAuth }>(`/app/claude-code/auth/key${memberQuery(member)}`, { method: "PUT", token, body: { key }, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
-  deleteClaudeKey: (token: string, member: string | null) => call<{ ok: true; auth: ClaudeAuth }>(`/app/claude-code/auth/key${memberQuery(member)}`, { method: "DELETE", token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  putClaudeKey: (token: string, member: string | null, key: string, label: string | null) => call<{ ok: true } & ClaudeAuthStatus>(`/app/claude-code/auth/key${memberQuery(member)}`, { method: "PUT", token, body: { key, ...(label ? { label } : {}) }, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  deleteClaudeKey: (token: string, member: string | null, id: string | null) => call<{ ok: true } & ClaudeAuthStatus>(`/app/claude-code/auth/key${withQuery(memberQuery(member), "id", id)}`, { method: "DELETE", token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  orderClaudeKeys: (token: string, member: string | null, ids: string[]) => call<{ ok: true } & ClaudeAuthStatus>(`/app/claude-code/auth/order${memberQuery(member)}`, { method: "PUT", token, body: { ids }, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  claudeUsage: (token: string, member: string | null) => call<ClaudeUsage>(`/app/claude-code/auth/usage${memberQuery(member)}`, { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   llmAccount: (token: string, id: string) => call<LlmAccount>(`/app/llm/accounts/${id}`, { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   patchLlmAccount: (token: string, id: string, patch: { label?: string; secret?: string }) =>
     call<LlmWritten>(`/app/llm/accounts/${id}`, { method: "PATCH", token, body: patch, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
