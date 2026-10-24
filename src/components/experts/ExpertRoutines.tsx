@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { RoutineDialog, type RoutineExpert } from "./RoutineDialog";
 import { RoutineHistoryDialog } from "./RoutineHistoryDialog";
 import { RoutinesList } from "./RoutinesList";
-import { RoutinesTable } from "./RoutinesTable";
 
 export function ExpertRoutines({ agentId, expert }: { agentId: string; expert: RoutineExpert }) {
   const expertKey = expert.profileId;
@@ -111,8 +110,6 @@ export function ExpertRoutines({ agentId, expert }: { agentId: string; expert: R
   const active = routines?.filter((r) => !r.suggested) ?? [];
   const suggested = routines?.filter((r) => r.suggested) ?? [];
   const panel = "mt-5 rounded-[22px] border bg-card p-4 sm:p-5";
-  // Two layouts side by side until one is chosen: ?vue=tableau keeps the table.
-  const [table] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("vue") === "tableau");
 
   return (
     <div>
@@ -143,25 +140,11 @@ export function ExpertRoutines({ agentId, expert }: { agentId: string; expert: R
             </p>
           )}
         </div>
-      ) : !table && routines.length > 0 ? (
+      ) : routines.length > 0 ? (
         <RoutinesList routines={[...active, ...suggested]} expertName={expert.name} {...actions} />
       ) : (
         <section className={panel}>
-          {suggested.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm text-ink-3">
-                {suggested.length > 1 ? `${suggested.length} routines proposées par ${expert.name}` : `1 routine proposée par ${expert.name}`}
-              </p>
-              <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => void bulk(suggested, true)}>
-                {bulkBusy && <Loader2 className="animate-spin" />} Tout activer ({suggested.length})
-              </Button>
-            </div>
-          )}
-          {routines.length === 0 ? (
-            <p className="text-sm text-ink-3">Aucune routine pour l’instant. Créez la première.</p>
-          ) : (
-            <RoutinesTable routines={[...active, ...suggested]} {...actions} />
-          )}
+          <p className="text-sm text-ink-3">Aucune routine pour l’instant. Créez la première.</p>
         </section>
       )}
 

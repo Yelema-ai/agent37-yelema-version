@@ -7,6 +7,8 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Pager } from "@/components/Pager";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
+import { ExpertImage } from "@/components/experts/ExpertImage";
+import { cn } from "@/lib/utils";
 import { paginate } from "@/lib/paginate";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { IDENTIFIER_TYPES, INSTANCE_PROFILE, entriesOf, profileLabel, type VaultDraft, type VaultEntry, type VaultOverview } from "@/lib/vault";
@@ -19,15 +21,18 @@ const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("fr-
 const experts_ = (data: VaultOverview | null) => (data?.profiles ?? []).filter((p) => p !== INSTANCE_PROFILE);
 const vaultUrl = (profile: string, handle?: string) => `/api/vault/own/${encodeURIComponent(profile)}${handle ? `/${encodeURIComponent(handle)}` : ""}`;
 
-// Intégrations · Identifiants : les connexions confiées aux experts de SA propre instance. Une liste
-// déroulante filtre par expert (aucun choix : toutes) ; chaque affichage relit le coffre de l'instance.
+// Intégrations · Clés : les connexions confiées aux experts de SA propre instance, toujours un expert
+// à la fois (Leslie, 24/10) : on choisit l'expert en haut, on voit et on ajoute ses clés.
 export function VaultView() {
   // Each Expert by the name the member sees everywhere else (Djénéba, not « Djeneba »).
   const { experts } = useExpertsContext();
   const nameOf = (p: string) => experts.find((e) => e.profileId === p)?.displayName ?? profileLabel(p);
   const [data, setData] = useState<VaultOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [profile, setProfile] = useState<string | null>(null);
+  const [chosen, setProfile] = useState<string | null>(null);
+  // An Expert is always chosen: the first one holding keys (else the first) until the member picks another.
+  const profile = chosen ?? experts_(data).find((p) => data && entriesOf(data.items, p).length > 0) ?? experts_(data)[0] ?? null;
+  const photoOf = (p: string) => experts.find((e) => e.profileId === p)?.photoUrl ?? null;
   const [page, setPage] = useState(1);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<VaultEntry | null>(null);
@@ -66,33 +71,43 @@ export function VaultView() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">Clés des experts</h2>
+          <h2 className="font-display text-[24px] font-bold tracking-tight text-ink">{profile ? `Clés de ${nameOf(profile)}` : "Clés des experts"}</h2>
           <p className="mt-1 max-w-xl text-sm text-ink-3">Confiez à un expert l’accès à un site : il s’y connecte pour vous, sans jamais voir le mot de passe.</p>
         </div>
-        <Button onClick={() => setAdding(true)} disabled={!data} className="self-start sm:self-auto">
-          <Plus /> Ajouter une connexion
+        <Button onClick={() => setAdding(true)} disabled={!data || !profile} className="self-start sm:self-auto">
+          <Plus /> {profile ? `Ajouter une clé pour ${nameOf(profile)}` : "Ajouter une clé"}
         </Button>
       </div>
 
-      <label className="block max-w-xs space-y-1 text-xs font-semibold text-ink-3">
-        <span>Expert</span>
-        <select
-          value={profile ?? ""}
-          onChange={(e) => {
-            setProfile(e.target.value || null);
-            setPage(1);
-          }}
-          disabled={!data}
-          className="block w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm font-normal text-ink"
-        >
-          <option value="">Tous les experts</option>
-          {experts_(data).map((p) => (
-            <option key={p} value={p}>
+      <div role="tablist" aria-label="Expert" className="flex flex-wrap gap-2">
+        {experts_(data).map((p) => {
+          const on = p === profile;
+          const n = data ? entriesOf(data.items, p).length : 0;
+          const photo = photoOf(p);
+          return (
+            <button
+              key={p}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              onClick={() => {
+                setProfile(p);
+                setPage(1);
+              }}
+              className={cn(
+                "inline-flex h-11 items-center gap-2 rounded-full border py-1 pl-1 pr-3.5 text-[13.5px] font-semibold transition-colors",
+                on ? "border-brand bg-tint text-brand-ink" : "border-line bg-surface text-ink-2 hover:bg-soft"
+              )}
+            >
+              <span className="relative size-8 shrink-0 overflow-hidden rounded-full bg-soft">
+                {photo && <ExpertImage src={photo} size={32} className="absolute inset-0 size-full object-cover object-[50%_20%]" />}
+              </span>
               {nameOf(p)}
-            </option>
-          ))}
-        </select>
-      </label>
+              {n > 0 && <span className="text-[12px] font-medium text-ink-3">{n}</span>}
+            </button>
+          );
+        })}
+      </div>
 
       <div className="flex items-start gap-3.5 rounded-[22px] border border-line bg-surface p-4 text-sm text-ink-2">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-tint text-brand">
@@ -112,10 +127,10 @@ export function VaultView() {
         </div>
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-line px-6 py-12 text-center">
-          <p className="text-sm font-semibold text-ink">{profile ? `Aucune connexion confiée à ${nameOf(profile)}` : "Aucune connexion confiée à vos experts"}</p>
+          <p className="text-sm font-semibold text-ink">{profile ? `Aucune clé confiée à ${nameOf(profile)}` : "Aucune clé confiée à vos experts"}</p>
           <p className="mt-1 max-w-sm text-xs text-ink-3">Ajoutez l’accès à un site (portail administratif, banque, outil métier) et dites à quoi il sert.</p>
           <Button onClick={() => setAdding(true)} variant="outline" size="sm" className="mt-4">
-            <Plus /> Ajouter une connexion
+            <Plus /> Ajouter une clé
           </Button>
         </div>
       ) : (
@@ -124,7 +139,6 @@ export function VaultView() {
             <table className="w-full min-w-[700px] text-sm">
               <thead className="bg-soft text-left text-xs text-ink-3">
                 <tr>
-                  <th className="px-4 py-2.5 font-medium">Expert</th>
                   <th className="px-4 py-2.5 font-medium">Libellé</th>
                   <th className="px-4 py-2.5 font-medium">Site</th>
                   <th className="px-4 py-2.5 font-medium">À quoi elle sert</th>
@@ -135,7 +149,6 @@ export function VaultView() {
               <tbody>
                 {shown.items.map((it) => (
                   <tr key={`${it.profile}:${it.id}`} className="border-t border-line align-top">
-                    <td className="px-4 py-3 font-medium text-ink">{nameOf(it.profile)}</td>
                     <td className="px-4 py-3 text-ink">
                       {it.label}
                       {/* Ni l'identifiant ni l'adresse : seulement leur nature, rien qui se lise par-dessus l'épaule. */}
