@@ -4,7 +4,24 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowRight, Blocks, ChevronDown, Lock, PanelLeftClose, Search, Settings2, SquarePen } from "lucide-react";
+import {
+  ArrowRight,
+  Blocks,
+  Calculator,
+  ChevronDown,
+  Handshake,
+  Headset,
+  Layers,
+  Lock,
+  Megaphone,
+  PanelLeftClose,
+  Search,
+  Settings2,
+  SquarePen,
+  TrendingUp,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { AccountMenu } from "@/components/AccountMenu";
@@ -139,11 +156,15 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
                 type="button"
                 onClick={() => toggleCycle(g.cycle!.key)}
                 aria-expanded={!folded}
-                className="flex min-h-8 items-center gap-1 rounded-lg px-2.5 pt-2 text-left text-[12px] font-semibold text-ink-3 hover:text-ink"
+                className="flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 pt-2 text-left text-[12px] font-semibold text-ink-3 hover:text-ink"
               >
-                <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", folded && "-rotate-90")} />
+                {(() => {
+                  const Icon = cycleIcon(g.cycle.label);
+                  return <Icon className="size-3.5 shrink-0" />;
+                })()}
                 <span className="min-w-0 flex-1 truncate">{g.cycle.label}</span>
                 <span className="font-medium">{g.experts.length}</span>
+                <ChevronDown className={cn("size-3.5 shrink-0 transition-transform", folded && "-rotate-90")} />
               </button>
             )}
             {!folded &&
@@ -264,7 +285,28 @@ function CompanyChats({ agentId, pathname, onNavigate }: { agentId: string; path
   );
 }
 
-// Experts without a cycle first (Djénéba heads them), then one group per cycle, in the order met.
+// A cycle's icon and place, read from its label (the back office sends neither): the six cycles
+// Yelema sells, in the order of its offer, matched most specific first. Any other cycle comes after
+// them, with a neutral stack.
+const CYCLE_KINDS: { re: RegExp; icon: LucideIcon; rank: number }[] = [
+  { re: /invest|portefeuille/, icon: TrendingUp, rank: 5 },
+  { re: /client|fid[eé]lisation/, icon: Headset, rank: 4 },
+  { re: /commercial|vente/, icon: Handshake, rank: 0 },
+  { re: /marketing|communication/, icon: Megaphone, rank: 1 },
+  { re: /\brh\b|talent|ressources humaines/, icon: Users, rank: 2 },
+  { re: /financ|compta/, icon: Calculator, rank: 3 },
+];
+
+function cycleKind(label: string): { icon: LucideIcon; rank: number } {
+  const l = label.toLowerCase();
+  return CYCLE_KINDS.find((k) => k.re.test(l)) ?? { icon: Layers, rank: CYCLE_KINDS.length };
+}
+
+function cycleIcon(label: string): LucideIcon {
+  return cycleKind(label).icon;
+}
+
+// Experts without a cycle first (Djénéba heads them), then one group per cycle, in the offer's order.
 function groupByCycle(experts: Expert[]): { cycle: { key: string; label: string } | null; experts: Expert[] }[] {
   const groups: { cycle: { key: string; label: string } | null; experts: Expert[] }[] = [{ cycle: null, experts: [] }];
   for (const e of experts) {
@@ -272,5 +314,7 @@ function groupByCycle(experts: Expert[]): { cycle: { key: string; label: string 
     if (g) g.experts.push(e);
     else groups.push({ cycle: e.cycle!, experts: [e] });
   }
+  const rank = (g: (typeof groups)[number]) => (g.cycle ? cycleKind(g.cycle.label).rank + 1 : 0);
+  groups.sort((x, y) => rank(x) - rank(y));
   return groups.filter((g) => g.experts.length > 0);
 }
