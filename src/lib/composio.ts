@@ -48,6 +48,9 @@ export function hashAppsToken(token: string): string {
 
 // ---- Catalog ---------------------------------------------------------------------------------
 
+// Composio's Unipile only lists accounts: the member links Unipile on its own card (src/lib/unipile.ts).
+export const HIDDEN_TOOLKITS: ReadonlySet<string> = new Set(["unipile"]);
+
 export async function listToolkits(search?: string): Promise<IntegrationToolkitsResult> {
   const params = new URLSearchParams({ limit: "24" });
   if (search) params.set("search", search);
@@ -57,7 +60,7 @@ export async function listToolkits(search?: string): Promise<IntegrationToolkits
   });
   if (!res.ok) throw new ApiError(502, "composio_error", "Le catalogue des outils est indisponible. Réessayez dans un instant.");
   const data = (await res.json()) as { items?: unknown[] };
-  return { items: (data.items ?? []).map(normalizeToolkit) };
+  return { items: (data.items ?? []).map(normalizeToolkit).filter((t) => !HIDDEN_TOOLKITS.has(t.slug.toLowerCase())) };
 }
 
 interface RawToolkit {
@@ -86,6 +89,7 @@ function normalizeToolkit(raw: unknown): IntegrationToolkit {
 
 // A toolkit with no auth config in Yelema's Composio project fails with 4308 "NoManagedAuth".
 export async function connectToolkit(userId: string, toolkit: string): Promise<IntegrationConnectResult> {
+  if (HIDDEN_TOOLKITS.has(toolkit.toLowerCase())) throw new ApiError(422, "use_unipile_card", "Unipile se relie avec sa carte « WhatsApp et messageries », en haut de cette page.");
   try {
     const session = await client().toolRouter.create(userId, { manageConnections: true });
     const request = await session.authorize(toolkit);
@@ -193,6 +197,7 @@ export async function mintMcpSession(userId: string): Promise<McpSession> {
     manageConnections: { waitForConnections: true },
     multiAccount: { enable: true },
     sandbox: { enable: false },
+    toolkits: { disable: [...HIDDEN_TOOLKITS] },
     mcp: true,
   });
   const url = typeof session.mcp?.url === "string" ? session.mcp.url.trim() : "";

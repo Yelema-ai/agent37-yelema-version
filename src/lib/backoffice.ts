@@ -5,6 +5,7 @@ import type { CompanyProfile } from "@/lib/company";
 import type { ComposioCall } from "@/lib/composio-usage";
 import { voiceKeyPath, type VoiceKeysOverview } from "@/lib/voice-keys";
 import { isServerId, mcpScopePath, mcpServerPath, type McpOauthQuery, type McpOauthServer, type McpOverview, type McpToolsOverview, type McpToolsReport, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
+import type { UnipileAccount, UnipileDraft, UnipileStatus } from "@/lib/unipile";
 import { vaultPath, type VaultDraft, type VaultItem, type VaultList, type VaultOverview, type VaultScope } from "@/lib/vault";
 import { scopePath, type LlmModelChoice, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { mailPath, type MailDetail, type MailDraft, type MailInbox, type MailRights, type MailRightsPatch, type MailSummary } from "@/lib/mail";
@@ -508,6 +509,11 @@ export const backoffice = {
     if (!path) throw new BackofficeError(404, "not_found", "Connexion introuvable.");
     return call<{ ok: true }>(path, { method: "DELETE", token, timeoutMs: SETTING_WRITE_TIMEOUT_MS });
   },
+  // The member's Unipile messaging: the key only passes through to the instance, never comes back.
+  unipile: (token: string) => call<UnipileStatus>("/app/unipile", { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  testUnipile: (token: string, draft: UnipileDraft) => call<{ accounts: UnipileAccount[] }>("/app/unipile/test", { method: "POST", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  setUnipile: (token: string, draft: UnipileDraft) => call<UnipileStatus>("/app/unipile", { method: "PUT", token, body: draft, timeoutMs: 60_000 }),
+  clearUnipile: (token: string) => call<{ ok: true }>("/app/unipile", { method: "DELETE", token, timeoutMs: 60_000 }),
   mcp: (token: string) => call<McpOverview>("/app/mcp", { token }),
   addMcpServer: (token: string, scope: SettingScope, draft: McpServerDraft) => {
     const path = mcpScopePath(scope);
