@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import { Composio } from "@composio/core";
 import { ApiError } from "@/lib/http";
 import { composioApiKey } from "@/lib/runtime-config";
-import { UNIPILE_HIDDEN_TOOL, UNIPILE_TOOLKIT, type ProxyRequest } from "@/lib/unipile-tools";
 import type {
   AgentRow,
   IntegrationConnection,
@@ -194,8 +193,6 @@ export async function mintMcpSession(userId: string): Promise<McpSession> {
     manageConnections: { waitForConnections: true },
     multiAccount: { enable: true },
     sandbox: { enable: false },
-    // Composio's Unipile toolkit only lists accounts; the proxy offers its own Unipile tools instead.
-    tools: { [UNIPILE_TOOLKIT]: { disable: [UNIPILE_HIDDEN_TOOL] } },
     mcp: true,
   });
   const url = typeof session.mcp?.url === "string" ? session.mcp.url.trim() : "";
@@ -207,23 +204,4 @@ export async function mintMcpSession(userId: string): Promise<McpSession> {
   }
   if (Object.keys(headers).length === 0) headers["x-api-key"] = apiKey();
   return { url, headers };
-}
-
-// ---- Unipile through proxy execute (lib/unipile-tools.ts) -------------------------------------
-
-/** The member's most recent active Unipile connection, or null. */
-export async function unipileAccount(userId: string): Promise<string | null> {
-  const { connections } = await listConnections(userId);
-  return connections.find((c) => c.toolkitSlug === UNIPILE_TOOLKIT && c.status === "ACTIVE" && !c.isDisabled)?.id ?? null;
-}
-
-/** One Unipile v1 call signed by Composio with that connection; Composio sends it once, never retried. */
-export async function unipileProxy(connectedAccountId: string, req: ProxyRequest): Promise<{ status?: number; data?: unknown }> {
-  const res = await client().tools.proxyExecute({
-    endpoint: req.endpoint,
-    method: req.method,
-    connectedAccountId,
-    ...(req.body ? { body: req.body } : {}),
-  });
-  return { status: res.status, data: res.data };
 }
