@@ -310,7 +310,7 @@ function ToolTile({
       <div className="flex min-h-[52px] items-center gap-3">
         <ToolLogo logo={toolkit.logo} name={toolkit.name} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-semibold text-ink">{toolkit.name}</p>
+          <p className="line-clamp-2 text-[15px] font-semibold leading-snug text-ink">{toolkit.name}</p>
           {toolkit.description && <p className="truncate text-[13px] text-ink-3">{toolkit.description}</p>}
         </div>
 
