@@ -8,6 +8,7 @@ import { callDuration, findInText, frenchSpacing, summarySections, transcriptOf,
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/back-button";
 import { CallButton } from "./CallButton";
 
 // The "Appels" tab of an expert: the member's calls with it, newest first, as a list across the page;
@@ -36,16 +37,17 @@ const metaOf = (c: CallRecord) =>
 export function ExpertCalls({ expert }: { expert: Expert }) {
   const [calls, setCalls] = useState<CallRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // The call whose page is open; null for the list.
-  const [openId, setOpenId] = useState<string | null>(null);
-  // « Voir le résumé » at the end of a call lands here with ?appel=dernier: the newest call opens.
+  // The call whose page is open rides the URL (?appel=<id>), so the browser's Back returns to the
+  // list and a call's page can be reloaded or shared. « Voir le résumé » at the end of a call lands
+  // with ?appel=dernier: the newest call.
   const wanted = useSearchParams().get("appel");
-  const opened = useRef(false);
-  useEffect(() => {
-    if (opened.current || !wanted || !calls?.length) return;
-    opened.current = true;
-    setOpenId(wanted === "dernier" ? calls[0].id : (calls.find((c) => c.id === wanted)?.id ?? null));
-  }, [wanted, calls]);
+  const openId = wanted === "dernier" ? (calls?.[0]?.id ?? null) : wanted;
+  const setOpenId = (id: string | null) => {
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set("appel", id);
+    else url.searchParams.delete("appel");
+    window.history.pushState(null, "", url.pathname + url.search);
+  };
 
   const load = useCallback(async () => {
     try {
@@ -74,11 +76,12 @@ export function ExpertCalls({ expert }: { expert: Expert }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="mr-auto text-lg font-bold text-ink">Appels avec {expert.name}</h2>
+        {/* « Appeler » heads the page already: one button, not two. */}
+        <h2 className="sr-only">Appels avec {expert.name}</h2>
+        <p className="mr-auto text-sm text-ink-3">Le résumé et la transcription de chaque appel avec {expert.name}.</p>
         <Button variant="ghost" size="sm" onClick={() => void load()} aria-label="Actualiser">
           <RefreshCw />
         </Button>
-        <CallButton expert={expert} />
       </div>
 
       {error && <p className="text-sm text-ko">{error}</p>}
@@ -146,10 +149,7 @@ function CallPage({ call: c, expert, onBack }: { call: CallRecord; expert: Exper
     <section className="flex min-w-0 flex-col gap-5" aria-label={titleOf(c)}>
       <header className="flex flex-wrap items-start gap-3 border-b border-line pb-4">
         <div className="min-w-0 flex-1">
-          <button type="button" onClick={onBack} className="-ml-1 inline-flex min-h-8 items-center gap-0.5 rounded-md px-1 text-[13px] font-semibold text-ink-3 hover:text-ink">
-            <ChevronLeft className="size-4" />
-            Appels
-          </button>
+          <BackButton label="Tous les appels" onClick={onBack} className="mb-3" />
           <h2 className="text-lg font-bold text-ink">{titleOf(c)}</h2>
           <p className="text-[12px] text-ink-3">{metaOf(c)}</p>
         </div>

@@ -4,6 +4,7 @@ import { DeliverableWatcher } from "@/components/activity/DeliverableWatcher";
 import { syncPrefs } from "@/lib/prefs-sync";
 import { SearchDialog } from "@/components/conversations/SearchDialog";
 import { useWorkspace } from "@/components/WorkspaceProvider";
+import { CompanyColors } from "@/components/app/CompanyColors";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ActivityProvider } from "@/components/activity/ActivityProvider";
@@ -88,8 +89,9 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
       <ActivityProvider>
         {/* The call lives above the pages: it goes on, folded or not, while the member navigates. */}
         <CallProvider>
+        <CompanyColors />
         <DeliverableWatcher />
-        {chatOnly && <SearchDialog />}
+        <SearchDialog />
         <div
           className="min-h-screen md:grid"
           // --shell-nav: where the working area starts, for what covers it (an enlarged dashboard).

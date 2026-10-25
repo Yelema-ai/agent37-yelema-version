@@ -15,6 +15,8 @@ export interface WorkspaceWithRole extends Workspace {
   logo_url?: string | null;
   /** `entreprise`: the company chat only (an agent on the company's instance): no Experts, no integrations. */
   access?: "instance" | "entreprise";
+  /** The company's main color (back office `me.workspace.brandColor`, #rrggbb), when it has one. */
+  brand_color?: string | null;
 }
 
 export interface WorkspaceMember {
@@ -62,6 +64,8 @@ export interface Expert {
   photoUrl?: string | null;
   /** Son dossier dans le drive (~/Livrables/<dossier>), quand le catalogue le connaît. */
   driveFolder?: string | null;
+  /** Le cycle souscrit qui l'a apporté (« Marketing événementiel »), quand le back-office le dit. */
+  cycle?: { key: string; label: string } | null;
 }
 
 /** Un expert tel que le back-office le présente : textes et médias, jamais de réglage d'agent. */

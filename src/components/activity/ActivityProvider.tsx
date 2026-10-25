@@ -150,7 +150,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
   const announce = useCallback(
     (n: Notice, text: string, routine?: string) => {
       const expert = expertsRef.current.find((e) => expertKey(e.agentId, e.profileId) === expertKey(n.agentId, n.profile));
-      const name = expert?.displayName ?? (n.profile ? expertDisplayName(n.profile) : "Votre expert");
+      const name = expert?.displayName ?? (n.profile ? expertDisplayName(n.profile) : "Votre Expert");
       const title =
         n.kind === "routine" ? `${routineDoneTitle(routine)} (${name})` : n.kind === "failed"
             ? isAccountToTopUp(text)

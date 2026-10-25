@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, CheckCheck } from "lucide-react";
+import { AlertTriangle, Bell, CheckCheck, MessageSquare, Repeat, SquarePen, type LucideIcon } from "lucide-react";
 import { useNotifications } from "@/components/activity/ActivityProvider";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
@@ -10,6 +10,13 @@ import { isAccountToTopUp } from "@/lib/chat-errors";
 import { expertDisplayName } from "@/lib/experts";
 import { relativeFr } from "@/lib/fr-dates";
 import { cn } from "@/lib/utils";
+
+// One sign per kind of notification, the same as elsewhere in the app (Repeat for routines).
+const KINDS: Record<NotificationItem["kind"], { icon: LucideIcon; label: string; badge: string }> = {
+  reply: { icon: MessageSquare, label: "Réponse", badge: "bg-brand text-on-brand" },
+  routine: { icon: Repeat, label: "Routine terminée", badge: "bg-ok text-white" },
+  failed: { icon: AlertTriangle, label: "Problème", badge: "bg-ko text-white" },
+};
 
 // The notification centre, beside the appearance menu: the answers and routine runs the activity
 // provider already announces (toasts), kept in a list. A line opens its conversation and reads it.
@@ -57,22 +64,49 @@ export function NotificationBell() {
           <div className="max-h-[min(460px,70vh)] overflow-y-auto p-1.5">
             {items.map((i) => {
               const who = face(i);
+              // The company chat has no Expert behind it: its own sign, the menu's « Nouvelle conversation » pen.
+              const company = !i.profile;
+              const name = company ? "Chat d’entreprise" : who.displayName;
               const title =
                 i.kind === "routine"
                   ? routineDoneTitle(i.routine)
                   : i.kind === "failed"
                     ? isAccountToTopUp(i.text)
                       ? "Votre compte d’IA est à recharger"
-                      : `${who.displayName} : la réponse a échoué`
-                    : `${who.displayName} a fini`;
-              const detail = i.kind === "routine" ? who.displayName : i.text;
+                      : `${name} : la réponse a échoué`
+                    : company
+                      ? "Le chat d’entreprise a répondu"
+                      : `${who.displayName} a répondu`;
+              const detail = i.kind === "routine" ? name : i.text;
+              const kind = KINDS[i.kind];
               return (
-                <DropdownMenuItem key={i.key} onSelect={() => open(i)} className="items-start gap-3 rounded-xl px-2.5 py-2.5">
-                  <ExpertAvatar expert={who} size="sm" />
+                <DropdownMenuItem
+                  key={i.key}
+                  onSelect={() => open(i)}
+                  className={cn("items-start gap-3 rounded-xl px-2.5 py-2.5", i.unread && "bg-tint/60 focus:bg-tint")}
+                >
+                  <span className="relative mt-0.5 shrink-0">
+                    {company ? (
+                      <span className="grid size-[34px] place-items-center rounded-full bg-brand text-on-brand">
+                        <SquarePen className="size-4" strokeWidth={1.9} />
+                      </span>
+                    ) : (
+                      <ExpertAvatar expert={who} size="sm" />
+                    )}
+                    {/* What happened, as a badge on the face: an answer, a routine run, a failure. */}
+                    <span
+                      className={cn("absolute -bottom-1 -right-1.5 grid size-5 place-items-center rounded-full ring-2 ring-surface", kind.badge)}
+                      title={kind.label}
+                    >
+                      <kind.icon className="size-3" strokeWidth={2.2} />
+                    </span>
+                  </span>
                   <span className="min-w-0 grow">
-                    <span className={cn("block text-[13.5px] leading-snug", i.unread ? "font-semibold text-ink" : "text-ink-2")}>{title}</span>
+                    <span className="flex items-baseline gap-2">
+                      <span className={cn("min-w-0 grow text-[13.5px] leading-snug", i.unread ? "font-semibold text-ink" : "text-ink-2")}>{title}</span>
+                      <span className="shrink-0 text-[11.5px] text-ink-3">{relativeFr(i.at)}</span>
+                    </span>
                     {detail && <span className="mt-0.5 line-clamp-2 block text-[12.5px] leading-snug text-ink-3">{detail}</span>}
-                    <span className="mt-1 block text-[11.5px] text-ink-3">{relativeFr(i.at)}</span>
                   </span>
                   {i.unread && <span aria-label="Non lue" className="mt-1.5 size-2 shrink-0 rounded-full bg-brand" />}
                 </DropdownMenuItem>

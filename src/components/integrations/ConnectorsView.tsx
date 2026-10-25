@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Loader2, MoreHorizontal, Plug, Plus, Search, Unplug } from "lucide-react";
+import { AlertCircle, Check, Loader2, MoreHorizontal, Plug, Plus, RotateCw, Search, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { ACCOUNT_STATE_LABELS, accountLabel, accountState, accountsBySlug } from "@/lib/connection-accounts";
+import { ACCOUNT_STATE_LABELS, accountState, accountsBySlug } from "@/lib/connection-accounts";
 import { isConnectionActive as isActive } from "@/lib/expert-tools";
 import { DEFAULT_INTEGRATION_TOOLKITS, catalogToolkit, composioLogoUrl } from "@/lib/integration-catalog";
 import type {
@@ -39,6 +39,22 @@ function activeCount(conns: IntegrationConnection[], slug: string): number {
 
 function normalize(text: string): string {
   return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+// A tool connected from a search and gone from the catalog comes back with its slug for a name
+// (« googleslides », « google_search_console ») : the usual ones by their real name, the others
+// spaced and capitalised.
+const KNOWN_NAMES: Record<string, string> = {
+  googleslides: "Google Slides", googlemeet: "Google Meet", googletasks: "Google Tasks", googlephotos: "Google Photos",
+  googlemaps: "Google Maps", googleads: "Google Ads", googlebigquery: "Google BigQuery", google_analytics: "Google Analytics",
+  google_search_console: "Google Search Console", googlesuper: "Google Workspace", youtube: "YouTube", linkedin: "LinkedIn",
+  whatsapp: "WhatsApp", github: "GitHub", gitlab: "GitLab", hubspot: "HubSpot", clickup: "ClickUp", mailchimp: "Mailchimp",
+  sharepoint: "SharePoint", one_drive: "OneDrive", microsoft_teams: "Microsoft Teams", excel: "Excel", openai: "OpenAI",
+};
+
+function readableName(slug: string, name: string | null | undefined): string {
+  if (name && name !== name.toLowerCase()) return name;
+  return KNOWN_NAMES[slug] ?? slug.replace(/[_-]+/g, " ").replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 }
 
 // Search results come with English descriptions: a tool from our catalog keeps its French copy, any
@@ -118,7 +134,7 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
       if (!slug || catalogToolkit(slug) || extra.some((t) => t.slug === slug)) continue;
       extra.push({
         slug,
-        name: c.toolkitName || slug,
+        name: readableName(slug, c.toolkitName),
         description: null,
         logo: composioLogoUrl(slug),
         enabled: true,
@@ -195,7 +211,7 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1.5">
-        <p className="text-[15px] text-ink-2">Connectez les outils de l’entreprise : tous vos experts peuvent s’en servir.</p>
+        <p className="text-[15px] text-ink-2">Connectez les outils de l’entreprise : tous vos Experts peuvent s’en servir.</p>
         <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-3">
           <Plug className="h-4 w-4" />
           Plus de 1 000 applications disponibles
@@ -260,12 +276,17 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
 const STATE_TONE = {
   active: "bg-ok-pale text-ok",
   pending: "bg-soft text-ink-2",
-  failed: "bg-soft text-ink-2",
+  failed: "bg-coral-pale text-coral-ink",
   disabled: "bg-soft text-ink-3",
 } as const;
 
-const dateFr = (ms: number | null | undefined): string =>
-  ms ? new Date(ms).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "";
+// « 12 oct. », the year only when it is not this one.
+const dateFr = (ms: number | null | undefined): string => {
+  if (!ms) return "";
+  const d = new Date(ms);
+  const year = d.getFullYear() !== new Date().getFullYear() ? { year: "numeric" as const } : {};
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", ...year });
+};
 
 function ToolTile({
   toolkit,
@@ -289,7 +310,7 @@ function ToolTile({
       <div className="flex min-h-[52px] items-center gap-3">
         <ToolLogo logo={toolkit.logo} name={toolkit.name} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-semibold text-ink">{toolkit.name}</p>
+          <p className="line-clamp-2 text-[15px] font-semibold leading-snug text-ink">{toolkit.name}</p>
           {toolkit.description && <p className="truncate text-[13px] text-ink-3">{toolkit.description}</p>}
         </div>
 
@@ -297,10 +318,16 @@ function ToolTile({
           <span className="h-8 w-24 shrink-0 animate-pulse rounded-[10px] bg-soft" />
         ) : accounts.length > 0 ? (
           <div className="flex shrink-0 items-center gap-0.5">
-            {connected && (
+            {connected ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-ok-pale px-2.5 py-1 text-xs font-semibold text-ok">
                 <Check className="h-3.5 w-3.5" />
                 Connecté
+              </span>
+            ) : (
+              // No account answers any more: the tool says so in its head, not only line by line.
+              <span className="inline-flex items-center gap-1 rounded-full bg-coral-pale px-2.5 py-1 text-xs font-semibold text-coral-ink">
+                <AlertCircle className="h-3.5 w-3.5" />
+                À reconnecter
               </span>
             )}
             <DropdownMenu>
@@ -337,24 +364,38 @@ function ToolTile({
         <ul className="mt-2 space-y-1 border-t pt-2">
           {accounts.map((a, i) => {
             const state = accountState(a);
+            // The account's date tells two accounts apart; its id stays in the tooltip.
+            const label = `Compte ${i + 1}`;
             return (
               <li key={a.id} className="flex items-center gap-2 text-[13px]">
                 <span className="min-w-0 flex-1 truncate text-ink-2" title={a.id}>
-                  {accountLabel(a, i)}
+                  {label}
                   {dateFr(a.createdAt) && <span className="text-ink-3"> · {dateFr(a.createdAt)}</span>}
                 </span>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATE_TONE[state]}`}>
                   {ACCOUNT_STATE_LABELS[state]}
                 </span>
+                {state !== "active" && (
+                  <button
+                    type="button"
+                    onClick={onConnect}
+                    disabled={waiting}
+                    aria-label={`Reconnecter ${toolkit.name}`}
+                    title="Reconnecter"
+                    className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink disabled:opacity-60 max-sm:size-10"
+                  >
+                    <RotateCw className="h-3.5 w-3.5" />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => onDisconnect(a.id)}
                   disabled={disconnecting !== null}
-                  aria-label={`Déconnecter ${accountLabel(a, i)}`}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-ink-3 transition-colors hover:bg-soft hover:text-destructive disabled:opacity-60"
+                  aria-label={`Déconnecter ${label}`}
+                  title="Déconnecter"
+                  className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-destructive disabled:opacity-60 max-sm:size-10"
                 >
                   {disconnecting === a.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
-                  Déconnecter
                 </button>
               </li>
             );
