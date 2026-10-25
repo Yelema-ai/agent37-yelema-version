@@ -2,11 +2,12 @@ import { randomUUID } from "node:crypto";
 import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { backoffice, BackofficeError, type ComposioCallsDeclaration } from "@/lib/backoffice";
-import { composioUserId, hashAppsToken, mintMcpSession, type McpSession } from "@/lib/composio";
+import { composioUserId, hashAppsToken, mintMcpSession, unipileAccount, unipileProxy, type McpSession } from "@/lib/composio";
 import { extractComposioCalls } from "@/lib/composio-usage";
 import { backofficeUrl } from "@/lib/runtime-config";
 import { pinnedWorkspaceId } from "@/lib/tenant";
 import { TenantError } from "@/lib/tenant-resolver";
+import { isSend, isUnipileTool, maskDestination, rewriteRpcPayload, rpcOf, unipileRequest, unipileResult, withUnipileTools } from "@/lib/unipile-tools";
 
 // The MCP proxy between the experts and Yelema's Composio: the only place their tool traffic meets
 // the key. Each instance's Hermes has an `apps` MCP server pointed here with its own Bearer token
@@ -106,6 +107,41 @@ function declareCalls(token: string, row: { agent37_id: string; workspace_id: st
   }
 }
 
+// Whether the member has an active Unipile connection, kept a minute so a tools/list costs no lookup.
+const unipileSeen = new Map<string, { at: number; active: boolean }>();
+async function hasUnipile(userId: string): Promise<boolean> {
+  const hit = unipileSeen.get(userId);
+  if (hit && Date.now() - hit.at < 60_000) return hit.active;
+  const active = (await unipileAccount(userId).catch(() => null)) !== null;
+  unipileSeen.set(userId, { at: Date.now(), active });
+  return active;
+}
+
+// A Unipile tool call is answered here, never forwarded: Composio signs the Unipile request with the
+// member's connection (proxy execute). A send leaves one audit line, without its text.
+async function unipileCall(agent: string, userId: string, rpc: NonNullable<ReturnType<typeof rpcOf>>): Promise<Response> {
+  const name = rpc.params.name;
+  let out: { text: string; isError: boolean };
+  if (!isUnipileTool(name)) out = { text: "Outil inconnu.", isError: true };
+  else {
+    try {
+      const req = unipileRequest(name, rpc.params.arguments);
+      const account = await unipileAccount(userId);
+      if (!account) out = { text: "Aucun compte Unipile connecté : il se connecte dans Intégrations.", isError: true };
+      else {
+        const up = await unipileProxy(account, req);
+        out = unipileResult(name, up);
+        if (isSend(name)) console.info(`[unipile] envoi ${String(up.status)} instance=${agent} vers=${maskDestination(req.destination ?? "")} le=${new Date().toISOString()}`);
+      }
+    } catch (e) {
+      const why = e instanceof Error ? e.message : "erreur";
+      console.warn(`[unipile] ${agent} ${name}: ${why.slice(0, 200)}`);
+      out = { text: /invalide|vide|trop long/.test(why) ? `Argument refusé : ${why}.` : "Unipile ne répond pas pour le moment.", isError: true };
+    }
+  }
+  return Response.json({ jsonrpc: "2.0", id: rpc.id, result: { content: [{ type: "text", text: out.text }], isError: out.isError } });
+}
+
 async function handle(request: Request): Promise<Response> {
   const token = /^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") ?? "")?.[1]?.trim();
   if (!token) return errorJson(401, "missing bearer token");
@@ -132,6 +168,8 @@ async function handle(request: Request): Promise<Response> {
   const userId = composioUserId(row);
 
   const body = request.method === "POST" ? await request.arrayBuffer() : undefined;
+  const rpc = body ? rpcOf(new TextDecoder().decode(body)) : null;
+  if (rpc?.method === "tools/call" && isUnipileTool(rpc.params.name)) return unipileCall(row.agent37_id, userId, rpc);
   try {
     let upstream = await forward(await getSession(userId), request, body);
     if (upstream.status === 404 || upstream.status === 401) {
@@ -146,6 +184,10 @@ async function handle(request: Request): Promise<Response> {
     for (const name of FORWARD_RESPONSE_HEADERS) {
       const value = upstream.headers.get(name);
       if (value) headers.set(name, value);
+    }
+    if (rpc?.method === "tools/list" && upstream.ok && (await hasUnipile(userId))) {
+      const sse = (upstream.headers.get("content-type") ?? "").includes("text/event-stream");
+      return new Response(rewriteRpcPayload(await upstream.text(), sse, withUnipileTools), { status: upstream.status, headers });
     }
     return new Response(upstream.body, { status: upstream.status, headers });
   } catch (e) {
