@@ -221,15 +221,15 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
           href="https://yelema.ai"
           target="_blank"
           rel="noopener"
-          className="mt-0.5 flex items-center justify-center gap-1.5 py-1 text-[11.5px] text-ink-3 hover:text-ink"
+          className="mt-1 flex items-center justify-center gap-1.5 py-1.5 text-[12.5px] text-ink-3 hover:text-ink"
         >
           {collapsed ? (
             // The long logo does not fit the rail: the Y alone, whole.
-            <Image src="/yelema_y_violet.svg" alt="Powered by Yelema" width={20} height={20} className="size-5" />
+            <Image src="/yelema_y_violet.svg" alt="Powered by Yelema" width={28} height={28} className="size-7" />
           ) : (
             <>
               Powered by
-              <Image src="/yelema-long.png" alt="Yelema" width={55} height={16} className="h-4 w-auto" />
+              <Image src="/yelema-long.png" alt="Yelema" width={76} height={22} className="h-[22px] w-auto" />
             </>
           )}
         </a>

@@ -11,6 +11,7 @@ const LIST_KEY = "yelema.chat.list-hidden";
 
 let listHidden = false;
 let full = false;
+let sidePanel = false;
 let loaded = false;
 const listeners = new Set<() => void>();
 
@@ -47,6 +48,18 @@ export function setChatListHidden(hidden: boolean) {
 export function setChatFull(on: boolean) {
   full = on;
   emit();
+}
+
+// Son ordinateur or Tableau de bord open beside the chat: the column of conversations folds away
+// meanwhile (not remembered), so the chat keeps room to be read.
+export function setChatSidePanel(open: boolean) {
+  if (sidePanel === open) return;
+  sidePanel = open;
+  emit();
+}
+
+export function useChatSidePanel(): boolean {
+  return useSyncExternalStore(subscribe, () => sidePanel, () => false);
 }
 
 export function useChatListHidden(): boolean {

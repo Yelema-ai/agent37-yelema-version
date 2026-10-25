@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, ChevronDown, FileText, ListChecks, Loader2, Lock, Mail, Mic, ReceiptText, Send, Sheet, Sun } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -18,22 +18,52 @@ import { agentTabPath } from "@/lib/expert-tabs";
 import type { Expert } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-// Four openers that suit any company, whoever the message goes to. A click puts the start of the
-// request in the field, to finish before sending.
+// Four openers that suit any company, whoever the message goes to. A click writes a whole request
+// in the field, with what is left to fill [between brackets], the first one selected (Leslie, 25/10:
+// the label alone did not help to ask well).
 const SHORTCUTS = [
-  { label: "Point du matin", icon: Sun },
-  { label: "Préparer une réunion", icon: CalendarDays },
-  { label: "Résumer mes emails", icon: Mail },
-  { label: "Suivre un dossier", icon: ListChecks },
+  {
+    label: "Point du matin",
+    icon: Sun,
+    prompt: "Fais-moi le point du matin : mes rendez-vous du jour, les e-mails importants arrivés depuis hier et ce qui attend une réponse de ma part. Termine par mes 3 priorités de la journée.",
+  },
+  {
+    label: "Préparer une réunion",
+    icon: CalendarDays,
+    prompt: "Prépare ma réunion avec [qui] du [date] sur [sujet] : le contexte, nos derniers échanges, les points à aborder et les questions à poser.",
+  },
+  {
+    label: "Résumer mes emails",
+    icon: Mail,
+    prompt: "Résume mes e-mails [d’aujourd’hui / de cette semaine] : ce qui est urgent, ce qui attend ma réponse, et propose une réponse courte pour chacun.",
+  },
+  {
+    label: "Suivre un dossier",
+    icon: ListChecks,
+    prompt: "Où en est le dossier [nom du dossier] ? Les dernières actions, ce qui bloque, la prochaine étape et qui doit agir.",
+  },
 ] as const;
 // Who has the chat d'entreprise only (no Djénéba to read their mail or agenda): openers on the
 // files they bring, as in the maquette of Serge's view.
 const CHAT_SHORTCUTS = [
-  { label: "Analyser un Excel", icon: Sheet },
-  { label: "Résumer un PDF", icon: FileText },
-  { label: "Rédiger un email", icon: Mail },
-  { label: "Vérifier une facture", icon: ReceiptText },
+  { label: "Analyser un Excel", icon: Sheet, prompt: "Analyse le fichier Excel joint : les chiffres clés, les tendances, ce qui sort de l’ordinaire, puis 3 recommandations." },
+  { label: "Résumer un PDF", icon: FileText, prompt: "Résume le PDF joint en 10 lignes : l’essentiel, les chiffres à retenir et les décisions à prendre." },
+  { label: "Rédiger un email", icon: Mail, prompt: "Rédige un e-mail à [destinataire] pour [objet], sur un ton [cordial / formel], en 5 lignes maximum." },
+  { label: "Vérifier une facture", icon: ReceiptText, prompt: "Vérifie la facture jointe : montants, TVA, dates et coordonnées. Signale ce qui ne va pas et ce qu’il faut demander au fournisseur." },
 ] as const;
+
+// Puts a shortcut's request in the field and selects its first [blank], so typing replaces it.
+function fillShortcut(field: HTMLTextAreaElement | null, prompt: string, setText: (t: string) => void) {
+  setText(prompt);
+  requestAnimationFrame(() => {
+    if (!field) return;
+    field.focus();
+    const start = prompt.indexOf("[");
+    const end = start < 0 ? -1 : prompt.indexOf("]", start);
+    if (start >= 0 && end > start) field.setSelectionRange(start, end + 1);
+    else field.setSelectionRange(prompt.length, prompt.length);
+  });
+}
 const isDjeneba = (e: Expert) => (e.catalogueKey ?? e.profileId).toLowerCase().includes("djeneba");
 
 // The back office says the installation failed: said at once, with the experts concerned when it
@@ -101,6 +131,7 @@ export function HomeView() {
   const djeneba = experts.find(isDjeneba) ?? null;
   const [picked, setPicked] = useState<"entreprise" | "djeneba">("entreprise");
   const [text, setText] = useState("");
+  const field = useRef<HTMLTextAreaElement>(null);
   const to = picked === "djeneba" && djeneba ? djeneba : null;
   const hello = userFirstName || userEmail.split("@")[0];
 
@@ -145,6 +176,7 @@ export function HomeView() {
         <>
           <section className="mt-7 rounded-[22px] border border-line bg-surface p-4 shadow-[0_8px_30px_rgb(48_22_103_/_0.06)]">
             <textarea
+              ref={field}
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={onKeyDown}
@@ -206,11 +238,11 @@ export function HomeView() {
           </section>
 
           <div className="mt-3 flex flex-wrap justify-center gap-2">
-            {(djeneba ? SHORTCUTS : CHAT_SHORTCUTS).map(({ label, icon: Icon }) => (
+            {(djeneba ? SHORTCUTS : CHAT_SHORTCUTS).map(({ label, icon: Icon, prompt }) => (
               <button
                 key={label}
                 type="button"
-                onClick={() => setText(`${label} : `)}
+                onClick={() => fillShortcut(field.current, prompt, setText)}
                 className="inline-flex h-10 items-center gap-2 rounded-full border border-line bg-surface px-3.5 text-[13px] font-semibold text-ink-2 hover:bg-soft hover:text-ink"
               >
                 <Icon className="size-4" /> {label}

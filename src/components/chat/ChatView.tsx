@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Loader2, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import { ComputerButton, ComputerDialog, ComputerPanel } from "@/components/experts/ExpertComputer";
 import { DashboardProvider } from "@/components/experts/DashboardProvider";
-import { DashboardButton, DashboardPanel, DashboardDialog, ShareDashboardModal } from "@/components/experts/ExpertDashboard";
+import { DashboardButton, DashboardPanel, DashboardDialog, ShareDashboardModal, SidePanelSync } from "@/components/experts/ExpertDashboard";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { expertDisplayName } from "@/lib/experts";
@@ -137,6 +137,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
       isStreaming={isStreaming}
       messages={messages}
     >
+    <SidePanelSync hasComputer={hasComputer} />
     <div className="flex h-full min-h-0">
     <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col wide:min-w-[400px]" {...att.dragHandlers}>
       {att.dragOver && <DropOverlay label="Déposez vos fichiers pour les joindre" />}
@@ -153,6 +154,15 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
           >
             {listHidden ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
+          <button
+          type="button"
+          onClick={() => setChatFull(!full)}
+          aria-label={full ? "Réduire" : "Plein écran"}
+          title={full ? "Réduire (Échap)" : "Plein écran"}
+          className="hidden size-9 shrink-0 place-items-center rounded-full text-ink-2 hover:bg-soft hover:text-ink lg:grid"
+        >
+          {full ? <Minimize2 className="h-[18px] w-[18px]" /> : <Maximize2 className="h-[18px] w-[18px]" />}
+        </button>
           {/* On an expert's page its photo and name already head the page: shown once. */}
           {face && !profile && <ExpertAvatar expert={face} size="sm" />}
           <div className="min-w-0">
@@ -164,15 +174,6 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
         <div className="flex shrink-0 items-center gap-2">
         {hasComputer && <ComputerButton />}
         {Boolean(profile) && <DashboardButton />}
-        <button
-          type="button"
-          onClick={() => setChatFull(!full)}
-          aria-label={full ? "Réduire" : "Plein écran"}
-          title={full ? "Réduire (Échap)" : "Plein écran"}
-          className="hidden size-9 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink-2 hover:bg-soft hover:text-ink lg:grid"
-        >
-          {full ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-        </button>
         <button
           type="button"
           onClick={startNewChat}

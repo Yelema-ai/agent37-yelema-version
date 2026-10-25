@@ -21,7 +21,7 @@ import { DRIVE_ROOT } from "@/lib/drive-paths";
 import { ChatProvider } from "@/components/chat/ChatProvider";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatView } from "@/components/chat/ChatView";
-import { setChatFull, useChatFull, useChatListHidden } from "@/components/chat/chat-layout";
+import { setChatFull, useChatFull, useChatListHidden, useChatSidePanel } from "@/components/chat/chat-layout";
 import { FilesTab } from "@/components/files/FilesTab";
 import { cn } from "@/lib/utils";
 import { CallButton } from "@/components/voice/CallButton";
@@ -117,7 +117,9 @@ export function AgentWorkspace({
     if (currentTab === "tools") window.history.replaceState(null, "", agentTabPath(agentId, "chat", profileId));
   }, [currentTab, agentId, profileId]);
   const isChat = currentTab === "chat" || currentTab === "tools";
-  const listHidden = useChatListHidden();
+  const listFolded = useChatListHidden();
+  const sidePanel = useChatSidePanel();
+  const listHidden = listFolded || sidePanel;
   const chatFull = useChatFull();
   // Échap, another tab or another page leave the full-screen chat.
   useEffect(() => {

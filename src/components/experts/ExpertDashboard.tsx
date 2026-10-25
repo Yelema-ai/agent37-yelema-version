@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { setChatSidePanel } from "@/components/chat/chat-layout";
 import Image from "next/image";
 import { BarChart3, ExternalLink, FileCode, FileText, Loader2, Maximize2, Minimize2, MoreHorizontal, Presentation, RefreshCw, Share2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,8 @@ export function DashboardButton() {
   const handleClick = () => {
     const isWide = typeof window !== "undefined" && window.matchMedia(WIDE).matches;
     if (isWide) {
+      // One panel beside the chat at a time.
+      if (!panelOpen) comp?.setPanelOpen(false);
       setPanelOpen(!panelOpen);
     } else {
       setDialogOpen(!dialogOpen);
@@ -261,6 +264,24 @@ function DashboardContent() {
       <PoweredBy />
     </div>
   );
+}
+
+// Beside the chat, one panel at a time: opening « Son ordinateur » closes the dashboard (the
+// dashboard's button closes the computer). While one is open the conversations fold away.
+export function SidePanelSync({ hasComputer }: { hasComputer: boolean }) {
+  const { panelOpen, setPanelOpen } = useDashboard();
+  const comp = useComputer();
+  const computerOpen = hasComputer && Boolean(comp?.panelOpen);
+  const prev = useRef(computerOpen);
+  useEffect(() => {
+    if (computerOpen && !prev.current) setPanelOpen(false);
+    prev.current = computerOpen;
+  }, [computerOpen, setPanelOpen]);
+  useEffect(() => {
+    setChatSidePanel(panelOpen || computerOpen);
+    return () => setChatSidePanel(false);
+  }, [panelOpen, computerOpen]);
+  return null;
 }
 
 export function DashboardPanel() {
