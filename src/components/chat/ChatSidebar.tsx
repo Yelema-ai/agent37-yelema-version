@@ -66,12 +66,12 @@ function groupSessions(sessions: ChatSession[]): { label: string; items: ChatSes
   return groups.filter((g) => g.items.length > 0);
 }
 
-type Filter = "all" | "unread" | "routines" | "archived";
+// No « Archivées » here (Leslie, 25/10): archived conversations are found under Toutes les conversations.
+type Filter = "all" | "unread" | "routines";
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "Tout" },
   { id: "unread", label: "Non lues" },
   { id: "routines", label: "Routines" },
-  { id: "archived", label: "Archivées" },
 ];
 
 const BADGES = {
@@ -125,14 +125,14 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { marks, mark } = useChatMarks();
   const keyOf = (s: ChatSession) => convKey(agentId, profile, s.session_id);
   const pinnedIds = new Set(marks.pinned);
-  // Archived conversations leave the rail for the « Archivées » filter; pinned ones head it, above the dates.
+  // Archived conversations leave the rail (Toutes les conversations keeps them under « Archivées »); pinned
+  // ones head it, above the dates.
   const archivedIds = new Set(marks.archived);
   const groups = useMemo(() => {
     const q = fold(query.trim());
     let found = q ? sessions.filter((s) => fold(s.routine ?? s.title ?? "Nouvelle conversation").includes(q)) : sessions;
     if (filter === "unread") found = found.filter((s) => statusOf(s.session_id) === "unread");
     if (filter === "routines") found = found.filter((s) => s.routine);
-    if (filter === "archived") return groupSessions(found.filter((s) => marks.archived.includes(convKey(agentId, profile, s.session_id))));
     const { pinned, rest } = arrange(found, (s) => convKey(agentId, profile, s.session_id), marks);
     return [...(pinned.length ? [{ label: "Épinglées", items: pinned }] : []), ...groupSessions(rest)];
   }, [sessions, query, filter, statusOf, marks, agentId, profile]);
@@ -141,7 +141,7 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
     const key = keyOf(s);
     mark(key, "archived", true);
     toast("Conversation archivée", {
-      description: "Elle reste sous le filtre Archivées.",
+      description: "Elle reste dans Toutes les conversations, sous Archivées.",
       action: { label: "Annuler", onClick: () => mark(key, "archived", false) },
     });
   }
@@ -418,7 +418,7 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           )}
           {!loadingSessions && sessions.length > 0 && groups.length === 0 && (
             <p className="px-2.5 py-2 text-[13px] text-ink-3">
-              {query.trim() ? "Aucune conversation ne correspond." : filter === "unread" ? "Tout est lu." : filter === "archived" ? "Aucune conversation archivée." : "Aucune routine pour l’instant."}
+              {query.trim() ? "Aucune conversation ne correspond." : filter === "unread" ? "Tout est lu." : "Aucune routine pour l’instant."}
             </p>
           )}
         </div>

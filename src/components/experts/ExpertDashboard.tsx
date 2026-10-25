@@ -256,7 +256,8 @@ function DashboardContent() {
       <div className="relative flex-1 overflow-hidden bg-surface">
         <iframe
           src={embedUrl}
-          title="Tableau de bord"
+          // aria-label, not title: Chrome shows an iframe's title as a tooltip over the page's own header.
+          aria-label="Tableau de bord"
           className="h-full w-full border-0 bg-transparent"
           sandbox="allow-scripts allow-popups allow-downloads"
         />
