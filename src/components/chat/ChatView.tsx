@@ -13,7 +13,7 @@ import { DropOverlay } from "@/components/DropOverlay";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessages } from "./ChatMessages";
 import { ChatSessionsPanel } from "./ChatSessionsPanel";
-import { setChatFull, setChatListHidden, useChatFull, useChatListHidden } from "./chat-layout";
+import { setChatFull, setChatListHidden, useChatFull, useChatListHidden, useChatSidePanel } from "./chat-layout";
 import { useChatContext } from "./ChatProvider";
 import { useChat } from "./useChat";
 import { useChatAttachments } from "./useChatAttachments";
@@ -119,6 +119,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
   // (image v1.1.0); an instance on another image, or on an older revision, has none to show.
   const listHidden = useChatListHidden();
   const full = useChatFull();
+  const sidePanel = useChatSidePanel();
   const hasComputer =
     Boolean(profile) &&
     instance?.image?.template === SCREEN_TEMPLATE &&
@@ -172,7 +173,8 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
           className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[13px] font-semibold text-ink hover:bg-soft"
         >
           <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">Nouvelle conversation</span>
+          {/* Beside an open panel the chat is narrow: the icon says enough, the title keeps its room. */}
+          <span className={cn("hidden sm:inline", sidePanel && "wide:hidden")}>Nouvelle conversation</span>
         </button>
         {/* Plein écran: in the corner, where a window is enlarged. */}
         <button

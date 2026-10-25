@@ -291,7 +291,8 @@ export function DashboardPanel() {
   return (
     <aside
       aria-label="Tableau de bord métier"
-      className="hidden wide:flex fixed inset-y-0 right-0 z-40 w-[640px] flex-col border-l border-line bg-card shadow-xl transition-all"
+      // Beside the chat, the same width as « Son ordinateur » (Leslie, 25/10), never over the chat.
+      className="hidden max-w-[900px] shrink basis-[60%] flex-col border-l border-line bg-card wide:flex"
     >
       <DashboardHeader
         onMaximize={() => {

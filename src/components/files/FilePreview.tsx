@@ -31,7 +31,7 @@ export function FilePreview({
       <DialogContent className="max-w-4xl">
         {entry && (
           <>
-            <DialogHeader className="items-start gap-3">
+            <DialogHeader className="items-start gap-3 text-left">
               <BackButton label="Livrables" onClick={onClose} />
               <DialogTitle className="max-w-full truncate pr-8">{entry.name}</DialogTitle>
             </DialogHeader>

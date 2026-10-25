@@ -268,7 +268,7 @@ export function ExpertEmails({ inbox, expertName, loaded }: { inbox: MailInbox |
 function MessageView({ expert, message, canReply, onReply, onBack }: { expert: string; message: MailDetail; canReply: boolean; onReply: () => void; onBack: () => void }) {
   return (
     <div className="space-y-4">
-      <DialogHeader className="items-start gap-3">
+      <DialogHeader className="items-start gap-3 text-left">
         <BackButton label="E-mails" onClick={onBack} />
         <DialogTitle className="font-display text-xl font-bold text-ink">{message.subject || "(Sans objet)"}</DialogTitle>
         <DialogDescription asChild>

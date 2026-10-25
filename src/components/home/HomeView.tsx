@@ -52,11 +52,18 @@ const CHAT_SHORTCUTS = [
   { label: "Vérifier une facture", icon: ReceiptText, prompt: "Vérifie la facture jointe : montants, TVA, dates et coordonnées. Signale ce qui ne va pas et ce qu’il faut demander au fournisseur." },
 ] as const;
 
+// The field grows with what is written (up to about eight lines), so a whole request stays readable.
+function grow(field: HTMLTextAreaElement) {
+  field.style.height = "auto";
+  field.style.height = `${Math.min(field.scrollHeight, 200)}px`;
+}
+
 // Puts a shortcut's request in the field and selects its first [blank], so typing replaces it.
 function fillShortcut(field: HTMLTextAreaElement | null, prompt: string, setText: (t: string) => void) {
   setText(prompt);
   requestAnimationFrame(() => {
     if (!field) return;
+    grow(field);
     field.focus();
     const start = prompt.indexOf("[");
     const end = start < 0 ? -1 : prompt.indexOf("]", start);
@@ -178,7 +185,10 @@ export function HomeView() {
             <textarea
               ref={field}
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => {
+                setText(e.target.value);
+                grow(e.target);
+              }}
               onKeyDown={onKeyDown}
               rows={2}
               placeholder={to ? `Que voulez-vous confier à ${to.displayName} ?` : "Que puis-je faire pour vous ?"}

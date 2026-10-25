@@ -1,5 +1,6 @@
 "use client";
 
+import { useChatSidePanel } from "@/components/chat/chat-layout";
 import { Maximize2, Monitor, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ const LiveDot = () => <span className="h-2 w-2 shrink-0 animate-pulse rounded-fu
 
 export function ComputerButton() {
   const { panelOpen, setPanelOpen, setDialogOpen } = useComputer();
+  const sidePanel = useChatSidePanel();
   return (
     <button
       type="button"
@@ -57,7 +59,7 @@ export function ComputerButton() {
     >
       <Monitor className="h-4 w-4" />
       {/* Beside the open panel the chat is narrow, and the highlighted icon says enough. */}
-      <span className={cn("hidden sm:inline", panelOpen && "wide:hidden")}>Son ordinateur</span>
+      <span className={cn("hidden sm:inline", (panelOpen || sidePanel) && "wide:hidden")}>Son ordinateur</span>
     </button>
   );
 }
