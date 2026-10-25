@@ -5,16 +5,19 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { DRIVE_ROOT } from "@/lib/drive-paths";
+import { isMemoryFolder } from "@/lib/drive-order";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { readNotifyPrefs } from "@/lib/notify-prefs";
 import { useOwnAgentId } from "@/components/conversations/useAllConversations";
-import { isDir, type FileListResponse } from "@/components/files/types";
+import { isDir, type FileEntry, type FileListResponse } from "@/components/files/types";
 import { systemNotify } from "./system-notify";
 
-// Every two minutes, the drive's files: one the page has not seen yet is a new deliverable, announced
+// Every two minutes, the drive's files (three levels deep): one the page has not seen yet is a new deliverable, announced
 // like a reply (toast, system notification when the tab is hidden) unless switched off in Paramètres.
 // The first listing is the baseline: nothing already there is announced.
 const EVERY = 120_000;
+const DEPTH = 3;
+const MAX_FOLDERS = 40;
 
 export function DeliverableWatcher() {
   const agentId = useOwnAgentId();
@@ -31,12 +34,21 @@ export function DeliverableWatcher() {
         () => null
       );
     async function check() {
-      const root = await list(DRIVE_ROOT);
-      if (!root || !live) return;
-      const nested = await Promise.all(root.filter(isDir).map((d) => list(d.path)));
-      // A folder that failed to list would read as files gone, then as new ones on the next pass.
-      if (!live || nested.some((n) => n === null)) return;
-      const files = [...root, ...nested.flatMap((n) => n ?? [])].filter((e) => e.type === "file");
+      // Livrables/<Expert>/<dossier>/fichier: three levels, a bounded number of folders per pass; the
+      // expert's memory folder is its working state, not a deliverable.
+      const files: FileEntry[] = [];
+      let level = [DRIVE_ROOT];
+      let listed = 0;
+      for (let depth = 0; depth < DEPTH && level.length; depth++) {
+        const batch = level.slice(0, MAX_FOLDERS - listed);
+        listed += batch.length;
+        const found = await Promise.all(batch.map(list));
+        // A folder that failed to list would read as files gone, then as new ones on the next pass.
+        if (!live || found.some((n) => n === null)) return;
+        const entries = found.flatMap((n) => n ?? []);
+        files.push(...entries.filter((e) => e.type === "file"));
+        level = entries.filter((e) => isDir(e) && !isMemoryFolder(e.name)).map((d) => d.path);
+      }
       const before = seen.current;
       seen.current = new Set(files.map((f) => f.path));
       if (!before || !readNotifyPrefs().deliverable) return;

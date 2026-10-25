@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useConversationStatus } from "@/components/activity/hooks";
 import { Archive, CheckCheck, ChevronRight, Copy, Loader2, MoreHorizontal, Pencil, Pin, PinOff, Plus, Repeat, RotateCw, Search, Trash2, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -35,6 +35,16 @@ function shortWhen(at: number): string {
 
 // Search ignores case and accents (« reference » finds « Référencement »).
 const fold = (t: string) => t.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+
+const FOLDED_KEY = "yelema:rail-folded";
+function readFolded(): Record<string, boolean> {
+  try {
+    const v = JSON.parse(localStorage.getItem(FOLDED_KEY) ?? "{}") as unknown;
+    return v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([, b]) => typeof b === "boolean")) : {};
+  } catch {
+    return {};
+  }
+}
 
 // Conversations grouped Aujourd'hui / Hier / Cette semaine / Plus ancien by last activity.
 function groupSessions(sessions: ChatSession[]): { label: string; items: ChatSession[] }[] {
@@ -95,7 +105,19 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const pendingDelete = sessions.find((s) => s.session_id === pendingDeleteId) ?? null;
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const [folded, setFolded] = useState<Record<string, boolean>>({ "Plus ancien": true });
+  // A group the person folded stays folded (kept in this browser); « Plus ancien » starts folded.
+  const [folded, setFolded] = useState<Record<string, boolean>>({});
+  useEffect(() => setFolded(readFolded()), []);
+  const setFold = (label: string, shut: boolean) =>
+    setFolded((prev) => {
+      const next = { ...prev, [label]: shut };
+      try {
+        localStorage.setItem(FOLDED_KEY, JSON.stringify(next));
+      } catch {
+        /* storage off: the choice lasts for this visit */
+      }
+      return next;
+    });
   const unreadIds = sessions.filter((s) => statusOf(s.session_id) === "unread").map((s) => s.session_id);
   const unreadCount = unreadIds.length;
   const { markRead } = useNotifications();
@@ -123,8 +145,9 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
     });
   }
   // A search or a filter shows everything it finds, and the open thread is never hidden in a folded group.
+  // Only the default fold of « Plus ancien » gives way to the open thread; a fold the person chose holds.
   const isFolded = (g: { label: string; items: ChatSession[] }) =>
-    !query.trim() && filter === "all" && !!folded[g.label] && !g.items.some((s) => s.session_id === highlightedSessionId);
+    !query.trim() && filter === "all" && (folded[g.label] ?? g.label === "Plus ancien") && (g.label in folded || !g.items.some((s) => s.session_id === highlightedSessionId));
   const pick = (sessionId: string) => {
     selectSession(sessionId);
     onNavigate?.();
@@ -319,7 +342,7 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
         )}
 
         {sessions.length > 0 && (
-          <div role="group" aria-label="Filtrer les conversations" className="mx-1 mb-2 flex gap-1.5 border-b border-line pb-2.5">
+          <div role="group" aria-label="Filtrer les conversations" className="mx-1 mb-2 flex flex-wrap gap-1.5 border-b border-line pb-2.5">
             {FILTERS.map(({ id, label }) => (
               <button
                 key={id}
@@ -327,7 +350,7 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                 onClick={() => setFilter(id)}
                 aria-pressed={filter === id}
                 className={cn(
-                  "h-8 shrink-0 whitespace-nowrap rounded-full border px-2.5 text-[12.5px] font-semibold transition-colors",
+                  "h-8 whitespace-nowrap rounded-full border px-2.5 text-[12.5px] font-semibold transition-colors",
                   filter === id ? "border-brand/40 bg-tint text-brand-ink" : "border-line text-ink-2 hover:bg-soft"
                 )}
               >
@@ -363,7 +386,7 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                 <div key={g.label} className="mb-1.5">
                   <button
                     type="button"
-                    onClick={() => setFolded({ ...folded, [g.label]: !shut })}
+                    onClick={() => setFold(g.label, !shut)}
                     aria-expanded={!shut}
                     className="flex min-h-9 w-full items-center gap-1.5 rounded-[10px] px-2 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3 hover:bg-soft"
                   >
