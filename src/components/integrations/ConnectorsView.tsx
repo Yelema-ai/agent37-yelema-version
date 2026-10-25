@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Loader2, MoreHorizontal, Plug, Plus, Search, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { ACCOUNT_STATE_LABELS, accountLabel, accountState, accountsBySlug } from "@/lib/connection-accounts";
 import { isConnectionActive as isActive } from "@/lib/expert-tools";
 import { DEFAULT_INTEGRATION_TOOLKITS, catalogToolkit, composioLogoUrl } from "@/lib/integration-catalog";
 import type {
@@ -107,17 +108,14 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
     };
   }, [q, agentId]);
 
-  const connectedSlugs = useMemo(
-    () => new Set((connections ?? []).filter(isActive).map((c) => slugKey(c.toolkitSlug))),
-    [connections]
-  );
+  const accounts = useMemo(() => accountsBySlug(connections ?? []), [connections]);
 
   // The catalog, plus any connected tool that is not in it (connected from a search).
   const base = useMemo(() => {
     const extra: IntegrationToolkit[] = [];
     for (const c of connections ?? []) {
       const slug = slugKey(c.toolkitSlug);
-      if (!slug || !isActive(c) || catalogToolkit(slug) || extra.some((t) => t.slug === slug)) continue;
+      if (!slug || catalogToolkit(slug) || extra.some((t) => t.slug === slug)) continue;
       extra.push({
         slug,
         name: c.toolkitName || slug,
@@ -139,11 +137,9 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
     const found = q.length >= MIN_SEARCH && remote?.q === q ? remote.items : [];
     const seen = new Set(local.map((t) => slugKey(t.slug)));
     const merged = [...local, ...found.filter((t) => !seen.has(slugKey(t.slug)))];
-    // Connected tools first; the catalog order otherwise (sort is stable).
-    return merged.sort(
-      (a, b) => Number(connectedSlugs.has(slugKey(b.slug))) - Number(connectedSlugs.has(slugKey(a.slug)))
-    );
-  }, [q, base, remote, connectedSlugs]);
+    // Tools with accounts first; the catalog order otherwise (sort is stable).
+    return merged.sort((a, b) => Number(accounts.has(slugKey(b.slug))) - Number(accounts.has(slugKey(a.slug))));
+  }, [q, base, remote, accounts]);
 
   // Watch the connections until this tool gains an account (the sign-in happens in another tab) or
   // the deadline passes.
@@ -182,19 +178,12 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
     }
   }
 
-  // Disconnect every account of this tool.
-  async function disconnect(toolkit: IntegrationToolkit) {
-    const ids = (connections ?? [])
-      .filter((c) => isActive(c) && slugKey(c.toolkitSlug) === slugKey(toolkit.slug))
-      .map((c) => c.id);
-    setDisconnecting(slugKey(toolkit.slug));
+  // One account at a time: a duplicate or an unfinished connection goes without touching the others.
+  async function disconnect(toolkit: IntegrationToolkit, id: string) {
+    setDisconnecting(id);
     try {
-      await Promise.all(
-        ids.map((id) =>
-          apiFetch(`/api/agents/${agentId}/integrations/connections/${encodeURIComponent(id)}`, { method: "DELETE" })
-        )
-      );
-      toast.success(`${toolkit.name} est déconnecté`);
+      await apiFetch(`/api/agents/${agentId}/integrations/connections/${encodeURIComponent(id)}`, { method: "DELETE" });
+      toast.success(`Compte ${toolkit.name} retiré`);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -235,11 +224,11 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
               <ToolTile
                 key={k}
                 toolkit={t}
-                connected={connections === null ? null : connectedSlugs.has(k)}
+                accounts={connections === null ? null : (accounts.get(k) ?? [])}
                 waiting={connecting === k || pending === k}
-                disconnecting={disconnecting === k}
+                disconnecting={disconnecting}
                 onConnect={() => connect(t)}
-                onDisconnect={() => disconnect(t)}
+                onDisconnect={(id) => disconnect(t, id)}
               />
             );
           })}
@@ -268,9 +257,19 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
   );
 }
 
+const STATE_TONE = {
+  active: "bg-ok-pale text-ok",
+  pending: "bg-soft text-ink-2",
+  failed: "bg-soft text-ink-2",
+  disabled: "bg-soft text-ink-3",
+} as const;
+
+const dateFr = (ms: number | null | undefined): string =>
+  ms ? new Date(ms).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "";
+
 function ToolTile({
   toolkit,
-  connected,
+  accounts,
   waiting,
   disconnecting,
   onConnect,
@@ -278,62 +277,89 @@ function ToolTile({
 }: {
   toolkit: IntegrationToolkit;
   // null while the connections are still loading
-  connected: boolean | null;
+  accounts: IntegrationConnection[] | null;
   waiting: boolean;
-  disconnecting: boolean;
+  disconnecting: string | null;
   onConnect: () => void;
-  onDisconnect: () => void;
+  onDisconnect: (id: string) => void;
 }) {
+  const connected = accounts?.some(isActive) ?? false;
   return (
-    <div className="flex min-h-[76px] items-center gap-3 rounded-[22px] border bg-card py-3 pl-4 pr-3">
-      <ToolLogo logo={toolkit.logo} name={toolkit.name} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-semibold text-ink">{toolkit.name}</p>
-        {toolkit.description && <p className="truncate text-[13px] text-ink-3">{toolkit.description}</p>}
+    <div className="rounded-[22px] border bg-card py-3 pl-4 pr-3">
+      <div className="flex min-h-[52px] items-center gap-3">
+        <ToolLogo logo={toolkit.logo} name={toolkit.name} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-semibold text-ink">{toolkit.name}</p>
+          {toolkit.description && <p className="truncate text-[13px] text-ink-3">{toolkit.description}</p>}
+        </div>
+
+        {accounts === null ? (
+          <span className="h-8 w-24 shrink-0 animate-pulse rounded-[10px] bg-soft" />
+        ) : accounts.length > 0 ? (
+          <div className="flex shrink-0 items-center gap-0.5">
+            {connected && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-ok-pale px-2.5 py-1 text-xs font-semibold text-ok">
+                <Check className="h-3.5 w-3.5" />
+                Connecté
+              </span>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={`Options pour ${toolkit.name}`}
+                  disabled={waiting}
+                  className="grid h-8 w-8 max-sm:size-10 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink disabled:opacity-60"
+                >
+                  {waiting ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onSelect={onConnect}>
+                  <Plus /> Ajouter un compte
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : waiting ? (
+          <Button size="sm" variant="outline" disabled className="shrink-0">
+            <Loader2 className="animate-spin" />
+            En attente
+          </Button>
+        ) : (
+          <Button size="sm" className="shrink-0" onClick={onConnect}>
+            Connecter
+          </Button>
+        )}
       </div>
 
-      {connected === null ? (
-        <span className="h-8 w-24 shrink-0 animate-pulse rounded-[10px] bg-soft" />
-      ) : connected ? (
-        <div className="flex shrink-0 items-center gap-0.5">
-          <span className="inline-flex items-center gap-1 rounded-full bg-ok-pale px-2.5 py-1 text-xs font-semibold text-ok">
-            <Check className="h-3.5 w-3.5" />
-            Connecté
-          </span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label={`Options pour ${toolkit.name}`}
-                disabled={disconnecting || waiting}
-                className="grid h-8 w-8 max-sm:size-10 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink disabled:opacity-60"
-              >
-                {disconnecting || waiting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <MoreHorizontal className="h-4 w-4" />
-                )}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onSelect={onConnect}>
-                <Plus /> Connecter un autre compte
-              </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onSelect={onDisconnect}>
-                <Unplug /> Déconnecter
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      ) : waiting ? (
-        <Button size="sm" variant="outline" disabled className="shrink-0">
-          <Loader2 className="animate-spin" />
-          En attente
-        </Button>
-      ) : (
-        <Button size="sm" className="shrink-0" onClick={onConnect}>
-          Connecter
-        </Button>
+      {accounts && accounts.length > 0 && (
+        <ul className="mt-2 space-y-1 border-t pt-2">
+          {accounts.map((a, i) => {
+            const state = accountState(a);
+            return (
+              <li key={a.id} className="flex items-center gap-2 text-[13px]">
+                <span className="min-w-0 flex-1 truncate text-ink-2" title={a.id}>
+                  {accountLabel(a, i)}
+                  {dateFr(a.createdAt) && <span className="text-ink-3"> · {dateFr(a.createdAt)}</span>}
+                </span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATE_TONE[state]}`}>
+                  {ACCOUNT_STATE_LABELS[state]}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onDisconnect(a.id)}
+                  disabled={disconnecting !== null}
+                  aria-label={`Déconnecter ${accountLabel(a, i)}`}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-ink-3 transition-colors hover:bg-soft hover:text-destructive disabled:opacity-60"
+                >
+                  {disconnecting === a.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
+                  Déconnecter
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );
