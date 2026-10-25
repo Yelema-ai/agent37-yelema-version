@@ -154,15 +154,6 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
           >
             {listHidden ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
-          <button
-          type="button"
-          onClick={() => setChatFull(!full)}
-          aria-label={full ? "Réduire" : "Plein écran"}
-          title={full ? "Réduire (Échap)" : "Plein écran"}
-          className="hidden size-9 shrink-0 place-items-center rounded-full text-ink-2 hover:bg-soft hover:text-ink lg:grid"
-        >
-          {full ? <Minimize2 className="h-[18px] w-[18px]" /> : <Maximize2 className="h-[18px] w-[18px]" />}
-        </button>
           {/* On an expert's page its photo and name already head the page: shown once. */}
           {face && !profile && <ExpertAvatar expert={face} size="sm" />}
           <div className="min-w-0">
@@ -182,6 +173,16 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
         >
           <Plus className="h-4 w-4" />
           <span className="hidden sm:inline">Nouvelle conversation</span>
+        </button>
+        {/* Plein écran: in the corner, where a window is enlarged. */}
+        <button
+          type="button"
+          onClick={() => setChatFull(!full)}
+          aria-label={full ? "Réduire" : "Plein écran"}
+          title={full ? "Réduire (Échap)" : "Plein écran"}
+          className="hidden size-9 shrink-0 place-items-center rounded-full text-ink-2 hover:bg-soft hover:text-ink lg:grid"
+        >
+          {full ? <Minimize2 className="h-[18px] w-[18px]" /> : <Maximize2 className="h-[18px] w-[18px]" />}
         </button>
         </div>
       </header>
