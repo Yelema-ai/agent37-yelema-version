@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useConversationStatus } from "@/components/activity/hooks";
-import { Archive, CheckCheck, ChevronRight, Copy, Loader2, MoreHorizontal, Pencil, Pin, PinOff, Plus, Repeat, RotateCw, Search, Trash2, X } from "lucide-react";
+import { Archive, CheckCheck, ChevronRight, Copy, Link2, Loader2, MoreHorizontal, Pencil, Pin, PinOff, Plus, Repeat, RotateCw, Search, Trash2, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNotifications } from "@/components/activity/ActivityProvider";
 import { convKey } from "@/lib/activity";
@@ -176,6 +176,28 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
     }
   }
 
+  // « Copier le lien »: a read-only link to the thread, for a signed-in colleague of the same company
+  // (30 days, see conversation-token.ts).
+  async function copyLink(s: ChatSession) {
+    const mint = apiFetch<{ path: string; days: number }>(
+      `/api/agents/${agentId}/chat/sessions/${s.session_id}/share${profileQuery(profile)}`,
+      { method: "POST", body: JSON.stringify({ title: s.routine ?? s.title ?? "" }) }
+    );
+    const url = mint.then((res) => new URL(res.path, window.location.origin).toString());
+    try {
+      // Safari only copies inside the click itself: hand it the link still being made (ClipboardItem
+      // with a promise), and fall back to writing the text once it is there.
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
+        await navigator.clipboard.write([new ClipboardItem({ "text/plain": url.then((u) => new Blob([u], { type: "text/plain" })) })]);
+      } else {
+        await navigator.clipboard.writeText(await url);
+      }
+      toast.success(`Lien copié. Il ouvre la conversation en lecture seule pour vos collègues, pendant ${(await mint).days} jours.`);
+    } catch (e) {
+      toast.error((e as Error).message || "Le lien n’a pas pu être copié. Réessayez.");
+    }
+  }
+
   function startRename(sessionId: string, current: string | null) {
     setEditingId(sessionId);
     setDraft(current ?? "");
@@ -245,7 +267,7 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={`Actions pour ${label}`}
-            title="Renommer, épingler, archiver ou supprimer"
+            title="Renommer, épingler, copier, archiver ou supprimer"
             className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-ink-3 opacity-0 transition-opacity hover:bg-soft-2 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100"
           >
             <MoreHorizontal className="h-4 w-4" />
@@ -267,6 +289,9 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void copyConversation(s)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
               <Copy className="size-4" /> Copier la conversation
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void copyLink(s)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
+              <Link2 className="size-4" /> Copier le lien
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => (archivedIds.has(keyOf(s)) ? mark(keyOf(s), "archived", false) : archive(s))} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
               <Archive className="size-4" /> {archivedIds.has(keyOf(s)) ? "Désarchiver" : "Archiver"}
