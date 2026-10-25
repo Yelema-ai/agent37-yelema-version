@@ -142,6 +142,18 @@ export function EnterpriseSidebar({ collapsed, onToggle, onNavigate }: { collaps
         <Blocks className="size-5 shrink-0" strokeWidth={1.9} />
         {!collapsed && "Intégrations"}
       </Link>}
+      {current?.access === "entreprise" && <Link
+        href="/integrations/connecteurs"
+        onClick={onNavigate}
+        className={cn(
+          "flex min-h-10 items-center gap-2.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors",
+          pathname.startsWith("/integrations") ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft",
+          collapsed && "justify-center px-0"
+        )}
+      >
+        <Blocks className="size-5 shrink-0" strokeWidth={1.9} />
+        {!collapsed && "Mes connecteurs"}
+      </Link>}
 
       {/* The Experts and the conversations scroll between the top of the menu and its foot, which stay put. */}
       <div className={cn("-mx-3 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3", collapsed && "-mx-2.5 items-center px-2.5")}>

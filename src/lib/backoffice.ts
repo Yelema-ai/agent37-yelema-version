@@ -563,6 +563,9 @@ export const backoffice = {
   // back office maps the token to its member and answers only from the compartments the org chart
   // opens to that member. A reasoned answer goes through a model on the provider's side.
   // `profile`: the expert asking, when its instance says which one (header X-Yelema-Profile).
+  // Chat d'entreprise : whose apps an agent (`u-…`) of the enterprise instance calls — its own member's account.
+  seatAppsUser: (instanceToken: string, workspace: string, profile: string) =>
+    call<{ user: string }>("/app/apps/seat", { method: "POST", token: instanceToken, workspace, body: { profile } }),
   memoryAsk: (instanceToken: string, workspace: string, question: string, profile?: string) =>
     call<{ answer: string | null }>("/app/memory/ask", { method: "POST", token: instanceToken, workspace, body: { question, profile }, timeoutMs: MEMORY_ASK_TIMEOUT_MS }),
   memorySearch: (instanceToken: string, workspace: string, query: string, limit?: number, profile?: string) =>
