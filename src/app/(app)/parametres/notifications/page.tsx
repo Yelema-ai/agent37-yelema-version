@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { toast } from "sonner";
 import { PageBody } from "@/components/app/PageBody";
+import { useWorkspace } from "@/components/WorkspaceProvider";
 import { SettingsCard, SettingsRow } from "@/components/settings/SettingsRows";
 import { Switch } from "@/components/experts/RoutinesTable";
 import { Button } from "@/components/ui/button";
@@ -19,8 +20,14 @@ const KINDS: { kind: NoticeKind; label: string; hint: string }[] = [
   { kind: "deliverable", label: "Nouveaux livrables", hint: "Quand un fichier arrive dans les livrables." },
   { kind: "failed", label: "Problèmes", hint: "Une réponse qui échoue, un compte d’IA à recharger." },
 ];
+// Un membre qui n'a que le chat d'entreprise : ni Experts ni routines.
+const CHAT_ONLY_KINDS = [
+  { kind: "reply" as const, label: "Réponses du chat d’entreprise", hint: "Quand le chat d’entreprise vous répond." },
+  ...KINDS.filter((k) => k.kind !== "reply" && k.kind !== "routine"),
+];
 
 export default function Page() {
+  const kinds = useWorkspace().current?.access === "entreprise" ? CHAT_ONLY_KINDS : KINDS;
   const [notif, setNotif] = useState<NotificationSupport>("unsupported");
   const [prefs, setPrefs] = useState<NotifyPrefs>(DEFAULT_NOTIFY_PREFS);
   useEffect(() => {
@@ -44,7 +51,7 @@ export default function Page() {
   return (
     <PageBody>
       <SettingsCard>
-        {KINDS.map((k) => (
+        {kinds.map((k) => (
           <SettingsRow key={k.kind} label={k.label} hint={k.hint} inline>
             <Switch on={prefs[k.kind]} label={k.label} onChange={() => flip(k.kind)} />
           </SettingsRow>
