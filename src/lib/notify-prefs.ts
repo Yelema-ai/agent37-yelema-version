@@ -1,5 +1,5 @@
 // Which kinds of notice pop up (toast and system notification). The bell keeps every notice either way.
-// Stored in the browser until the back office keeps the user's preferences (then the mobile app shares them).
+// Read from the browser's copy; `lib/prefs-sync` keeps it in step with the back office.
 
 export type NoticeKind = "reply" | "routine" | "deliverable" | "failed";
 export type NotifyPrefs = Record<NoticeKind, boolean>;
@@ -16,10 +16,17 @@ export function readNotifyPrefs(): NotifyPrefs {
   }
 }
 
-export function saveNotifyPrefs(prefs: NotifyPrefs): void {
+/** The local copy only (used by the sync). */
+export function storeNotifyPrefs(prefs: NotifyPrefs): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(prefs));
   } catch {
     // Private window or blocked storage: the choice lasts for this page only.
   }
+}
+
+/** A choice made on this device: kept locally and sent to the back office. */
+export async function saveNotifyPrefs(prefs: NotifyPrefs): Promise<void> {
+  storeNotifyPrefs(prefs);
+  (await import("@/lib/prefs-sync")).pushPrefs({ notify: prefs });
 }

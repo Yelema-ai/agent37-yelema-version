@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Blocks, House, PanelLeftClose, Settings2, UserPlus } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
+import { EnterpriseSidebar } from "@/components/enterprise/EnterpriseSidebar";
 import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { AccountMenu } from "@/components/AccountMenu";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
@@ -19,7 +20,15 @@ const NAV = [
   { href: "/integrations", label: "Intégrations", icon: Blocks, exact: false },
 ] as const;
 
-export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolean; onToggle: () => void; onNavigate?: () => void }) {
+type SidebarProps = { collapsed: boolean; onToggle: () => void; onNavigate?: () => void };
+
+/** The company chat's menu for a member who has only that; the Experts' menu for everyone else. */
+export function Sidebar(props: SidebarProps) {
+  const { current } = useWorkspace();
+  return current?.access === "entreprise" ? <EnterpriseSidebar {...props} /> : <ExpertsSidebar {...props} />;
+}
+
+function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const { current } = useWorkspace();
   // The company's main logo first (« Entreprise »), then the deployment's, then the initial.

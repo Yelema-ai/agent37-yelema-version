@@ -17,7 +17,7 @@ import {
 // Rows shown before « Voir plus ».
 const FIRST = 5;
 
-function Switch({ on, label, disabled, onChange }: { on: boolean; label: string; disabled?: boolean; onChange: () => void }) {
+export function Switch({ on, label, disabled, onChange }: { on: boolean; label: string; disabled?: boolean; onChange: () => void }) {
   return (
     <button
       type="button"

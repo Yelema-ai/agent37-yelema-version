@@ -1,44 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { NO_MARKS, parseMarks, setMark, type ChatMarks } from "@/lib/chat-marks";
+import { NO_MARKS, setMark, type ChatMarks } from "@/lib/chat-marks";
+import { MARKS_EVENT, pushPrefs, readLocalMarks, storeLocalMarks, syncPrefs } from "@/lib/prefs-sync";
 
-// Pinned and archived conversations, kept in the browser until the back office stores them (then
-// they follow the member to the mobile app). Every list re-reads on the same event, so pinning in
-// the rail moves the row in the menu at once.
-const KEY = "yelema.chat-marks";
-const EVENT = "yelema:chat-marks";
-
-function read(): ChatMarks {
-  try {
-    return parseMarks(localStorage.getItem(KEY));
-  } catch {
-    return NO_MARKS;
-  }
-}
-
+// Pinned and archived conversations. Every list re-reads on the same event, so pinning in the rail
+// moves the row elsewhere at once; the back office keeps them for the member's other devices.
 export function useChatMarks() {
   const [marks, setMarks] = useState<ChatMarks>(NO_MARKS);
   useEffect(() => {
-    const sync = () => setMarks(read());
+    const sync = () => setMarks(readLocalMarks());
     sync();
-    window.addEventListener(EVENT, sync);
+    void syncPrefs();
+    window.addEventListener(MARKS_EVENT, sync);
     window.addEventListener("storage", sync);
     return () => {
-      window.removeEventListener(EVENT, sync);
+      window.removeEventListener(MARKS_EVENT, sync);
       window.removeEventListener("storage", sync);
     };
   }, []);
 
   const mark = useCallback((key: string, kind: "pinned" | "archived", on: boolean) => {
-    const next = setMark(read(), key, kind, on);
-    try {
-      localStorage.setItem(KEY, JSON.stringify(next));
-    } catch {
-      // No storage: the mark lasts for this page.
-    }
+    const next = setMark(readLocalMarks(), key, kind, on);
+    storeLocalMarks(next);
     setMarks(next);
-    window.dispatchEvent(new Event(EVENT));
+    pushPrefs({ chatMarks: next });
   }, []);
 
   return { marks, mark };

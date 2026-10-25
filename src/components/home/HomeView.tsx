@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, MessageCircle, Mic, Send } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspace } from "@/components/WorkspaceProvider";
+import { EnterpriseHome } from "@/components/enterprise/EnterpriseHome";
 import { DictationBar } from "@/components/chat/ChatComposer";
 import { useDictation } from "@/components/chat/useDictation";
 import { useVoices } from "@/components/voice/useVoices";
@@ -119,7 +120,13 @@ function Installing() {
 // Accueil: greeting, "Demander à mon équipe" (chips pick the expert; sending opens that expert's
 // chat with the message on its way), then the team. Everything shown is what is installed for
 // this user; the catalogue only dresses it.
+/** A member with the company chat only gets its own home; everyone else the Experts' home. */
 export function HomeView() {
+  const { current } = useWorkspace();
+  return current?.access === "entreprise" ? <EnterpriseHome /> : <ExpertsHome />;
+}
+
+function ExpertsHome() {
   const router = useRouter();
   const { current, userEmail, userFirstName } = useWorkspace();
   const { experts, loading, unreadable, installing, stalled, failed, failedExperts } = useExpertsContext();

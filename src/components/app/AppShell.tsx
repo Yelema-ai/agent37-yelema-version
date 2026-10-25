@@ -1,6 +1,9 @@
 "use client";
 
 import { DeliverableWatcher } from "@/components/activity/DeliverableWatcher";
+import { syncPrefs } from "@/lib/prefs-sync";
+import { SearchDialog } from "@/components/conversations/SearchDialog";
+import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ActivityProvider } from "@/components/activity/ActivityProvider";
@@ -29,6 +32,9 @@ const COLLAPSE_KEY = "sbmini";
  * son contenu dans <Page>.
  */
 export function AppShell({ children, initialExperts }: { children: React.ReactNode; initialExperts: InitialExperts | null }) {
+  // The member's notification and conversation choices, from the back office, before the first notice.
+  useEffect(() => void syncPrefs(), []);
+  const chatOnly = useWorkspace().current?.access === "entreprise";
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -83,6 +89,7 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
         {/* The call lives above the pages: it goes on, folded or not, while the member navigates. */}
         <CallProvider>
         <DeliverableWatcher />
+        {chatOnly && <SearchDialog />}
         <div
           className="min-h-screen md:grid"
           // --shell-nav: where the working area starts, for what covers it (an enlarged dashboard).

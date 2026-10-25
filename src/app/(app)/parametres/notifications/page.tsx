@@ -9,6 +9,7 @@ import { Switch } from "@/components/experts/RoutinesTable";
 import { Button } from "@/components/ui/button";
 import { askNotificationPermission, notificationSupport, type NotificationSupport } from "@/components/activity/system-notify";
 import { DEFAULT_NOTIFY_PREFS, readNotifyPrefs, saveNotifyPrefs, type NoticeKind, type NotifyPrefs } from "@/lib/notify-prefs";
+import { syncPrefs } from "@/lib/prefs-sync";
 
 // Paramètres · Notifications : ce qui mérite d'interrompre, sur le web et dans l'app seulement.
 // Un type coupé reste dans la cloche ; il ne s'affiche plus en bulle ni en notification.
@@ -25,6 +26,7 @@ export default function Page() {
   useEffect(() => {
     setNotif(notificationSupport());
     setPrefs(readNotifyPrefs());
+    void syncPrefs().then(() => setPrefs(readNotifyPrefs()));
   }, []);
 
   async function enable() {
@@ -36,7 +38,7 @@ export default function Page() {
   function flip(kind: NoticeKind) {
     const next = { ...prefs, [kind]: !prefs[kind] };
     setPrefs(next);
-    saveNotifyPrefs(next);
+    void saveNotifyPrefs(next);
   }
 
   return (

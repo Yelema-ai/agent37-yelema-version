@@ -76,6 +76,8 @@ export interface BoMe {
   user: { id: string; email: string; firstName: string | null; lastName: string | null; name: string | null; jobTitle: string | null; role: "admin" | "member"; avatarUrl?: string | null; /** Call voice per expert (`*` = all) and language, shared with the mobile app. */ voices?: Record<string, Partial<Record<"fr" | "en", string>>> };
   workspace: { id: string; name: string; logoUrl: string | null };
   instance: { id: string } | null;
+  /** `entreprise`: company chat only — no Experts, no instance of one's own. Absent on older back offices. */
+  access?: "instance" | "entreprise";
 }
 
 export interface BoInstanceView {
@@ -321,6 +323,9 @@ function usageQuery(filter: BoUsageFilter, page?: number): string {
   return query ? `?${query}` : "";
 }
 
+/** `/app/me/preferences` : épinglé, archivé et notifications du membre, gardés par le back-office. */
+export type MemberPrefs = { chatMarks: { pinned: string[]; archived: string[] }; notify: Record<string, boolean> };
+
 export const backoffice = {
   login: (email: string, password: string) =>
     call<BoOpenedSession>("/app/auth/login", { method: "POST", body: { email, password } }),
@@ -339,6 +344,8 @@ export const backoffice = {
   // keeps it and answers the profile with its `avatarUrl`. `DELETE` goes back to the initial.
   setMyAvatar: (token: string, form: FormData) => call<BoMe>("/app/me/avatar", { method: "PUT", token, form, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   removeMyAvatar: (token: string) => call<BoMe>("/app/me/avatar", { method: "DELETE", token }),
+  preferences: (token: string) => call<MemberPrefs>("/app/me/preferences", { token }),
+  setPreferences: (token: string, body: Partial<MemberPrefs>) => call<MemberPrefs>("/app/me/preferences", { method: "PUT", token, body }),
   instance: async (token: string): Promise<BoInstanceReading> => {
     const d = await call<{ instance: BoInstance | null; installation?: string; failedExperts?: unknown }>("/app/instance", { token });
     const known = d.installation === "running" || d.installation === "ready" || d.installation === "failed";

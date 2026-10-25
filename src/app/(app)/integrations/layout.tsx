@@ -31,7 +31,8 @@ export default function IntegrationsLayout({ children }: { children: React.React
   const { authVia } = usePublicConfig();
   // The catalog's logos are the app's own; a search result's comes from Composio: the connection is opened early.
   preconnect(COMPOSIO_LOGOS_ORIGIN);
-  const tabs = TABS.filter(
+  // The company chat only: nothing here is its member's to plug (its agent has no apps nor channels).
+  const tabs = current?.access === "entreprise" ? [] : TABS.filter(
     (t) => (!t.adminOnly || current?.role === "admin") && (!("backoffice" in t) || authVia === "backoffice")
   );
 
@@ -41,6 +42,9 @@ export default function IntegrationsLayout({ children }: { children: React.React
     nav.current?.querySelector<HTMLElement>("[aria-current=page]")?.scrollIntoView({ inline: "center", block: "nearest" });
   }, [pathname]);
 
+  if (current?.access === "entreprise") {
+    return <p className="mx-auto w-full max-w-[1280px] px-4 pt-6 text-sm text-ink-2 sm:px-8">Les intégrations sont réglées pour les Experts de l’entreprise. Le chat d’entreprise s’en sert sans réglage de votre part.</p>;
+  }
   return (
     <>
       {tabs.length > 1 && (

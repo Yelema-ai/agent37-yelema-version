@@ -13,6 +13,8 @@ export interface WorkspaceWithRole extends Workspace {
   role: Role;
   /** The company's main logo (back office `me.workspace.logoUrl`), shown at the top of the menu. */
   logo_url?: string | null;
+  /** `entreprise`: the company chat only (an agent on the company's instance): no Experts, no integrations. */
+  access?: "instance" | "entreprise";
 }
 
 export interface WorkspaceMember {
