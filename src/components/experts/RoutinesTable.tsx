@@ -230,7 +230,7 @@ export function RoutinesTable({ routines, ...act }: { routines: Routine[] } & Ro
   );
 }
 
-function RowMenu({ routine: r, busy, onRunNow, onHistory, onEdit, onRemove }: { routine: Routine; busy: boolean } & RoutineActions) {
+export function RowMenu({ routine: r, busy, onRunNow, onHistory, onEdit, onRemove }: { routine: Routine; busy: boolean } & RoutineActions) {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>

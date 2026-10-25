@@ -195,7 +195,7 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1.5">
-        <p className="text-[15px] text-ink-2">Connectez les outils de l’entreprise : tous vos experts peuvent s’en servir.</p>
+        <p className="text-[15px] text-ink-2">Connectez les outils de l’entreprise : tous vos Experts peuvent s’en servir.</p>
         <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-3">
           <Plug className="h-4 w-4" />
           Plus de 1 000 applications disponibles

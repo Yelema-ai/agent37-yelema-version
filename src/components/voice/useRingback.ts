@@ -45,13 +45,33 @@ const BEEPS = 3;
 const BEEP_S = 0.16;
 const GAP_S = 0.12;
 
+// Opened during the click that starts the call: a browser lets a page play sound only from a
+// context a gesture started, and the expert may hang up long after, with no click (Leslie, 25/10:
+// no tone when the expert hangs up). The end tone plays on it, then it is released.
+let primed: AudioContext | null = null;
+
+export function primeHangupTone(): void {
+  if (primed) return;
+  try {
+    primed = newAudioContext();
+  } catch {
+    primed = null;
+  }
+}
+
 export function playHangupTone(): void {
   let ctx: AudioContext;
-  try {
-    ctx = newAudioContext();
-  } catch {
-    return;
+  if (primed && primed.state !== "closed") {
+    ctx = primed;
+    void ctx.resume().catch(() => {});
+  } else {
+    try {
+      ctx = newAudioContext();
+    } catch {
+      return;
+    }
   }
+  primed = null;
   const gain = ctx.createGain();
   gain.gain.value = 0;
   gain.connect(ctx.destination);

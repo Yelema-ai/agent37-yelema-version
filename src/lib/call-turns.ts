@@ -10,38 +10,54 @@
 
 export type CallPhase = "idle" | "connecting" | "listening" | "thinking" | "speaking" | "reconnecting" | "ended" | "unreachable";
 
-/** The halo around the expert's picture, same codes as the mobile app (Leslie, 18/10). */
-export type Halo = "parle" | "ecoute" | "reflechit" | "connexion" | "reco" | "muet";
+/**
+ * The halo around the expert's picture (Leslie, 23/10, as on the mobile app): violet while the expert
+ * speaks, picks up, thinks or searches, green when it is the member's turn, grey with a red badge when
+ * the microphone is cut. The connection shows the picture in grey with a turning arc.
+ */
+export type Halo = "parle" | "ecoute" | "reflechit" | "cherche" | "connexion" | "reco" | "muet";
 
-export const HALO_RGB: Record<Halo, string> = {
-  parle: "228,118,90", // corail #E4765A
-  ecoute: "245,184,61", // ambre #F5B83D
-  reflechit: "46,199,128", // vert #2EC780
-  connexion: "141,104,250", // violet #8D68FA, pulses (900 ms)
-  reco: "197,196,255", // lavande #C5C4FF, blinks (450 ms)
-  muet: "150,150,160", // gris
+/** The Expert's side is `--call`: Yelema's violet, or the company's color. Green and grey are common. */
+export const HALO_COLOR: Record<Halo, string> = {
+  parle: "var(--call)",
+  ecoute: "#2ec780", // vert
+  reflechit: "var(--call)",
+  cherche: "var(--call)",
+  connexion: "var(--call)",
+  reco: "#c9c8d4", // gris, blinks (450 ms)
+  muet: "#c9c8d4",
 };
 
-/** Half a pulse, in ms; null when the halo stays still. */
-export const HALO_PULSE_MS: Record<Halo, number | null> = { parle: null, ecoute: null, reflechit: null, connexion: 900, reco: 450, muet: null };
+/** A color at some opacity, for any CSS color (a variable included). */
+export function tint(color: string, alpha: number): string {
+  return `color-mix(in srgb, ${color} ${Math.round(alpha * 100)}%, transparent)`;
+}
 
-/** Same order as the mobile app: reconnection, then connection, thinking, muted, speaking, listening. */
-export function haloOf(phase: CallPhase, muted: boolean): Halo | null {
+/** Half a pulse, in ms; null when the halo stays still. */
+export const HALO_PULSE_MS: Record<Halo, number | null> = { parle: null, ecoute: null, reflechit: null, cherche: null, connexion: null, reco: 450, muet: null };
+
+/** Reconnection, then connection, muted, a tool at work, thinking, speaking, listening. */
+export function haloOf(phase: CallPhase, muted: boolean, tool = false): Halo | null {
   if (phase === "reconnecting") return "reco";
   if (phase === "connecting") return "connexion";
-  if (phase === "thinking") return "reflechit";
-  if (phase !== "listening" && phase !== "speaking") return null;
+  if (phase !== "listening" && phase !== "speaking" && phase !== "thinking") return null;
+  // Mic cut: the expert speaking still shows (Leslie, 25/10); the cut mic stays red on its button.
+  if (phase === "speaking") return "parle";
   if (muted) return "muet";
-  return phase === "speaking" ? "parle" : "ecoute";
+  if (tool) return "cherche";
+  if (phase === "thinking") return "reflechit";
+  return "ecoute";
 }
 
 export const VOICE_ON = 0.02;
 export const VOICE_OFF = 0.01;
-export const VOICE_START_MS = 120;
-export const VOICE_END_MS = 700;
+// Held long enough that a breath between two sentences does not flip the halo to « à vous » and
+// back (Leslie, 25/10: states to stabilise).
+export const VOICE_START_MS = 200;
+export const VOICE_END_MS = 1200;
 export const MIC_ON = 0.03;
 export const MIC_START_MS = 250;
-export const MIC_END_MS = 800;
+export const MIC_END_MS = 1000;
 export const THINKING_MAX_MS = 15_000;
 export const THINKING_LONGER_MAX_MS = 45_000;
 

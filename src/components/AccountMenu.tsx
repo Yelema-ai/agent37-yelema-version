@@ -32,7 +32,7 @@ export function AccountMenu({ collapsed = false }: { collapsed?: boolean }) {
   async function enableNotifications() {
     const next = await askNotificationPermission();
     setNotif(next);
-    if (next === "granted") toast.success("Notifications activées : vous serez prévenu quand un expert répond.");
+    if (next === "granted") toast.success("Notifications activées : vous serez prévenu quand un Expert répond.");
     else if (next === "denied") toast.info("Notifications refusées. Vous pouvez les autoriser dans les réglages du navigateur.");
   }
 

@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
+import { BackButton } from "@/components/ui/back-button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Preview as DocPreview } from "@/components/chat/DocumentCards";
+import { docKind } from "@/lib/drive-links";
 import { contentUrl, previewKind, type FileEntry } from "./types";
 
 // Preview one file in a dialog. Rendering is chosen by extension:
@@ -28,8 +31,9 @@ export function FilePreview({
       <DialogContent className="max-w-4xl">
         {entry && (
           <>
-            <DialogHeader>
-              <DialogTitle className="truncate pr-8">{entry.name}</DialogTitle>
+            <DialogHeader className="items-start gap-3 text-left">
+              <BackButton label="Livrables" onClick={onClose} />
+              <DialogTitle className="max-w-full truncate pr-8">{entry.name}</DialogTitle>
             </DialogHeader>
             <PreviewBody agentId={agentId} entry={entry} />
             <div className="flex justify-end">
@@ -72,6 +76,16 @@ function PreviewBody({ agentId, entry }: { agentId: string; entry: FileEntry }) 
 
   if (kind === "text") {
     return <TextPreview url={inline} />;
+  }
+
+  // Word, Excel and PowerPoint: drawn as in the chat (Leslie, 23/10: they open in Livrables too).
+  const doc = docKind(entry.name);
+  if (doc === "word" || doc === "excel" || doc === "powerpoint") {
+    return (
+      <div className="h-[60vh] overflow-auto rounded-md border bg-white">
+        <DocPreview agentId={agentId} doc={{ name: entry.name, path: entry.path, size: entry.size ?? null, modified: entry.modified ?? null, kind: doc }} />
+      </div>
+    );
   }
 
   return (

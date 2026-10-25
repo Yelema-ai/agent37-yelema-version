@@ -1,5 +1,6 @@
 "use client";
 
+import { useChatSidePanel } from "@/components/chat/chat-layout";
 import { Maximize2, Monitor, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ const LiveDot = () => <span className="h-2 w-2 shrink-0 animate-pulse rounded-fu
 
 export function ComputerButton() {
   const { panelOpen, setPanelOpen, setDialogOpen } = useComputer();
+  const sidePanel = useChatSidePanel();
   return (
     <button
       type="button"
@@ -57,7 +59,7 @@ export function ComputerButton() {
     >
       <Monitor className="h-4 w-4" />
       {/* Beside the open panel the chat is narrow, and the highlighted icon says enough. */}
-      <span className={cn("hidden sm:inline", panelOpen && "wide:hidden")}>Son ordinateur</span>
+      <span className={cn("hidden sm:inline", (panelOpen || sidePanel) && "wide:hidden")}>Son ordinateur</span>
     </button>
   );
 }
@@ -73,7 +75,7 @@ export function ComputerPanel(props: ComputerProps) {
           <p className="flex items-center gap-2 text-sm font-semibold text-ink">
             {live && <LiveDot />} Son ordinateur
           </p>
-          <p className="truncate text-xs text-ink-3">Tous vos experts travaillent sur cet ordinateur.</p>
+          <p className="truncate text-xs text-ink-3">Tous vos Experts travaillent sur cet ordinateur.</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setDialogOpen(true)} aria-label="Agrandir" title="Agrandir">
@@ -115,7 +117,7 @@ export function ComputerDialog({ onWrite, ...props }: ComputerProps & { onWrite:
           </DialogTitle>
           <DialogDescription className="flex items-center gap-2 text-[13px] text-ink-3">
             {live && <LiveDot />}
-            {live ? "En direct. " : ""}Tous vos experts travaillent sur cet ordinateur.
+            {live ? "En direct. " : ""}Tous vos Experts travaillent sur cet ordinateur.
           </DialogDescription>
         </DialogHeader>
 
