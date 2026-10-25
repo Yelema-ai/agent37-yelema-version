@@ -1,5 +1,6 @@
 "use client";
 
+import { BackButton } from "@/components/ui/back-button";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, Check, Copy, Inbox, Loader2, Mail, Paperclip, Plus, RefreshCw, Send, X } from "lucide-react";
 import { toast } from "sonner";
@@ -116,7 +117,7 @@ export function ExpertEmails({ inbox, expertName, loaded }: { inbox: MailInbox |
           {loaded ? <Inbox className="h-6 w-6" /> : <Loader2 className="h-6 w-6 animate-spin" />}
         </span>
         <h2 className="mt-3 text-base font-semibold text-ink">{loaded ? "Pas de boîte e-mail" : "Chargement…"}</h2>
-        {loaded && <p className="mx-auto mt-1 max-w-md text-sm text-ink-3">{expertName} n’a pas de boîte e-mail que vous puissiez consulter. Votre administrateur peut le régler dans Administration › E-mails.</p>}
+        {loaded && <p className="mx-auto mt-1 max-w-md text-sm text-ink-3">{expertName} n’a pas de boîte e-mail que vous puissiez consulter. Votre administrateur peut le régler dans Intégrations › E-mails.</p>}
       </div>
     );
   }
@@ -145,7 +146,7 @@ export function ExpertEmails({ inbox, expertName, loaded }: { inbox: MailInbox |
                   ? `${expertName} écrit depuis cette adresse, à votre demande, y compris hors de l’entreprise.`
                   : `${expertName} écrit depuis cette adresse, à votre demande, aux membres de votre entreprise seulement.`
                 : inbox.sendEnabled
-                  ? "Vous pouvez lire cette boîte ; l’envoi ne vous est pas ouvert. Votre administrateur peut le régler dans Administration › E-mails."
+                  ? "Vous pouvez lire cette boîte ; l’envoi ne vous est pas ouvert. Votre administrateur peut le régler dans Intégrations › E-mails."
                   : `${expertName} n’est pas encore autorisé à envoyer des e-mails. Votre administrateur peut l’autoriser dans Administration › E-mails.`}
             </p>
           </div>
@@ -233,6 +234,7 @@ export function ExpertEmails({ inbox, expertName, loaded }: { inbox: MailInbox |
               expert={inbox.expert}
               message={open.message}
               canReply={inbox.canSend && !isSent(open.message.labels)}
+              onBack={() => setOpen(null)}
               onReply={() => {
                 setCompose({ replyTo: open.message });
                 setOpen(null);
@@ -263,10 +265,11 @@ export function ExpertEmails({ inbox, expertName, loaded }: { inbox: MailInbox |
   );
 }
 
-function MessageView({ expert, message, canReply, onReply }: { expert: string; message: MailDetail; canReply: boolean; onReply: () => void }) {
+function MessageView({ expert, message, canReply, onReply, onBack }: { expert: string; message: MailDetail; canReply: boolean; onReply: () => void; onBack: () => void }) {
   return (
     <div className="space-y-4">
-      <DialogHeader>
+      <DialogHeader className="items-start gap-3">
+        <BackButton label="E-mails" onClick={onBack} />
         <DialogTitle className="font-display text-xl font-bold text-ink">{message.subject || "(Sans objet)"}</DialogTitle>
         <DialogDescription asChild>
           <div className="flex flex-col gap-1 pt-2 text-xs text-ink-3">

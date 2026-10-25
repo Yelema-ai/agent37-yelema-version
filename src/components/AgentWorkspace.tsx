@@ -21,6 +21,7 @@ import { DRIVE_ROOT } from "@/lib/drive-paths";
 import { ChatProvider } from "@/components/chat/ChatProvider";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatView } from "@/components/chat/ChatView";
+import { setChatFull, useChatFull, useChatListHidden } from "@/components/chat/chat-layout";
 import { FilesTab } from "@/components/files/FilesTab";
 import { cn } from "@/lib/utils";
 import { CallButton } from "@/components/voice/CallButton";
@@ -29,10 +30,11 @@ import { ExpertCalls } from "@/components/voice/ExpertCalls";
 import { useVoices } from "@/components/voice/useVoices";
 
 const TABS: { id: AgentTab; label: string; icon: typeof MessageSquare }[] = [
+  // Livrables right after Discussion (Leslie, 25/10), then Appels and E-mails.
   { id: "chat", label: "Discussion", icon: MessageSquare },
+  { id: "files", label: "Livrables", icon: FolderOpen },
   { id: "calls", label: "Appels", icon: Phone },
   { id: "emails", label: "E-mails", icon: Mail },
-  { id: "files", label: "Livrables", icon: FolderOpen },
   { id: "routines", label: "Routines", icon: Repeat },
 ];
 
@@ -115,11 +117,29 @@ export function AgentWorkspace({
     if (currentTab === "tools") window.history.replaceState(null, "", agentTabPath(agentId, "chat", profileId));
   }, [currentTab, agentId, profileId]);
   const isChat = currentTab === "chat" || currentTab === "tools";
+  const listHidden = useChatListHidden();
+  const chatFull = useChatFull();
+  // Échap, another tab or another page leave the full-screen chat.
+  useEffect(() => {
+    if (!chatFull) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !e.defaultPrevented && !document.querySelector("[role=dialog]")) setChatFull(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [chatFull]);
+  useEffect(() => {
+    if (!isChat) setChatFull(false);
+  }, [isChat]);
+  useEffect(() => () => setChatFull(false), [pathname]);
   const isFiles = currentTab === "files";
 
   function selectTab(tab: AgentTab) {
     const path = agentTabPath(agentId, tab, profileId);
-    if (typeof window !== "undefined" && window.location.pathname !== path) {
+    if (typeof window === "undefined") return;
+    // The tab already open, deeper in (a call's page): back to its list. The chat keeps its thread.
+    const deeper = tab !== "chat" && window.location.search !== "";
+    if (window.location.pathname !== path || deeper) {
       window.history.pushState(null, "", path);
     }
   }
@@ -248,14 +268,21 @@ export function AgentWorkspace({
           </div>
           {/* Chat owns its full height and stays MOUNTED (just hidden) across tab switches. */}
           {chatOpened && (
-            <div className={cn("relative flex min-h-0 flex-1", !isChat && "hidden")}>
+            <div
+              className={cn(
+                "relative flex min-h-0 flex-1",
+                !isChat && "hidden",
+                // « Plein écran »: the chat over the whole window, menu and header included.
+                chatFull && isChat && "fixed inset-0 z-40 bg-surface"
+              )}
+            >
               {/* The conversations open in their own column beside the chat from « Conversations » under
                   Discussion, and close to give the chat its whole width (phones and tablets: a panel).
                   Under 1280 px a column would leave the chat a strip: it floats over the chat instead,
                   like the phone's panel, and closes once a conversation is picked. */}
               {/* The conversations of this space, always beside the chat on a wide screen (search, Tout /
                   Non lues / Routines, periods). Narrower, the chat's header opens them in a panel. */}
-              <div className="hidden w-[288px] shrink-0 flex-col border-r border-line bg-surface px-2.5 py-3 xl:flex">
+              <div className={cn("hidden w-[288px] shrink-0 flex-col border-r border-line bg-surface px-2.5 py-3", !listHidden && "xl:flex")}>
                 <ChatSidebar />
               </div>
               <div className="min-w-0 flex-1">

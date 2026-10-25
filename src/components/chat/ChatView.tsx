@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import { ComputerButton, ComputerDialog, ComputerPanel } from "@/components/experts/ExpertComputer";
 import { DashboardProvider } from "@/components/experts/DashboardProvider";
 import { DashboardButton, DashboardPanel, DashboardDialog, ShareDashboardModal } from "@/components/experts/ExpertDashboard";
@@ -13,6 +13,7 @@ import { DropOverlay } from "@/components/DropOverlay";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessages } from "./ChatMessages";
 import { ChatSessionsPanel } from "./ChatSessionsPanel";
+import { setChatFull, setChatListHidden, useChatFull, useChatListHidden } from "./chat-layout";
 import { useChatContext } from "./ChatProvider";
 import { useChat } from "./useChat";
 import { useChatAttachments } from "./useChatAttachments";
@@ -109,14 +110,15 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
     [experts, agentId, profile]
   );
   const instance = useMemo(() => agents.find((x) => x.agent37_id === agentId) ?? null, [agents, agentId]);
-  // The expert's name when the chat targets one, the instance's otherwise.
-  const agentName = profile
-    ? (expert?.displayName ?? expertDisplayName(profile))
-    : instance?.name?.trim() || agentId;
+  // The expert's name when the chat targets one; the company chat otherwise (never the instance's
+  // name, which the back office writes as the list of its Experts).
+  const agentName = profile ? (expert?.displayName ?? expertDisplayName(profile)) : "Chat d’entreprise";
   // The avatar shown in the header, the welcome and beside each reply.
   const face = profile ? { displayName: agentName, photoUrl: expert?.photoUrl ?? null, gateway: null } : null;
   // "Son ordinateur" needs the screen the yelema-hermes image streams, from its revision 5 on
   // (image v1.1.0); an instance on another image, or on an older revision, has none to show.
+  const listHidden = useChatListHidden();
+  const full = useChatFull();
   const hasComputer =
     Boolean(profile) &&
     instance?.image?.template === SCREEN_TEMPLATE &&
@@ -141,16 +143,36 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
       <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <ChatSessionsPanel />
+          {/* Wide screen: the column of conversations folds away and comes back from here. */}
+          <button
+            type="button"
+            onClick={() => setChatListHidden(!listHidden)}
+            aria-label={listHidden ? "Afficher les conversations" : "Masquer les conversations"}
+            title={listHidden ? "Afficher les conversations" : "Masquer les conversations"}
+            className="-ml-1.5 hidden size-9 shrink-0 place-items-center rounded-full text-ink-2 hover:bg-soft hover:text-ink xl:grid"
+          >
+            {listHidden ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+          </button>
           {/* On an expert's page its photo and name already head the page: shown once. */}
           {face && !profile && <ExpertAvatar expert={face} size="sm" />}
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold leading-tight text-ink">{headerTitle}</h1>
+            {/* The company chat: never the instance's name (the back office names it after its Experts). */}
             {!profile && <p className="truncate text-xs text-ink-3">{agentName}</p>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
         {hasComputer && <ComputerButton />}
         {Boolean(profile) && <DashboardButton />}
+        <button
+          type="button"
+          onClick={() => setChatFull(!full)}
+          aria-label={full ? "Réduire" : "Plein écran"}
+          title={full ? "Réduire (Échap)" : "Plein écran"}
+          className="hidden size-9 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink-2 hover:bg-soft hover:text-ink lg:grid"
+        >
+          {full ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </button>
         <button
           type="button"
           onClick={startNewChat}

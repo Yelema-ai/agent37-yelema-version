@@ -76,7 +76,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
       )}
     >
       <div className={cn("flex items-center gap-1", collapsed && "flex-col")}>
-        <Link href="/" className={cn("flex min-w-0 items-center gap-2.5 px-2 pt-1.5 pb-3.5", !collapsed && "flex-1")}>
+        <Link href="/" className={cn("flex min-w-0 items-center gap-2.5 pt-1.5 pb-3.5", collapsed ? "justify-center" : "flex-1 px-2")}>
           {logoUrl ? (
             // Le logo du client. Yelema reste en pied, en « Powered by ». Entier, jamais rogné : contenu dans
             // sa case, avec une petite marge, menu ouvert ou replié.
@@ -110,7 +110,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
         title="Nouvelle conversation"
         className={cn(
           "mb-1.5 flex min-h-11 items-center gap-2.5 rounded-xl bg-brand px-3 text-sm font-semibold text-on-brand transition-opacity hover:opacity-90",
-          collapsed && "justify-center px-0"
+          collapsed && RAIL_SQUARE
         )}
       >
         <SquarePen className="size-5 shrink-0" strokeWidth={1.9} />
@@ -120,7 +120,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
         type="button"
         onClick={openSearch}
         title="Rechercher (Ctrl K)"
-        className={cn("flex min-h-10 items-center gap-2.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors text-ink-2 hover:bg-soft", collapsed && "justify-center px-0")}
+        className={cn("flex min-h-10 items-center gap-2.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors text-ink-2 hover:bg-soft", collapsed && RAIL_SQUARE)}
       >
         <Search className="size-5 shrink-0" strokeWidth={1.9} />
         {!collapsed && (
@@ -136,7 +136,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
         className={cn(
           "flex min-h-10 items-center gap-2.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors",
           pathname.startsWith("/integrations") ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft",
-          collapsed && "justify-center px-0"
+          collapsed && RAIL_SQUARE
         )}
       >
         <Blocks className="size-5 shrink-0" strokeWidth={1.9} />
@@ -146,6 +146,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
       {/* The Experts and the conversations scroll between the top of the menu and its foot, which stay put. */}
       <div className={cn("-mx-3 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3", collapsed && "-mx-2.5 items-center px-2.5")}>
       {/* An employee with the company chat only has no Experts: no empty heading then. */}
+      {collapsed && experts.length > 0 && <div className="my-2 h-px w-8 shrink-0 bg-line" aria-hidden />}
       {!collapsed && experts.length > 0 && (
         <div className="px-2.5 pt-4 pb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-3">Mes Experts</div>
       )}
@@ -222,13 +223,23 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: { collapsed: boolea
           rel="noopener"
           className="mt-0.5 flex items-center justify-center gap-1.5 py-1 text-[11.5px] text-ink-3 hover:text-ink"
         >
-          {!collapsed && "Powered by"}
-          <Image src="/yelema-long.png" alt="Yelema" width={55} height={16} className="h-4 w-auto" />
+          {collapsed ? (
+            // The long logo does not fit the rail: the Y alone, whole.
+            <Image src="/yelema_y_violet.svg" alt="Powered by Yelema" width={20} height={20} className="size-5" />
+          ) : (
+            <>
+              Powered by
+              <Image src="/yelema-long.png" alt="Yelema" width={55} height={16} className="h-4 w-auto" />
+            </>
+          )}
         </a>
       </div>
     </aside>
   );
 }
+
+// Menu folded: every entry is the same square, centred in the rail, so icons and faces line up.
+const RAIL_SQUARE = "size-11 min-h-0 shrink-0 justify-center px-0";
 
 const isDjeneba = (e: { catalogueKey?: string | null; profileId: string }) =>
   (e.catalogueKey ?? e.profileId).toLowerCase().includes("djeneba");

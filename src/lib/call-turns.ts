@@ -41,19 +41,23 @@ export function haloOf(phase: CallPhase, muted: boolean, tool = false): Halo | n
   if (phase === "reconnecting") return "reco";
   if (phase === "connecting") return "connexion";
   if (phase !== "listening" && phase !== "speaking" && phase !== "thinking") return null;
+  // Mic cut: the expert speaking still shows (Leslie, 25/10); the cut mic stays red on its button.
+  if (phase === "speaking") return "parle";
   if (muted) return "muet";
-  if (tool && phase !== "speaking") return "cherche";
+  if (tool) return "cherche";
   if (phase === "thinking") return "reflechit";
-  return phase === "speaking" ? "parle" : "ecoute";
+  return "ecoute";
 }
 
 export const VOICE_ON = 0.02;
 export const VOICE_OFF = 0.01;
-export const VOICE_START_MS = 120;
-export const VOICE_END_MS = 700;
+// Held long enough that a breath between two sentences does not flip the halo to « à vous » and
+// back (Leslie, 25/10: states to stabilise).
+export const VOICE_START_MS = 200;
+export const VOICE_END_MS = 1200;
 export const MIC_ON = 0.03;
 export const MIC_START_MS = 250;
-export const MIC_END_MS = 800;
+export const MIC_END_MS = 1000;
 export const THINKING_MAX_MS = 15_000;
 export const THINKING_LONGER_MAX_MS = 45_000;
 

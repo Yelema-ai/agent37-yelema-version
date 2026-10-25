@@ -84,7 +84,7 @@ export function CompanyProfileView() {
 
   return (
     <div className="max-w-4xl">
-      <h1 className="sr-only">Votre entreprise</h1>
+      <h1 className="sr-only">Contexte de l’entreprise</h1>
       <p className="mt-1 max-w-2xl text-sm text-ink-2">
         Ce que vos Experts savent de votre entreprise, et ce qui met l’espace à son image.
       </p>

@@ -119,7 +119,7 @@ export function UnitPanel({ org, company, unitId, counts, onClose }: { org: Org;
       <div className={HEADING}>Documents</div>
       <p className="text-xs text-ink-3">
         {docs > 0
-          ? `${count(docs, "document")} ${unit ? `réservé${docs > 1 ? "s" : ""} à ce département` : "pour toute l’entreprise"}, à voir dans Entreprise.`
+          ? `${count(docs, "document")} ${unit ? `réservé${docs > 1 ? "s" : ""} à ce département` : "pour toute l’entreprise"}, à voir dans Contexte.`
           : unit
             ? "Aucun document réservé à ce département."
             : "Aucun document pour toute l’entreprise."}

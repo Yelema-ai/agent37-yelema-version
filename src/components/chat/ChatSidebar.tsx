@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { conversationText } from "@/lib/conversation-text";
+import { copyLater } from "@/lib/clipboard";
 import { expertDisplayName } from "@/lib/experts";
 import { profileQuery } from "@/lib/profile-id";
 import type { SessionDetail } from "@/lib/types";
@@ -137,10 +138,13 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   // « Copier la conversation »: the whole thread as text, to paste to a colleague or a developer.
   // A shareable read-only link needs the back office (an expert's space is its owner's only).
   async function copyConversation(s: ChatSession) {
+    const expert = profile ? expertDisplayName(profile) : "L’Expert";
+    // Started during the click: see copyLater.
+    const text = apiFetch<SessionDetail>(`/api/agents/${agentId}/chat/sessions/${s.session_id}${profileQuery(profile)}`).then((res) =>
+      conversationText(s.routine ?? s.title ?? "Conversation", expert, res.history ?? [])
+    );
     try {
-      const res = await apiFetch<SessionDetail>(`/api/agents/${agentId}/chat/sessions/${s.session_id}${profileQuery(profile)}`);
-      const expert = profile ? expertDisplayName(profile) : "L’Expert";
-      await navigator.clipboard.writeText(conversationText(s.routine ?? s.title ?? "Conversation", expert, res.history ?? []));
+      await copyLater(text);
       toast.success("Conversation copiée. Collez-la où vous voulez.");
     } catch {
       toast.error("La conversation n’a pas pu être copiée. Réessayez.");

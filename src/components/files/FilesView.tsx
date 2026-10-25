@@ -32,6 +32,7 @@ import { HiddenFileInput } from "@/components/HiddenFileInput";
 import { useAsyncAction } from "@/components/useAsyncAction";
 import { FilePreview } from "./FilePreview";
 import { useFileBrowser } from "./useFileBrowser";
+import { BackButton } from "@/components/ui/back-button";
 import { archiveUrl, breadcrumbs, contentUrl, formatBytes, formatMtime, isDir, type FileEntry } from "./types";
 
 type ViewMode = "list" | "grid";
@@ -165,15 +166,12 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
           {/* Where one is, as a path to click (Leslie, 23/10: the « Retour » button was not clear):
               « ‹ Livrables » goes back up one folder and says where to; each step of the path opens it. */}
           <div className="flex min-w-0 flex-1 items-center gap-1">
-            {!fb.atRoot && fb.parentPath && crumbs.length > 1 && (
-              <button
-                type="button"
-                onClick={goUp}
-                aria-label={`Revenir à ${crumbs[crumbs.length - 2].label}`}
-                className="mr-1 grid size-10 shrink-0 place-items-center rounded-full border bg-card text-foreground transition-colors hover:bg-secondary"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
+            {!fb.atRoot && crumbs.length > 1 && (
+              <BackButton
+                label={crumbs[crumbs.length - 2].label}
+                onClick={() => (fb.parentPath ? goUp() : navigate(crumbs[crumbs.length - 2].path))}
+                className="mr-2"
+              />
             )}
             <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto" aria-label="Chemin du dossier">
               {crumbs.length === 0 ? (

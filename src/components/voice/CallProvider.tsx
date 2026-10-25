@@ -14,7 +14,7 @@ import { loadVoicePrefs } from "@/lib/voice-prefs";
 import { cn } from "@/lib/utils";
 import { CallView, inCallPhase } from "./CallDialog";
 import { faceProps } from "./face";
-import { useRingback } from "./useRingback";
+import { primeHangupTone, useRingback } from "./useRingback";
 import { demoCallEnabled, useDemoCall } from "./useDemoCall";
 import { useVoiceCall } from "./useVoiceCall";
 
@@ -98,6 +98,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       voicesRef.current = voices;
+      // Still inside the click: the end tone may then play even if the expert hangs up.
+      primeHangupTone();
       setExpert(who);
       setView("full");
       void dial(who);

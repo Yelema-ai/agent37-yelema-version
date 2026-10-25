@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
+import { BackButton } from "@/components/ui/back-button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Preview as DocPreview } from "@/components/chat/DocumentCards";
@@ -30,8 +31,9 @@ export function FilePreview({
       <DialogContent className="max-w-4xl">
         {entry && (
           <>
-            <DialogHeader>
-              <DialogTitle className="truncate pr-8">{entry.name}</DialogTitle>
+            <DialogHeader className="items-start gap-3">
+              <BackButton label="Livrables" onClick={onClose} />
+              <DialogTitle className="max-w-full truncate pr-8">{entry.name}</DialogTitle>
             </DialogHeader>
             <PreviewBody agentId={agentId} entry={entry} />
             <div className="flex justify-end">

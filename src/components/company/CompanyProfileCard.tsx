@@ -36,7 +36,7 @@ export function CompanyProfileCard() {
     <section className="relative mt-5 flex flex-col gap-4 rounded-[22px] border border-brand/25 bg-tint p-5 pr-12 sm:flex-row sm:items-center sm:gap-6 sm:p-6 sm:pr-14">
       <div className="min-w-0 flex-1">
         <h2 className="font-display text-lg font-bold text-ink">
-          Complétez votre entreprise ({profile.done}/{profile.total})
+          Complétez le contexte de votre entreprise ({profile.done}/{profile.total})
         </h2>
         <p className="mt-1 text-sm text-ink-2">Ajoutez votre logo, une présentation et vos documents : vos Experts répondront avec le contexte de votre entreprise.</p>
       </div>

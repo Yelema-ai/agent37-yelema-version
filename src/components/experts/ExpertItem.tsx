@@ -57,7 +57,7 @@ export function ExpertItem({
       className={cn(
         "flex min-h-12 items-center gap-2.5 rounded-[11px] px-2 text-sm font-semibold transition-colors",
         active ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft",
-        compact && "justify-center px-0",
+        compact && "size-12 min-h-0 shrink-0 justify-center px-0",
         className
       )}
     >
