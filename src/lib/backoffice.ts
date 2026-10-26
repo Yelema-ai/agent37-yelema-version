@@ -156,11 +156,23 @@ export interface BoInstanceReading {
 }
 
 export interface BoMember {
+  id: string;
   name: string | null;
   email: string;
   role: "admin" | "member";
   status: string;
   instance: { name: string; createdAt: string | null } | null;
+  /** `entreprise` : membre du chat d'entreprise, sans instance à lui. */
+  access: "instance" | "entreprise";
+  /** Un admin peut le retirer depuis l'app (membre `entreprise`, pas lui-même). */
+  removable: boolean;
+}
+
+/** Places : utilisateurs de l'abonnement (`allowed` nul = sans plafond), membres du chat d'entreprise. */
+export interface BoMemberRoom {
+  quota: { used: number; allowed: number | null };
+  seats: { used: number; cap: number } | null;
+  enterpriseOpen: boolean;
 }
 
 export type BoOpenedSession = { session: BoSession } & BoMe;
@@ -411,7 +423,10 @@ export const backoffice = {
   // Admins only, and without instance ids: lists to read, not ways in.
   instances: async (token: string) =>
     (await call<{ items: { member: { name: string | null; email: string }; instance: BoInstanceView }[] }>("/app/instances", { token })).items,
-  members: async (token: string) => (await call<{ items: BoMember[] }>("/app/members", { token })).items,
+  members: (token: string) => call<{ items: BoMember[] } & BoMemberRoom>("/app/members", { token }),
+  inviteMember: (token: string, body: { email: string; firstName: string; lastName: string }) =>
+    call<{ ok: true; warning: string | null }>("/app/members/invite", { method: "POST", token, body }),
+  removeMember: (token: string, id: string) => call<{ ok: true }>(`/app/members/${encodeURIComponent(id)}`, { method: "DELETE", token }),
 
   // Billing, for the workspace's admins (a member is refused, 403). The app reads and hands out the
   // back office's own payment link; it never creates a payment.
