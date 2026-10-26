@@ -76,7 +76,7 @@ const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"));
 
 /**
  * The cards of one reply: the files its text names first, then the deliverables its own turn wrote
- * (`written`, as the runtime's history reports them), each once. Never a file written by another
+ * (`written`: as the runtime's history reports them, and the reply's MEDIA tags), each once. Never a file written by another
  * conversation at the same time. Memory, notes and technical files get no card. A named file missing
  * from a folder the listing covers does not exist (a path the expert made up): no card for it.
  */
@@ -84,13 +84,17 @@ const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"));
 const TECHNICAL = /\.(srt|vtt|json|jsonl|py|js|mjs|ts|sh|yaml|yml|toml|log|lock|env|ini|cfg|pyc|sqlite|db)$/i;
 export const isTechnicalFile = (name: string) => TECHNICAL.test(name);
 
+/** Never a card nor a link in the chat: working files, notes (.md) and anything in the memory folder. */
+export const isHiddenInChat = (path: string) =>
+  isTechnicalFile(path) || /\.(md|markdown)$/i.test(path) || path.split("/").slice(0, -1).some(isMemoryFolder);
+
 export function turnDocs(text: string, listing: readonly DriveFile[], written: readonly string[] = []): TurnDoc[] {
   const byPath = new Map(listing.map((f) => [normDrivePath(f.path), f]));
   const listed = new Set([...byPath.keys()].map(parentOf));
   const out: TurnDoc[] = [];
   const seen = new Set<string>();
   const add = (path: string, f?: DriveFile) => {
-    if (seen.has(path) || isTechnicalFile(path)) return;
+    if (seen.has(path) || isHiddenInChat(path)) return;
     seen.add(path);
     const name = path.split("/").pop() ?? path;
     out.push({ name, path, size: f?.size ?? null, modified: f?.modified ?? null, kind: docKind(name) });
@@ -98,7 +102,6 @@ export function turnDocs(text: string, listing: readonly DriveFile[], written: r
   for (const p of drivePathsIn(text)) if (byPath.has(p) || !listed.has(parentOf(p))) add(p, byPath.get(p));
   for (const w of written) {
     const p = normDrivePath(w.startsWith("Livrables/") ? `~/${w}` : w);
-    if (/\.md$/i.test(p) || p.split("/").slice(2, -1).some(isMemoryFolder)) continue;
     add(p, byPath.get(p));
   }
   return out;

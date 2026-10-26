@@ -80,20 +80,48 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
   }, [initialMessage, activeSessionId, send]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   // Whether the user is pinned near the bottom — controls whether new tokens auto-scroll.
   const stickRef = useRef(true);
+  // The distance from the bottom kept while earlier messages load above; dropped as soon as the user scrolls.
+  const holdRef = useRef<number | null>(null);
 
   const onScroll = () => {
     const el = scrollRef.current;
     if (el) stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
+  const release = () => {
+    holdRef.current = null;
+  };
 
-  // Follow the stream only when the user is already near the bottom.
+  // A conversation opens on its last message.
   useEffect(() => {
-    if (!stickRef.current) return;
+    stickRef.current = true;
+    holdRef.current = null;
+  }, [activeSessionId]);
+
+  const settle = useCallback(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, loadingHistory]);
+    if (!el) return;
+    if (stickRef.current) el.scrollTop = el.scrollHeight;
+    else if (holdRef.current != null) el.scrollTop = el.scrollHeight - holdRef.current;
+  }, []);
+  useEffect(settle, [messages, loadingHistory, settle]);
+  // Replies, cards and pictures lay out after the render: follow them too.
+  const hasMessages = messages.length > 0;
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(settle);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [settle, hasMessages, loadingHistory]);
+  const showEarlier = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickRef.current = false;
+    holdRef.current = el.scrollHeight - el.scrollTop;
+  }, []);
 
   const showWelcome = !loadingHistory && messages.length === 0;
   // Memoized so the per-token re-renders during streaming don't re-scan the thread list.
@@ -193,6 +221,9 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
       <div
         ref={scrollRef}
         onScroll={onScroll}
+        onWheel={release}
+        onTouchMove={release}
+        onKeyDown={release}
         className={cn(
           "min-h-0",
           showWelcome ? "flex flex-1 flex-col items-center justify-end px-4 pb-4" : "flex-1 overflow-y-auto"
@@ -203,7 +234,9 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>
         ) : messages.length > 0 ? (
-          <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} />
+          <div ref={contentRef}>
+            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} />
+          </div>
         ) : (
           <>
             {face && !profile && <ExpertAvatar expert={face} size="lg" className="mb-4 max-sm:hidden" />}

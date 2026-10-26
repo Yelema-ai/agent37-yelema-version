@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { agent37, instanceFetch } from "@/lib/agent37";
 import { backofficeAgentRow, requireMember, requireUser } from "@/lib/auth";
 import { cleanReply } from "@/lib/chat-errors";
+import { visibleHistory } from "@/lib/compaction";
 import { resumeSeed } from "@/lib/conversation-resume";
 import { openConversation } from "@/lib/conversation-token";
 import { agentTabPath } from "@/lib/expert-tabs";
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     if (!own) throw new ApiError(409, "no_space", "Vous n’avez pas encore d’espace où reprendre cette conversation.");
 
     const detail = await agent37.getSession(claims.a, claims.s, profileQuery(claims.p), claims.u);
-    const lines = (detail.history ?? [])
+    const lines = visibleHistory(detail.history ?? [])
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.role === "assistant" ? cleanReply(m.content ?? "") : (m.content ?? "").trim() }))
       .filter((m) => m.content);

@@ -30,7 +30,7 @@ import {
   type Outcome,
   type Turn,
 } from "@/lib/activity";
-import { isAccountToTopUp } from "@/lib/chat-errors";
+import { cleanReply, isAccountToTopUp } from "@/lib/chat-errors";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { expertDisplayName } from "@/lib/experts";
 import type { ChatSession } from "@/components/chat/types";
@@ -180,7 +180,8 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
         commit(startTurn(stateRef.current, { ...t, startedAt: Date.now(), mode: "local" }));
       },
       bind: (id, sessionId, responseId) => commit(bindTurn(stateRef.current, id, sessionId, responseId)),
-      finish: (id, outcome, text, source = "local") => {
+      finish: (id, outcome, raw, source = "local") => {
+        const text = cleanReply(raw);
         const now = Date.now();
         const r = finishTurn(stateRef.current, id, outcome, source, visible(), now);
         commit(r.notice ? remember(r.state, r.notice, text, null, now) : r.state);

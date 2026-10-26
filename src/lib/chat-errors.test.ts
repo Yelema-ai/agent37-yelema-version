@@ -19,6 +19,7 @@ test("cleanReply drops the runtime's English lines and repeated paragraphs", () 
   assert.equal(cleanReply(raw), "Voici le point.");
   assert.equal(cleanReply("⚡ Command invoked: /tableau\nJe prépare le tableau."), "Je prépare le tableau.");
   assert.equal(cleanReply("Rien à retirer."), "Rien à retirer.");
+  assert.equal(cleanReply("Voici l’affiche.\nMEDIA:/home/node/Livrables/Koffi/affiche.png"), "Voici l’affiche.");
 });
 
 test("a provider out of credit gets its own sentence, which the bell recognises", () => {
