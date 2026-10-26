@@ -8,8 +8,8 @@ import type { DocKind, DriveFile, TurnDoc } from "@/lib/drive-links";
 import type { FileListResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { FilePreview } from "@/components/files/FilePreview";
-import { contentUrl, formatBytes, type FileEntry } from "@/components/files/types";
+import { FilePreview, ReducedImage } from "@/components/files/FilePreview";
+import { contentUrl, formatBytes, thumbUrl, type FileEntry } from "@/components/files/types";
 
 const KINDS: Record<DocKind, { label: string; icon: LucideIcon; tone: string }> = {
   pdf: { label: "PDF", icon: FileText, tone: "bg-[#FCE8E4] text-[#B4321F] dark:bg-[#3b2520] dark:text-[#f4a28c]" },
@@ -97,18 +97,17 @@ export function Preview({ agentId, doc }: { agentId: string; doc: TurnDoc }) {
   const url = contentUrl(agentId, doc.path, "inline");
   const e = ext(doc.name);
   if ((doc.size ?? 0) > MAX_PREVIEW_BYTES) return <FormatThumb doc={doc} />;
-  if (doc.kind === "image") return <ImagePreview url={url} doc={doc} />;
+  if (doc.kind === "image") return <ImagePreview url={url} thumb={thumbUrl(agentId, doc.path, 960, doc.modified)} doc={doc} />;
   if (doc.kind === "pdf") return <Lazy doc={doc} url={url} render={renderPdf} />;
   if (e === "xlsx" || e === "xlsm" || e === "csv") return <Lazy doc={doc} url={url} render={renderSheet} />;
   if (e === "docx") return <Lazy doc={doc} url={url} render={renderDocx} />;
   return <FormatThumb doc={doc} />;
 }
 
-function ImagePreview({ url, doc }: { url: string; doc: TurnDoc }) {
+function ImagePreview({ url, thumb, doc }: { url: string; thumb: string; doc: TurnDoc }) {
   const [failed, setFailed] = useState(false);
   if (failed) return <FormatThumb doc={doc} />;
-  // eslint-disable-next-line @next/next/no-img-element -- streamed by our BFF; an <img> never runs script
-  return <img src={url} alt={doc.name} loading="lazy" onError={() => setFailed(true)} className="size-full object-contain" />;
+  return <ReducedImage thumb={thumb} original={url} alt={doc.name} onFail={() => setFailed(true)} className="size-full object-contain" />;
 }
 
 type Render = (data: ArrayBuffer, doc: TurnDoc, width: number) => Promise<ReactNode>;

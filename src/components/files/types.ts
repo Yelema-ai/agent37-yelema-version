@@ -82,6 +82,12 @@ export function contentUrl(agentId: string, path: string, disposition: "inline" 
   return `/api/agents/${agentId}/files/content?path=${encodeURIComponent(path)}&disposition=${disposition}`;
 }
 
+/** A reduced copy of a drive picture (thumb route); `modified` versions it so the browser keeps it. */
+export function thumbUrl(agentId: string, path: string, width: number, modified?: number | null): string {
+  const v = modified ? `&v=${Math.trunc(modified)}` : "";
+  return `/api/agents/${agentId}/files/thumb?path=${encodeURIComponent(path)}&w=${width}${v}`;
+}
+
 // Folder download → the BFF archive route streams a .tar.gz of the directory (key attached
 // server-side), so an <a download> can point straight at it, like contentUrl for single files.
 export function archiveUrl(agentId: string, path: string): string {
