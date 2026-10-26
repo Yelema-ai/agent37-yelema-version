@@ -117,8 +117,24 @@ from ruamel.yaml import YAML
 
 TELEGRAM_API_TIMEOUT_S = 20
 
+# Custom emoji IDs from the "ExpertYelema" sticker set (https://t.me/addemoji/ExpertYelema).
+EXPERT_EMOJI_IDS = {
+    "adjoua": "5969576054027722422",
+    "alioune": "5969618157592128985",
+    "fatima": "5969999881400491290",
+    "djeneba": "5969914433026138152",
+    "ibrahim": "5971938685472481742",
+    "koffi": "5969991635063283359",
+    "fatou": "5969791682860819040",
+    "salif": "5969881847109262972",
+    "awa": "5969774936783330236",
+    "nadia": "5972007623992548834",
+    "kouassi": "5969773764257258928",
+    "mamadou": "5969755441926777485",
+}
 
-def create_forum_topic(bot_token: str, chat_id: str, name: str) -> int:
+
+def create_forum_topic(bot_token: str, chat_id: str, name: str, icon_custom_emoji_id: str = None) -> int:
     """POST createForumTopic; returns the new topic's numeric message_thread_id.
 
     Raises RuntimeError with Telegram's own error description on failure (e.g. the bot
@@ -128,11 +144,35 @@ def create_forum_topic(bot_token: str, chat_id: str, name: str) -> int:
     structured code).
     """
     url = f"https://api.telegram.org/bot{bot_token}/createForumTopic"
-    resp = requests.post(url, json={"chat_id": chat_id, "name": name}, timeout=TELEGRAM_API_TIMEOUT_S)
+    payload = {"chat_id": chat_id, "name": name}
+    if icon_custom_emoji_id:
+        payload["icon_custom_emoji_id"] = str(icon_custom_emoji_id)
+    resp = requests.post(url, json=payload, timeout=TELEGRAM_API_TIMEOUT_S)
     data = resp.json()
     if not data.get("ok"):
-        raise RuntimeError(data.get("description", f"HTTP {resp.status_code}"))
+        # If Telegram rejects custom emoji (e.g. PREMIUM_ACCOUNT_REQUIRED), fall back without icon
+        if icon_custom_emoji_id and "PREMIUM" in data.get("description", "").upper():
+            resp = requests.post(url, json={"chat_id": chat_id, "name": name}, timeout=TELEGRAM_API_TIMEOUT_S)
+            data = resp.json()
+        if not data.get("ok"):
+            raise RuntimeError(data.get("description", f"HTTP {resp.status_code}"))
     return int(data["result"]["message_thread_id"])
+
+
+def set_topic_icon(bot_token: str, chat_id: str, thread_id: int, icon_custom_emoji_id: str):
+    """POST editForumTopic to apply the custom emoji icon to an existing topic."""
+    url = f"https://api.telegram.org/bot{bot_token}/editForumTopic"
+    payload = {
+        "chat_id": chat_id,
+        "message_thread_id": int(thread_id),
+        "icon_custom_emoji_id": str(icon_custom_emoji_id),
+    }
+    resp = requests.post(url, json=payload, timeout=TELEGRAM_API_TIMEOUT_S)
+    data = resp.json()
+    if not data.get("ok"):
+        print(f"notice: could not set custom emoji on topic {thread_id}: {data.get('description')}", file=sys.stderr)
+        return False
+    return True
 
 
 def main():
@@ -155,17 +195,22 @@ def main():
     gateway = config.setdefault("gateway", {})
     routes = gateway.setdefault("profile_routes", [])
 
+    emoji_id = EXPERT_EMOJI_IDS.get(profile.lower().strip())
+
     existing = next(
         (r for r in routes if dict(r).get("platform") == "telegram" and dict(r).get("profile") == profile),
         None,
     )
     if existing is not None and str(dict(existing).get("thread_id", "")).isdigit():
+        thread_id = int(dict(existing)["thread_id"])
+        if emoji_id:
+            set_topic_icon(bot_token, chat_id, thread_id, emoji_id)
         print(f"skip: profile={profile} already has a numeric topic (thread_id="
-              f"{dict(existing)['thread_id']}), not recreating")
+              f"{thread_id}), icon update attempted")
         return
 
     try:
-        thread_id = create_forum_topic(bot_token, chat_id, profile)
+        thread_id = create_forum_topic(bot_token, chat_id, profile, icon_custom_emoji_id=emoji_id)
     except RuntimeError as exc:
         print(f"ERROR: could not create Telegram topic for profile={profile}: {exc}", file=sys.stderr)
         print("       If a topic with this name already exists (e.g. created manually or by a "
