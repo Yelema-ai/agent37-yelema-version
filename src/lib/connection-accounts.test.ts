@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { accountLabel, accountState, accountSummary, accountsBySlug, splitAccounts } from "./connection-accounts.ts";
+import { accountLabel, accountState, accountSummary, accountTitle, accountsBySlug, pinnedAccounts, splitAccounts, withAccountDetails } from "./connection-accounts.ts";
 import type { IntegrationConnection } from "./types.ts";
 
 const conn = (id: string, status: string, slug = "unipile", updatedAt = 0, isDisabled = false): IntegrationConnection => ({
@@ -44,4 +44,23 @@ test("la carte d'un outil résume ses comptes, les connexions inachevées à par
   assert.equal(accountSummary([conn("a", "ACTIVE")]), "1 compte");
   assert.equal(accountSummary([conn("d", "INITIATED")]), "Connexion non terminée");
   assert.equal(accountSummary([]), "");
+});
+
+test("le nom d'un compte vient du back-office : libellé, sinon e-mail, sinon nom, sinon son rang", () => {
+  const details = [
+    { id: "ca_a", email: "awa@acme.ci", name: null, label: "Pro", isDefault: true, addedBy: { email: "awa@acme.ci", name: "Awa" } },
+    { id: "ca_b", email: "awa.perso@gmail.com", name: null, label: null, isDefault: false, addedBy: null },
+  ];
+  const [a, b, c] = withAccountDetails([conn("ca_a", "ACTIVE", "gmail"), conn("ca_b", "ACTIVE", "gmail"), conn("ca_c", "ACTIVE", "gmail")], details);
+  assert.equal(accountTitle(a!, 0), "Pro");
+  assert.equal(a!.isDefault, true);
+  assert.equal(accountTitle(b!, 1), "awa.perso@gmail.com");
+  assert.equal(accountTitle(c!, 2), "Compte 3");
+  assert.equal(c!.isDefault, undefined);
+});
+
+test("le compte par défaut est épinglé seul, dans un ordre stable", () => {
+  assert.deepEqual(pinnedAccounts({ slack: "ca_s", gmail: "ca_g" }), { gmail: ["ca_g"], slack: ["ca_s"] });
+  assert.equal(JSON.stringify(pinnedAccounts({ slack: "ca_s", gmail: "ca_g" })), JSON.stringify(pinnedAccounts({ gmail: "ca_g", slack: "ca_s" })));
+  assert.deepEqual(pinnedAccounts({}), {});
 });

@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { Composio } from "@composio/core";
 import { ApiError } from "@/lib/http";
 import { composioApiKey } from "@/lib/runtime-config";
@@ -87,12 +87,13 @@ function normalizeToolkit(raw: unknown): IntegrationToolkit {
 
 // ---- Connect ---------------------------------------------------------------------------------
 
-// A toolkit with no auth config in Yelema's Composio project fails with 4308 "NoManagedAuth".
+// A toolkit with no auth config in Yelema's Composio project fails with 4308 "NoManagedAuth". Several accounts
+// of one tool are allowed; the alias (unique per member and tool) is what an expert names to pick one.
 export async function connectToolkit(userId: string, toolkit: string): Promise<IntegrationConnectResult> {
   if (HIDDEN_TOOLKITS.has(toolkit.toLowerCase())) throw new ApiError(422, "use_unipile_card", "Unipile se relie avec sa carte « WhatsApp et messageries », en haut de cette page.");
   try {
-    const session = await client().toolRouter.create(userId, { manageConnections: true });
-    const request = await session.authorize(toolkit);
+    const session = await client().toolRouter.create(userId, { manageConnections: true, multiAccount: { enable: true } });
+    const request = await session.authorize(toolkit, { alias: `${toolkit.toLowerCase()}-${randomBytes(3).toString("hex")}` });
     return { toolkit, connectedAccountId: request.id, redirectUrl: request.redirectUrl ?? "" };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -190,8 +191,10 @@ export interface McpSession {
   headers: Record<string, string>;
 }
 
-export async function mintMcpSession(userId: string): Promise<McpSession> {
+// `pins`: the member's default account per tool (exact: Composio uses that one, and no other, for the tool).
+export async function mintMcpSession(userId: string, pins: Record<string, string[]> = {}): Promise<McpSession> {
   const session = await client().create(userId, {
+    ...(Object.keys(pins).length ? { connectedAccounts: pins } : {}),
     // Keep the manage-connections tool so an expert can hand out a sign-in link in chat, allow
     // several accounts per toolkit, and drop Composio's remote sandbox.
     manageConnections: { waitForConnections: true },

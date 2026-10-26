@@ -253,6 +253,13 @@ export interface IntegrationConnection {
   isDisabled?: boolean;
   createdAt?: number | null;
   updatedAt?: number | null;
+  // Kept by the back office: e-mail and name read once at connection, the member's label, the tool's
+  // default for the experts, and who added it (null: added elsewhere, e.g. by an expert in chat).
+  email?: string | null;
+  accountName?: string | null;
+  label?: string | null;
+  isDefault?: boolean;
+  addedBy?: { email: string; name: string | null } | null;
 }
 
 export interface IntegrationConnectionsResult {

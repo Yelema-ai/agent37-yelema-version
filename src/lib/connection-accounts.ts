@@ -48,6 +48,27 @@ export function accountLabel(c: IntegrationConnection, index: number): string {
   return `Compte ${index + 1} · ${tail}`;
 }
 
+/** What the screen calls an account: the member's label, else its e-mail, else its name, else its rank. */
+export function accountTitle(c: IntegrationConnection, index: number): string {
+  return c.label || c.email || c.accountName || `Compte ${index + 1}`;
+}
+
+/** What the back office keeps about each account, laid over Composio's list (unknown ids stay as they are). */
+export function withAccountDetails(conns: readonly IntegrationConnection[], details: readonly BoAccountDetails[]): IntegrationConnection[] {
+  const byId = new Map(details.map((d) => [d.id, d]));
+  return conns.map((c) => {
+    const d = byId.get(c.id);
+    return d ? { ...c, email: d.email, accountName: d.name, label: d.label, isDefault: d.isDefault, addedBy: d.addedBy } : c;
+  });
+}
+
+export type BoAccountDetails = { id: string; email: string | null; name: string | null; label: string | null; isDefault: boolean; addedBy: { email: string; name: string | null } | null };
+
+/** Composio's `connectedAccounts` pin: the chosen default alone, since a pin is exact and the order of a list is undocumented. */
+export function pinnedAccounts(defaults: Readonly<Record<string, string>>): Record<string, string[]> {
+  return Object.fromEntries(Object.entries(defaults).sort(([a], [b]) => a.localeCompare(b)).map(([toolkit, id]) => [toolkit, [id]]));
+}
+
 /** Accounts that work or did, apart from the sign-ins never finished (cleared together). */
 export function splitAccounts(list: readonly IntegrationConnection[]): {
   accounts: IntegrationConnection[];

@@ -1,6 +1,11 @@
 import "server-only";
 import { agent37 } from "@/lib/agent37";
+import { backoffice } from "@/lib/backoffice";
 import { composioUserId, connectToolkit, deleteConnection, listConnections, listToolkits } from "@/lib/composio";
+import { withAccountDetails } from "@/lib/connection-accounts";
+import { ApiError } from "@/lib/http";
+import { authViaBackoffice } from "@/lib/runtime-config";
+import { readSession } from "@/lib/session";
 import type {
   AgentRow,
   IntegrationConnectionsResult,
@@ -16,21 +21,56 @@ function onYelemaComposio(row: AgentRow): boolean {
   return Boolean(row.apps_token_hash);
 }
 
+// The member's session for the back office, when it keeps the accounts' details; null otherwise.
+async function boToken(row: AgentRow): Promise<string | null> {
+  if (!onYelemaComposio(row) || !authViaBackoffice()) return null;
+  return (await readSession())?.accessToken ?? null;
+}
+
+// Composio's list, with what the back office keeps (e-mail, label, default, author). Without it the list still shows.
+async function connectionsWithDetails(row: AgentRow): Promise<IntegrationConnectionsResult> {
+  const [result, token] = await Promise.all([listConnections(composioUserId(row)), boToken(row)]);
+  if (!token) return result;
+  try {
+    return { connections: withAccountDetails(result.connections, (await backoffice.connectorAccounts(token)).accounts) };
+  } catch (e) {
+    console.warn("[integrations] account details unavailable:", e instanceof Error ? e.message : e);
+    return result;
+  }
+}
+
+// The back office notes who added the account; a miss only loses the author, never the connection.
+async function connectAndRecord(row: AgentRow, toolkit: string): Promise<IntegrationConnectResult> {
+  const started = await connectToolkit(composioUserId(row), toolkit);
+  const token = await boToken(row);
+  if (token && started.connectedAccountId) {
+    await backoffice
+      .recordConnectorAccount(token, { connectedAccountId: started.connectedAccountId, toolkit })
+      .catch((e) => console.warn("[integrations] author not recorded:", e instanceof Error ? e.message : e));
+  }
+  return started;
+}
+
 export const integrations = {
   toolkits: (row: AgentRow, search?: string): Promise<IntegrationToolkitsResult> =>
     onYelemaComposio(row) ? listToolkits(search) : agent37.listIntegrationToolkits(row.agent37_id, { search }),
 
   connect: (row: AgentRow, toolkit: string): Promise<IntegrationConnectResult> =>
-    onYelemaComposio(row)
-      ? connectToolkit(composioUserId(row), toolkit)
-      : agent37.connectIntegration(row.agent37_id, { toolkit }),
+    onYelemaComposio(row) ? connectAndRecord(row, toolkit) : agent37.connectIntegration(row.agent37_id, { toolkit }),
 
   connections: (row: AgentRow): Promise<IntegrationConnectionsResult> =>
-    onYelemaComposio(row) ? listConnections(composioUserId(row)) : agent37.listIntegrationConnections(row.agent37_id),
+    onYelemaComposio(row) ? connectionsWithDetails(row) : agent37.listIntegrationConnections(row.agent37_id),
 
   // Either backend checks that the account belongs to this instance's identity before deleting.
   disconnect: (row: AgentRow, connectedAccountId: string): Promise<unknown> =>
     onYelemaComposio(row)
       ? deleteConnection(composioUserId(row), connectedAccountId)
       : agent37.disconnectIntegration(row.agent37_id, connectedAccountId),
+
+  // Label and default live in the back office, for the member's own accounts on Yelema's Composio only.
+  async updateAccount(row: AgentRow, connectedAccountId: string, body: { label?: string | null; isDefault?: boolean }): Promise<unknown> {
+    const token = await boToken(row);
+    if (!token) throw new ApiError(404, "not_found", "Le nom et le compte par défaut ne sont pas disponibles pour cet espace.");
+    return backoffice.updateConnectorAccount(token, connectedAccountId, body);
+  },
 };
