@@ -40,13 +40,15 @@ const WORKING_FOLDER = /^(__pycache__|\.?cache|caches|node_modules|tmp|temp|\.ve
 // « vignette.webp », and the folders that hold them.
 const PREVIEW_WORD = /(^|[\s._-])(apercus?|previews?|vignettes?|thumbnails?|thumbs?|miniatures?)([\s._-]|\d|$)/;
 const PICTURE = /\.(png|jpe?g|webp|gif|avif)$/;
+// Subtitles the expert writes for its videos (.srt, .vtt): never a deliverable on their own.
+const SUBTITLES = /\.(srt|vtt)$/;
 
 /** An entry a member does not need in Livrables: shown only with « Afficher les fichiers cachés ». */
 export function isDriveClutter(entry: { name: string; type: string }): boolean {
   const name = plain(entry.name);
   if (entry.type === "directory") return WORKING_FOLDER.test(name) || /^(apercus?|previews?|vignettes?|thumbnails?|miniatures?)$/.test(name);
   if (WORKING_FILE.test(name)) return true;
-  return PICTURE.test(name) && PREVIEW_WORD.test(name.replace(PICTURE, ""));
+  return SUBTITLES.test(name) || (PICTURE.test(name) && PREVIEW_WORD.test(name.replace(PICTURE, "")));
 }
 
 /** The search of Livrables: every word, in any order, accents and case aside. */

@@ -46,3 +46,8 @@ test("search: every word, accents and case aside", () => {
   assert.ok(!matchesDriveQuery("Relance Lagune.docx", "lagune yao"));
   assert.ok(matchesDriveQuery("x.pdf", "  "));
 });
+
+test("subtitles are clutter, the video stays", () => {
+  for (const n of ["Spot Tabaski.srt", "spot.fr.VTT"]) assert.ok(isDriveClutter({ name: n, type: "file" }), n);
+  assert.ok(!isDriveClutter({ name: "Spot Tabaski.mp4", type: "file" }));
+});
