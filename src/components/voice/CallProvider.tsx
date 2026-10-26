@@ -168,7 +168,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       {expert && (
         <Dialog open={view === "full"} onOpenChange={closeFull}>
           <DialogContent
-            className="gap-0 overflow-hidden p-0 max-sm:inset-0 max-sm:h-[100dvh] max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:border-0 sm:max-w-[920px]"
+            className="gap-0 overflow-hidden p-0 max-sm:inset-0 max-sm:h-[100dvh] max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:border-0 sm:max-w-[560px]"
             onOpenAutoFocus={(e) => e.preventDefault()}
             onInteractOutside={(e) => inCall && e.preventDefault()}
           >
