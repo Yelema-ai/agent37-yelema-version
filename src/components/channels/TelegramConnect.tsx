@@ -38,7 +38,7 @@ export function TelegramConnect({
   channel: MessagingPlatform;
   onBack: () => void;
 }) {
-  const [step, setStep] = useState<Step>(isChannelConnected(channel) ? "connected" : "qr");
+  const [step, setStep] = useState<Step>(isChannelConnected(channel) ? "connected" : "token");
   const [qrBot, setQrBot] = useState<string | null>(null);
   const defaultBotName = (agentName ?? "").split("@")[0]?.trim() || "Mon assistant";
   const [token, setToken] = useState("");
@@ -258,7 +258,7 @@ export function TelegramConnect({
                 setBot(null);
                 setOwner(null);
                 setQrBot(null);
-                setStep("qr");
+                setStep("token");
               }}
             >
               Connecter un autre bot
