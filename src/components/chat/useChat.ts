@@ -7,6 +7,8 @@ import { batchQueued, insertBefore, isSteer, steerText, unreadSteerCount } from 
 import { profileQuery } from "@/lib/profile-id";
 import { toolPhrase } from "@/lib/tool-steps";
 import { isNetworkError, newMessageKey, withoutRunningTurn } from "@/lib/turn-idempotency";
+import { finalReply } from "@/lib/turn-reply";
+import { visibleHistory } from "@/lib/compaction";
 import { useTurnReporter } from "@/components/activity/hooks";
 import { type SessionDetail } from "@/lib/types";
 import { uid, type ChatMessage, type ChatSettings, type MessageAttachment, type ToolEvent, type ToolStatus } from "./types";
@@ -126,6 +128,8 @@ interface LiveRun {
   queue: Queued[];
   /** What was sent, as the engine stores it (absent for a reattached run). */
   sent?: { role: "user"; content: string; at: number };
+  /** The text written before each tool: a step, taken out of the reply. */
+  narration: string[];
 }
 
 interface Queued {
@@ -140,7 +144,7 @@ const BUSY_WAIT_MS = 3000;
 // --- Transcript merging ------------------------------------------------------------------------
 
 function mapHistory(history: SessionDetail["history"]): ChatMessage[] {
-  return (history ?? []).map((h) => ({
+  return visibleHistory(history ?? []).map((h) => ({
     id: h.id || uid("h"),
     role: h.role,
     content: h.role === "user" ? steerText(h.content ?? "") : (h.content ?? ""),
@@ -309,7 +313,9 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
                 const tool = str(data.tool) ?? "tool";
                 const args = data.arguments && typeof data.arguments === "object" ? (data.arguments as Record<string, unknown>) : undefined;
                 const generating = event === "response.tool_call.generating";
-                patchRun(run, (m) => ({ ...m, tools: openTool(m.tools, { tool, status: "running", phrase: toolPhrase(tool, args), generating }) }));
+                const said = run.assistant.content.trim();
+                if (said) run.narration.push(said);
+                patchRun(run, (m) => ({ ...m, content: "", tools: openTool(m.tools, { tool, status: "running", phrase: toolPhrase(tool, args), generating }) }));
                 break;
               }
               case "response.tool_call.completed":
@@ -324,7 +330,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
               case "response.completed": {
                 sawTerminal = true;
                 const final = str(data.output_text);
-                if (final) patchRun(run, (m) => ({ ...m, content: final }));
+                if (final) patchRun(run, (m) => ({ ...m, content: finalReply(final, run.narration) }));
                 pendingSteer = str(data.pending_steer) ?? "";
                 break;
               }
@@ -397,6 +403,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
         steered: [],
         steers: new Set(),
         queue: [],
+        narration: [],
       };
       turns.start(run);
       runsRef.current.set(sid, run);
@@ -541,7 +548,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
       const startedAt = Date.now();
       const users = batch.map((q): ChatMessage => ({ ...q.user, at: startedAt, queued: undefined, steered: undefined }));
       const assistant: ChatMessage = { id: uid("a"), role: "assistant", content: "", tools: [] };
-      const run: LiveRun = { sessionId, responseId: null, abort: new AbortController(), users, assistant, done: false, steered: [], steers: new Set(), queue: [], sent: { role: "user", content: text, at: startedAt } };
+      const run: LiveRun = { sessionId, responseId: null, abort: new AbortController(), users, assistant, done: false, steered: [], steers: new Set(), queue: [], sent: { role: "user", content: text, at: startedAt }, narration: [] };
       turns.start(run);
       if (sessionId) {
         runsRef.current.set(sessionId, run);

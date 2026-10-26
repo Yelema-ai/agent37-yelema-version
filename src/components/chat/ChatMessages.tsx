@@ -18,6 +18,7 @@ import { useChatContext } from "./ChatProvider";
 import { DocumentCards, useDriveListing } from "./DocumentCards";
 import { Markdown } from "./Markdown";
 import { cleanReply } from "@/lib/chat-errors";
+import { mediaTags } from "@/lib/media-tags";
 import { LiveStep, StepsList } from "./ChatSteps";
 import type { ChatMessage, MessageAttachment } from "./types";
 
@@ -110,12 +111,15 @@ export function ChatMessages({
   isStreaming,
   face = null,
   driveFolder = null,
+  onShowEarlier,
 }: {
   messages: ChatMessage[];
   isStreaming: boolean;
   face?: Pick<Expert, "displayName" | "photoUrl" | "gateway"> | null;
   /** The expert's folder in the drive: the files written there during a turn get a card. */
   driveFolder?: string | null;
+  /** Called before earlier messages are added above, so the view keeps its place. */
+  onShowEarlier?: () => void;
 }) {
   // The instance whose drive the paths in a reply point into (they become download links).
   const { agentId } = useChatContext();
@@ -162,7 +166,10 @@ export function ChatMessages({
     <div onClick={handleContainerClick} className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6 sm:px-6">
       {start > 0 && (
         <div className="flex justify-center">
-          <button type="button" onClick={() => setShown((n) => n + PAGE)} className="rounded-full border border-line px-3 py-1 text-xs text-ink-3 hover:bg-surface">
+          <button type="button" onClick={() => {
+              onShowEarlier?.();
+              setShown((n) => n + PAGE);
+            }} className="rounded-full border border-line px-3 py-1 text-xs text-ink-3 hover:bg-surface">
             Afficher les messages précédents ({start})
           </button>
         </div>
@@ -225,23 +232,24 @@ export function ChatMessages({
 
         const live = i === liveIndex;
         const tools = m.tools ?? [];
-        const showDots =
-          live && !m.content && !m.thinking && !tools.some((t) => t.status === "running");
+        // Once the expert works with tools, the turn shows one live step line; its reply appears when the turn ends.
+        const working = live && tools.length > 0;
+        const showDots = live && !working && !m.content && !m.thinking;
 
         return (
           <div key={m.id} className="flex items-start gap-3">
             {face && <ExpertAvatar expert={face} size="xs" className="mt-0.5" />}
             <div className="min-w-0 max-w-full flex-1 text-[15px] text-ink">
               {m.thinking && <ThinkingBlock content={m.thinking} live={live && !m.content} />}
-              {live ? <LiveStep tools={tools} /> : tools.length > 0 && <StepsList tools={tools} />}
+              {working ? <LiveStep tools={tools} /> : !live && tools.length > 0 && <StepsList tools={tools} />}
               {routineThread && !live && isSilentRun(m.content) ? (
                 <p className="text-sm italic text-ink-3">{SILENT_RUN_LABEL}</p>
-              ) : m.content ? (
+              ) : m.content && !working ? (
                 <Markdown content={cleanReply(m.content)} agentId={agentId} />
               ) : showDots ? (
                 <TypingDots />
               ) : null}
-              {!live && m.content && <DocumentCards agentId={agentId} docs={turnDocs(m.content, listing, m.files)} />}
+              {!live && m.content && <DocumentCards agentId={agentId} docs={turnDocs(cleanReply(m.content), listing, [...(m.files ?? []), ...mediaTags(m.content).paths])} />}
               {!live && m.content && !(routineThread && isSilentRun(m.content)) && <CopyReply text={cleanReply(m.content)} />}
             </div>
           </div>

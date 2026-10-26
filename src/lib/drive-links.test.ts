@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { docKind, drivePathsIn, normDrivePath, turnDocs } from "./drive-links.ts";
+import { docKind, drivePathsIn, isHiddenInChat, normDrivePath, turnDocs } from "./drive-links.ts";
 
 test("the paths a reply names, in order, once each, in one spelling", () => {
   const text = [
@@ -52,4 +52,11 @@ test("turnDocs shows no card for a working file (JSON, script, log)", () => {
   ];
   const docs = turnDocs("Voir Livrables/Kouassi/etat.json", listing as never, ["Livrables/Kouassi/calcul.py", "Livrables/Kouassi/Point.pdf"]);
   assert.deepEqual(docs.map((d) => d.name), ["Point.pdf"]);
+});
+
+test("a note (.md) or a memory file named in the reply or by a MEDIA tag gets no card", () => {
+  const text = "Voir `~/Livrables/Koffi/brief.md` et `~/Livrables/Koffi/_memoire/client.pdf`, puis `~/Livrables/Koffi/affiche.png`.";
+  const docs = turnDocs(text, [], ["~/Livrables/Koffi/notes.md", "~/Livrables/Koffi/Mémoire/suivi.docx", "~/Livrables/Koffi/deck.pdf"]);
+  assert.deepEqual(docs.map((d) => d.name), ["affiche.png", "deck.pdf"]);
+  assert.ok(isHiddenInChat("~/Livrables/Koffi/brief.MD") && !isHiddenInChat("~/Livrables/Koffi/deck.pdf"));
 });

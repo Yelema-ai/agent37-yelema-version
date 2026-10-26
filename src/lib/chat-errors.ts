@@ -1,3 +1,5 @@
+import { mediaTags } from "./media-tags.ts";
+
 // The instance's own failure text is technical and in English: the member reads a French sentence.
 // A known cause gets its own; anything else keeps the caller's generic one.
 
@@ -27,9 +29,9 @@ const RUNTIME_LINES = [
   /^\s*[^\w\s]{0,3}\s*command invoked\b.*$/i,
 ];
 
-/** A reply as the member reads it: the runtime's English lines out, the same paragraph never twice in a row. */
+/** A reply as the member reads it: the runtime's English lines and MEDIA tags out, the same paragraph never twice in a row. */
 export function cleanReply(text: string): string {
-  const kept = text.split("\n").filter((line) => !RUNTIME_LINES.some((re) => re.test(line)));
+  const kept = mediaTags(text).text.split("\n").filter((line) => !RUNTIME_LINES.some((re) => re.test(line)));
   const paragraphs = kept.join("\n").split(/\n{2,}/);
   const out = paragraphs.filter((p, i) => !p.trim() || i === 0 || p.trim() !== paragraphs[i - 1].trim());
   return out.join("\n\n").replace(/^\s+|\s+$/g, "");

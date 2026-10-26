@@ -3,19 +3,23 @@
 import { memo } from "react";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
-import { ANGLED, BARE, CODE, LINKED, safeDecode } from "@/lib/drive-links";
+import { ANGLED, BARE, CODE, isHiddenInChat, LINKED, safeDecode } from "@/lib/drive-links";
+
+const HIDDEN_LINK = /\[([^\]\n]*)\]\(<?(?:file:\/\/|sandbox:)?((?:\/home\/node|~)\/Livrables\/[^)>\n]+)>?\)/g;
 
 // Experts give the drive path of what they saved (see lib/drive-paths.ts for the drive itself); turn those paths into download links (the
-// browser can't open file:// links or instance paths, and Streamdown blocks them).
+// browser can't open file:// links or instance paths, and Streamdown blocks them). A working note or memory file keeps its name, unlinked.
 function linkDriveFiles(content: string, agentId: string): string {
   const url = (path: string) =>
     `/api/agents/${agentId}/files/content?path=${encodeURIComponent(safeDecode(path))}&disposition=attachment`;
   const name = (path: string) => safeDecode(path.split("/").pop() ?? path);
+  const link = (label: string, path: string) => (isHiddenInChat(path) ? label : `[${label}](${url(path)})`);
   return content
+    .replace(HIDDEN_LINK, (m, label: string, path: string) => (isHiddenInChat(path) ? label : m))
     .replace(ANGLED, (_m, path: string) => `](${url(path)})`)
     .replace(LINKED, (_m, path: string) => `](${url(path)})`)
-    .replace(CODE, (_m, path: string) => `[${name(path)}](${url(path)})`)
-    .replace(BARE, (_m, lead: string, path: string) => `${lead}[${name(path)}](${url(path)})`);
+    .replace(CODE, (_m, path: string) => link(name(path), path))
+    .replace(BARE, (_m, lead: string, path: string) => `${lead}${link(name(path), path)}`);
 }
 
 // Our own links (drive downloads) open directly; external ones still ask first.
