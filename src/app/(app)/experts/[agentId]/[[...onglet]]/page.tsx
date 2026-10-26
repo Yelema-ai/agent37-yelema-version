@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
-import { agentAccessRole, getAgentRow, requireUser } from "@/lib/auth";
+import { agentAccessRole, getAgentRow, getRole, requireUser } from "@/lib/auth";
+import { openConversation } from "@/lib/conversation-token";
 import { movedTabPath, parseAgentRoute } from "@/lib/expert-tabs";
 import { AgentWorkspace } from "@/components/AgentWorkspace";
 
@@ -10,8 +11,10 @@ import { AgentWorkspace } from "@/components/AgentWorkspace";
 // est en permanence dans la barre latérale.
 export default async function AgentWorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ agentId: string; onglet?: string[] }>;
+  searchParams: Promise<{ c?: string }>;
 }) {
   const { agentId, onglet } = await params;
 
@@ -30,7 +33,16 @@ export default async function AgentWorkspacePage({
   const row = await getAgentRow(db, agentId).catch(() => null);
   if (!row) notFound();
   const role = await agentAccessRole(db, row, user.id);
-  if (!role) notFound();
+  if (!role) {
+    // A colleague opening a link copied by the owner (« Copier le lien »): the token names this
+    // instance and the owner's workspace; a member of that workspace reads it, read-only.
+    const { c } = await searchParams;
+    const claims = openConversation(c);
+    if (claims && claims.a === agentId && claims.w === row.workspace_id && (await getRole(db, claims.w, user.id))) {
+      redirect(`/conversations/partagee?c=${c}`);
+    }
+    notFound();
+  }
 
   return (
     <AgentWorkspace

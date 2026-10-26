@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useConversationStatus } from "@/components/activity/hooks";
-import { Archive, CheckCheck, ChevronRight, Copy, Link2, Loader2, MoreHorizontal, Pencil, Pin, PinOff, Plus, Repeat, RotateCw, Search, Trash2, X } from "lucide-react";
+import { Archive, CheckCheck, ChevronRight, Link2, Loader2, MoreHorizontal, Pencil, Pin, PinOff, Plus, Repeat, RotateCw, Search, Trash2, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNotifications } from "@/components/activity/ActivityProvider";
 import { convKey } from "@/lib/activity";
@@ -12,11 +12,9 @@ import { arrange } from "@/lib/chat-marks";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { conversationText } from "@/lib/conversation-text";
+import { agentTabPath } from "@/lib/expert-tabs";
 import { copyLater } from "@/lib/clipboard";
-import { expertDisplayName } from "@/lib/experts";
 import { profileQuery } from "@/lib/profile-id";
-import type { SessionDetail } from "@/lib/types";
 import { useChatContext } from "./ChatProvider";
 import type { ChatSession } from "./types";
 
@@ -160,41 +158,30 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [draft, setDraft] = useState("");
   const skipBlur = useRef(false);
 
-  // « Copier la conversation »: the whole thread as text, to paste to a colleague or a developer.
-  // A shareable read-only link needs the back office (an expert's space is its owner's only).
-  async function copyConversation(s: ChatSession) {
-    const expert = profile ? expertDisplayName(profile) : "L’Expert";
-    // Started during the click: see copyLater.
-    const text = apiFetch<SessionDetail>(`/api/agents/${agentId}/chat/sessions/${s.session_id}${profileQuery(profile)}`).then((res) =>
-      conversationText(s.routine ?? s.title ?? "Conversation", expert, res.history ?? [])
-    );
-    try {
-      await copyLater(text);
-      toast.success("Conversation copiée. Collez-la où vous voulez.");
-    } catch {
-      toast.error("La conversation n’a pas pu être copiée. Réessayez.");
-    }
-  }
-
-  // « Copier le lien »: a read-only link to the thread, for a signed-in colleague of the same company
-  // (30 days, see conversation-token.ts).
+  // « Copier le lien »: the conversation's own address (?session=), so its owner reopens it later and
+  // keeps writing. With sharing on, the link also carries a sealed token (c=, 30 days, see
+  // conversation-token.ts): a signed-in colleague of the same company who opens it is sent to the
+  // read-only view instead of a 404. Without it, the link still works for the owner.
   async function copyLink(s: ChatSession) {
+    const link = new URL(`${agentTabPath(agentId, "chat", profile)}?session=${encodeURIComponent(s.session_id)}`, window.location.origin);
     const mint = apiFetch<{ path: string; days: number }>(
       `/api/agents/${agentId}/chat/sessions/${s.session_id}/share${profileQuery(profile)}`,
       { method: "POST", body: JSON.stringify({ title: s.routine ?? s.title ?? "" }) }
+    ).then(
+      (res) => ({ token: new URL(res.path, window.location.origin).searchParams.get("c"), days: res.days }),
+      () => ({ token: null, days: 0 })
     );
-    const url = mint.then((res) => new URL(res.path, window.location.origin).toString());
+    // Started during the click: see copyLater.
+    const url = mint.then(({ token }) => {
+      if (token) link.searchParams.set("c", token);
+      return link.toString();
+    });
     try {
-      // Safari only copies inside the click itself: hand it the link still being made (ClipboardItem
-      // with a promise), and fall back to writing the text once it is there.
-      if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
-        await navigator.clipboard.write([new ClipboardItem({ "text/plain": url.then((u) => new Blob([u], { type: "text/plain" })) })]);
-      } else {
-        await navigator.clipboard.writeText(await url);
-      }
-      toast.success(`Lien copié. Il ouvre la conversation en lecture seule pour vos collègues, pendant ${(await mint).days} jours.`);
-    } catch (e) {
-      toast.error((e as Error).message || "Le lien n’a pas pu être copié. Réessayez.");
+      await copyLater(url);
+      const { token, days } = await mint;
+      toast.success(token ? `Lien copié. Il rouvre cette conversation, et vos collègues la lisent pendant ${days} jours.` : "Lien copié. Il rouvre cette conversation.");
+    } catch {
+      toast.error("Le lien n’a pas pu être copié. Réessayez.");
     }
   }
 
@@ -286,9 +273,6 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                   <Pin className="size-4" /> Épingler
                 </>
               )}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void copyConversation(s)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
-              <Copy className="size-4" /> Copier la conversation
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void copyLink(s)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
               <Link2 className="size-4" /> Copier le lien
