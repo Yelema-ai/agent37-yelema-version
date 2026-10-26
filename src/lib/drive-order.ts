@@ -33,8 +33,8 @@ const plain = (s: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
-// Code, data and logs the expert works with, and its caches.
-const WORKING_FILE = /\.(py|pyc|js|mjs|cjs|ts|sh|json|jsonl|yaml|yml|toml|log|lock|env|ini|cfg|sqlite|db|tmp|bak)$/;
+// Code, data, logs and working notes (.md) the expert works with, and its caches.
+const WORKING_FILE = /\.(md|markdown|py|pyc|js|mjs|cjs|ts|sh|json|jsonl|yaml|yml|toml|log|lock|env|ini|cfg|sqlite|db|tmp|bak)$/;
 const WORKING_FOLDER = /^(__pycache__|\.?cache|caches|node_modules|tmp|temp|\.venv|venv)$/;
 // The pictures made to preview a document in the chat: « apercu.png », « rapport-preview-01.png »,
 // « vignette.webp », and the folders that hold them.
@@ -44,7 +44,7 @@ const PICTURE = /\.(png|jpe?g|webp|gif|avif)$/;
 /** An entry a member does not need in Livrables: shown only with « Afficher les fichiers cachés ». */
 export function isDriveClutter(entry: { name: string; type: string }): boolean {
   const name = plain(entry.name);
-  if (entry.type === "directory") return WORKING_FOLDER.test(name) || /^(apercus?|previews?|vignettes?|thumbnails?|miniatures?)$/.test(name);
+  if (entry.type === "directory") return isMemoryFolder(entry.name) || WORKING_FOLDER.test(name) || /^(apercus?|previews?|vignettes?|thumbnails?|miniatures?)$/.test(name);
   if (WORKING_FILE.test(name)) return true;
   return PICTURE.test(name) && PREVIEW_WORD.test(name.replace(PICTURE, ""));
 }

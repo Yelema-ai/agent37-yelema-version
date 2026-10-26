@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { DRIVE_ROOT } from "@/lib/drive-paths";
-import { isMemoryFolder } from "@/lib/drive-order";
+import { isDriveClutter, isMemoryFolder } from "@/lib/drive-order";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { readNotifyPrefs } from "@/lib/notify-prefs";
 import { useOwnAgentId } from "@/components/conversations/useAllConversations";
@@ -46,7 +46,7 @@ export function DeliverableWatcher() {
         // A folder that failed to list would read as files gone, then as new ones on the next pass.
         if (!live || found.some((n) => n === null)) return;
         const entries = found.flatMap((n) => n ?? []);
-        files.push(...entries.filter((e) => e.type === "file"));
+        files.push(...entries.filter((e) => e.type === "file" && !isDriveClutter(e)));
         level = entries.filter((e) => isDir(e) && !isMemoryFolder(e.name)).map((d) => d.path);
       }
       const before = seen.current;

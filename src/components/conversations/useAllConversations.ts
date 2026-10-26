@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { profileQuery } from "@/lib/profile-id";
 import { DRIVE_ROOT } from "@/lib/drive-paths";
+import { isDriveClutter } from "@/lib/drive-order";
 import { agentTabPath } from "@/lib/expert-tabs";
 import type { ChatSession } from "@/components/chat/types";
 import { isDir, type FileEntry, type FileListResponse } from "@/components/files/types";
@@ -78,7 +79,7 @@ export function useDriveFiles(agentId: string | null, enabled = true) {
     let live = true;
     const list = (path: string) =>
       apiFetch<FileListResponse>(`/api/agents/${agentId}/files/list?path=${encodeURIComponent(path)}`).then(
-        (r) => r.entries.filter((e) => !e.hidden),
+        (r) => r.entries.filter((e) => !e.hidden && !isDriveClutter(e)),
         () => [] as FileEntry[]
       );
     void (async () => {

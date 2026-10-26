@@ -34,9 +34,9 @@ test("by name, A to Z, the memory folder still first", () => {
 test("clutter: working files, caches and preview pictures; documents stay", () => {
   const f = (name: string) => isDriveClutter({ name, type: "file" });
   const d = (name: string) => isDriveClutter({ name, type: "directory" });
-  for (const n of ["calcul.py", "etat.json", "run.log", "apercu.png", "rapport-apercu.png", "deck-preview-01.png", "Vignette.webp", "thumbnail.jpg", "Aperçu_2.png"]) assert.ok(f(n), n);
-  for (const n of ["Point.pdf", "Deck Unifood.pptx", "Trésorerie.xlsx", "Relances.docx", "Affiche Tabaski.png", "previsions.png", "Notes.md"]) assert.ok(!f(n), n);
-  for (const n of ["__pycache__", ".cache", "cache", "apercus", "previews"]) assert.ok(d(n), n);
+  for (const n of ["calcul.py", "etat.json", "run.log", "apercu.png", "rapport-apercu.png", "deck-preview-01.png", "Vignette.webp", "thumbnail.jpg", "Aperçu_2.png", "Notes.md", "brouillon.MARKDOWN"]) assert.ok(f(n), n);
+  for (const n of ["Point.pdf", "Deck Unifood.pptx", "Trésorerie.xlsx", "Relances.docx", "Affiche Tabaski.png", "previsions.png"]) assert.ok(!f(n), n);
+  for (const n of ["__pycache__", ".cache", "cache", "apercus", "previews", "_memoire", "Mémoire"]) assert.ok(d(n), n);
   assert.ok(!d("Clients"));
 });
 
