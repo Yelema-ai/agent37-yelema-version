@@ -291,11 +291,11 @@ export const agent37 = {
       { method: "POST" }
     ),
   // Add a message to a running turn (yelema-hermes ≥ v1.7.0; older images answer 404).
-  steerResponse: (id: string, responseId: string, text: string) =>
+  steerResponse: (id: string, responseId: string, text: string, key?: string) =>
     instanceCall<{ id: string; accepted: boolean }>(
       id,
       `/v1/responses/${encodeURIComponent(responseId)}/steer`,
-      { method: "POST", body: JSON.stringify({ text }) }
+      { method: "POST", body: JSON.stringify({ text, ...(key ? { client_message_id: key } : {}) }) }
     ),
 
   // ---- Per-instance file browser (Agents API /v1/files) — JSON surfaces only. The byte surfaces
