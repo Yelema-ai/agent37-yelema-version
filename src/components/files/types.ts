@@ -1,6 +1,6 @@
 // Shared client-side helpers for the Files tab. The wire shapes (FileEntry / FileListResponse)
 // live in lib/types.ts so the server (lib/agent37.ts) and the browser agree on one definition.
-import { DRIVE_ABS, DRIVE_ROOT } from "@/lib/drive-paths";
+import { DRIVE_ABS, DRIVE_ROOT, seatFolderOf } from "@/lib/drive-paths";
 import type { FileEntry } from "@/lib/types";
 
 export type { FileEntry, FileListResponse } from "@/lib/types";
@@ -40,9 +40,12 @@ export function formatMtime(ms: number): string {
 export function breadcrumbs(path: string): { label: string; path: string }[] {
   const root = [DRIVE_ABS, DRIVE_ROOT].find((r) => path === r || path.startsWith(`${r}/`));
   if (!root) return [];
-  const crumbs: { label: string; path: string }[] = [{ label: "Livrables", path: root }];
-  let acc = root;
-  for (const part of path.slice(root.length).split("/").filter(Boolean)) {
+  const parts = path.slice(root.length).split("/").filter(Boolean);
+  const seat = seatFolderOf(parts);
+  if (seat) parts.shift();
+  let acc = seat ? `${root}/${seat}` : root;
+  const crumbs: { label: string; path: string }[] = [{ label: seat ? "Mes livrables" : "Livrables", path: acc }];
+  for (const part of parts) {
     acc += `/${part}`;
     crumbs.push({ label: part, path: acc });
   }

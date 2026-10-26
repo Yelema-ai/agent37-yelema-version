@@ -106,6 +106,19 @@ function declareCalls(token: string, row: { agent37_id: string; workspace_id: st
   }
 }
 
+// Chat d'entreprise: the enterprise instance has no agents row; its agent (`u-…`, header X-Yelema-Profile)
+// reaches the apps of ITS member, whom the back office names from the instance token. Unknown agent: no row.
+async function seatRow(token: string, workspace: string | undefined, header: string | null): Promise<{ agent37_id: string; workspace_id: string; owner_user_id: string } | Response | null> {
+  const profile = header?.trim() ?? "";
+  if (!workspace || !/^u-[a-z0-9]{6}$/.test(profile)) return null;
+  try {
+    const { user } = await backoffice.seatAppsUser(token, workspace, profile);
+    return { agent37_id: profile, workspace_id: workspace, owner_user_id: user };
+  } catch (e) {
+    return e instanceof BackofficeError && e.status >= 400 && e.status < 500 ? null : errorJson(503, "token lookup unavailable");
+  }
+}
+
 async function handle(request: Request): Promise<Response> {
   const token = /^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") ?? "")?.[1]?.trim();
   if (!token) return errorJson(401, "missing bearer token");
@@ -119,13 +132,15 @@ async function handle(request: Request): Promise<Response> {
     return e instanceof TenantError && e.status < 500 ? errorJson(401, "invalid token") : errorJson(503, "token lookup unavailable");
   }
 
-  const { data: row, error } = await createAdminClient()
+  const { data: found, error } = await createAdminClient()
     .from("agents")
     .select("agent37_id, workspace_id, owner_user_id")
     .eq("apps_token_hash", hashAppsToken(token))
     .maybeSingle<{ agent37_id: string; workspace_id: string; owner_user_id: string | null }>();
   // A database outage must not look like a revoked token to the expert.
   if (error) return errorJson(503, "token lookup unavailable");
+  const row = found ?? (await seatRow(token, pinned, request.headers.get("x-yelema-profile")));
+  if (row instanceof Response) return row;
   if (!row) return errorJson(401, "invalid token");
   // An instance of another client than this address's is not ours to proxy.
   if (pinned && row.workspace_id !== pinned) return errorJson(401, "invalid token");

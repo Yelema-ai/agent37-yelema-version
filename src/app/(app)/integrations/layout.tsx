@@ -42,8 +42,18 @@ export default function IntegrationsLayout({ children }: { children: React.React
     nav.current?.querySelector<HTMLElement>("[aria-current=page]")?.scrollIntoView({ inline: "center", block: "nearest" });
   }, [pathname]);
 
+  // The company chat: only the member's own apps (their Gmail, Agenda…), used by their chat alone.
   if (current?.access === "entreprise") {
-    return <p className="mx-auto w-full max-w-[1280px] px-4 pt-6 text-sm text-ink-2 sm:px-8">Les intégrations sont réglées pour les Experts de l’entreprise. Le chat d’entreprise s’en sert sans réglage de votre part.</p>;
+    if (!pathname.startsWith("/integrations/connecteurs")) {
+      return <p className="mx-auto w-full max-w-[1280px] px-4 pt-6 text-sm text-ink-2 sm:px-8">Les intégrations sont réglées pour les Experts de l’entreprise. Vos propres applications se branchent dans Mes connecteurs.</p>;
+    }
+    return (
+      <>
+        <h1 className="mx-auto w-full max-w-[1280px] px-4 pt-6 font-display text-[30px] font-bold tracking-tight text-ink sm:px-8">Mes connecteurs</h1>
+        <p className="mx-auto w-full max-w-[1280px] px-4 pt-1 text-sm text-ink-2 sm:px-8">Vos applications, utilisées par votre seul chat d’entreprise : personne d’autre n’y a accès.</p>
+        {children}
+      </>
+    );
   }
   return (
     <>

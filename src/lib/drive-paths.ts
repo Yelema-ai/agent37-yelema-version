@@ -11,3 +11,8 @@ export function isDriveRoot(path: string): boolean {
   const trimmed = path.replace(/\/+$/, "");
   return trimmed === DRIVE_ROOT || trimmed === DRIVE_ABS;
 }
+
+/** Chat d'entreprise : le dossier de son agent (`u-…`) en tête d'un chemin, montré « Mes livrables », jamais l'identifiant. */
+export function seatFolderOf(parts: readonly string[]): string | undefined {
+  return parts[0] && /^u-[a-z0-9]{6}$/.test(parts[0]) ? parts[0] : undefined;
+}
