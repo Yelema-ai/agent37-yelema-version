@@ -22,6 +22,7 @@ export async function POST(request: Request, { params }: Ctx) {
       t: (title ?? "").trim().slice(0, 200),
       o: (user.firstName ?? user.name ?? "").slice(0, 80),
       e: Math.floor(Date.now() / 1000) + LINK_DAYS * 24 * 60 * 60,
+      u: user.id,
     });
     if (!token) throw new ApiError(501, "share_off", "Le partage de conversation n’est pas encore activé sur cet espace. Contactez Yelema.");
     return json({ path: `/conversations/partagee?c=${token}`, days: LINK_DAYS });

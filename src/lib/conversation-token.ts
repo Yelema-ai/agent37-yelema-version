@@ -20,6 +20,8 @@ export interface ConversationClaims {
   o: string;
   /** Expiry, in seconds since the epoch. */
   e: number;
+  /** Owner's account id: on an enterprise instance the conversation is read as theirs (links minted since 26/10). */
+  u?: string;
 }
 
 export const LINK_DAYS = 30;
@@ -54,7 +56,8 @@ export function openConversation(token: unknown, now = Date.now(), key: Buffer |
     const ok =
       c.v === 1 && text(c.w, 128) && text(c.a, 128) && text(c.p, 128, true) && text(c.s, 128) && text(c.t, 200, true) && text(c.o, 80, true) &&
       typeof c.e === "number" && c.e * 1000 > now;
-    return ok ? { w: c.w as string, a: c.a as string, p: c.p as string, s: c.s as string, t: c.t as string, o: c.o as string, e: c.e as number } : null;
+    if (!ok || (c.u !== undefined && !text(c.u, 128))) return null;
+    return { w: c.w as string, a: c.a as string, p: c.p as string, s: c.s as string, t: c.t as string, o: c.o as string, e: c.e as number, ...(c.u ? { u: c.u as string } : {}) };
   } catch {
     return null;
   }

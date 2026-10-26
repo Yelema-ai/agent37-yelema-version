@@ -142,6 +142,7 @@ function mapHistory(history: SessionDetail["history"]): ChatMessage[] {
     role: h.role,
     content: h.role === "user" ? steerText(h.content ?? "") : (h.content ?? ""),
     thinking: h.thinking,
+    ...(h.files?.length ? { files: h.files } : {}),
     ...(h.created_at ? { at: h.created_at < 1e12 ? h.created_at * 1000 : h.created_at } : {}),
     ...(h.role === "user" && isSteer(h.content ?? "") ? { steered: true } : {}),
   }));

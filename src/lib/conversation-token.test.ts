@@ -22,3 +22,8 @@ test("without a secret, no link is made", () => {
   assert.equal(conversationKey({}), null);
   assert.equal(sealConversation(claims, null), null);
 });
+
+test("the owner's account rides in the link, so an enterprise seat is read as its owner", () => {
+  const withOwner = { ...claims, u: "user_42" };
+  assert.deepEqual(openConversation(sealConversation(withOwner, key), 1_000_000_000_000, key), withOwner);
+});
