@@ -29,6 +29,17 @@ export interface WorkspaceMember {
   name?: string | null;
   status?: string | null;
   instance_name?: string | null;
+  /** Back-office member id; `entreprise` members can be removed by an admin when `removable`. */
+  id?: string;
+  access?: "instance" | "entreprise";
+  removable?: boolean;
+}
+
+/** Seats when the back office lists the members: subscription users and enterprise chat. */
+export interface MemberRoom {
+  quota: { used: number; allowed: number | null };
+  seats: { used: number; cap: number } | null;
+  enterpriseOpen: boolean;
 }
 
 export interface Invitation {
