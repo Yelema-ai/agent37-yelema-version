@@ -3,6 +3,7 @@ import { requireAgentAccess } from "@/lib/auth";
 import { assertInDrive } from "@/lib/drive";
 import { ApiError, handleError, readJson } from "@/lib/http";
 import { DEFAULT_PROFILE, resolveProfile } from "@/lib/profiles";
+import { messageKeyOf } from "@/lib/turn-idempotency";
 import { FILES_ONLY_PROMPT } from "@/lib/types";
 import { upstreamErrorMessage } from "../../_helpers";
 
@@ -19,6 +20,8 @@ interface ResponsesBody {
   provider?: string | null;
   reasoning_effort?: string | null;
   files?: string[];
+  // Sent again after a cut, the same key makes the gateway join the turn it already started.
+  client_message_id?: string;
 }
 
 // Run a chat turn and stream the agent's reply back as Server-Sent Events. We authorize +
@@ -59,6 +62,8 @@ export async function POST(request: Request, { params }: Ctx) {
     }
     if (body.reasoning_effort) payload.reasoning_effort = body.reasoning_effort;
     if (files.length) payload.files = files;
+    const key = messageKeyOf(body.client_message_id);
+    if (key) payload.client_message_id = key;
 
     const upstream = await instanceFetch(id, "/v1/responses", {
       method: "POST",
