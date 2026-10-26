@@ -46,10 +46,26 @@ function instanceBaseUrl(id: string, port?: number): string {
   return `https://${urlId(id)}${suffix}.${INSTANCE_DOMAIN}`;
 }
 
-/** The Telegram of an instance, as the runtime gateway publishes it; `state: null` = no bot yet. */
+/**
+ * The Telegram of an instance, as the runtime gateway publishes it; `state: null` = no bot being set up or
+ * connected through it. `source`: the Yelema bot (absent) or the member's BotFather bot (`own`). `active`: that
+ * bot is the one the instance's runtime listens to; `instanceBot`: the one it listens to, whatever its source.
+ */
 export type TelegramHubStatus = {
   connected: boolean;
-  state: { phase: "awaiting_group" | "needs_topics" | "ready"; bot: string; chatTitle?: string; topics?: Record<string, string>; inviteLink?: string | null; groupUrl?: string } | null;
+  state: {
+    phase: "awaiting_group" | "needs_topics" | "ready" | "failed";
+    source?: "yelema" | "own";
+    botId: number;
+    bot: string;
+    chatTitle?: string;
+    topics?: Record<string, string>;
+    inviteLink?: string | null;
+    groupUrl?: string;
+    error?: string;
+    active?: boolean;
+  } | null;
+  instanceBot?: { id: number; username: string | null } | null;
 };
 
 export type RelayChannel = "slack" | "teams";
@@ -332,6 +348,8 @@ export const agent37 = {
     link: async (id: string, name: string): Promise<{ url: string; groupUrl?: string; expiresAt: string }> =>
       parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram/link`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) })),
     status: async (id: string): Promise<TelegramHubStatus> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram`)),
+    own: async (id: string, token: string): Promise<{ bot: string; groupUrl: string }> =>
+      parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram/own`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) })),
     sync: async (id: string): Promise<{ ok: true; topics: number }> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram/sync`, { method: "POST" })),
     disconnect: async (id: string): Promise<{ ok: true }> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram`, { method: "DELETE" })),
   },

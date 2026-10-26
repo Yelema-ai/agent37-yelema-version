@@ -22,7 +22,7 @@ import { SlackConnect } from "@/components/channels/SlackConnect";
 import { TeamsConnect } from "@/components/channels/TeamsConnect";
 import { TelegramConnect } from "@/components/channels/TelegramConnect";
 import { RelayChannel } from "@/components/channels/RelayChannel";
-import { TelegramHub } from "@/components/channels/TelegramHub";
+import { TelegramChannel } from "@/components/channels/TelegramChannel";
 import { TelegramTopics } from "@/components/channels/TelegramTopics";
 import { WhatsAppConnect } from "@/components/channels/WhatsAppConnect";
 import { useRuntimeTools } from "@/components/experts/useRuntimeTools";
@@ -56,12 +56,12 @@ export function ChannelsTab({
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
-  // Un Telegram posé par la passerelle a déjà ses sujets : l'ancien bouton « Créer les sujets » (groupe /sethome) s'efface.
+  // Un bot posé par la passerelle (et relevé par l'instance) a déjà ses sujets : l'ancien bouton « Créer les sujets » s'efface.
   const [hubTelegram, setHubTelegram] = useState(false);
   useEffect(() => {
     if (hermesTools !== true) return;
     let alive = true;
-    apiFetch<TelegramHubStatus>(`/api/agents/${agentId}/channels/telegram/hub`).then((r) => alive && setHubTelegram(Boolean(r.state)), () => undefined);
+    apiFetch<TelegramHubStatus>(`/api/agents/${agentId}/channels/telegram/hub`).then((r) => alive && setHubTelegram(r.state?.active === true), () => undefined);
     return () => {
       alive = false;
     };
@@ -92,7 +92,10 @@ export function ChannelsTab({
     return (
       <div className="space-y-6">
         <Header />
-        <TelegramHub agentId={agentId} canManage={canManage} />
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold">Telegram</h3>
+          <TelegramChannel agentId={agentId} canManage={canManage} />
+        </section>
         <RelayChannel agentId={agentId} channel="slack" canManage={canManage} />
         <RelayChannel agentId={agentId} channel="teams" canManage={canManage} />
       </div>
