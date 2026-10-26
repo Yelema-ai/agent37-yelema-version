@@ -152,7 +152,7 @@ export function ChannelsTab({
         </div>
       ) : (
         <>
-          <div className="divide-y rounded-lg border bg-card">
+          <div className="divide-y overflow-hidden rounded-[22px] border bg-card">
             {featured.map((channel) => (
               <ChannelRow
                 key={channel.id}
@@ -190,7 +190,7 @@ export function ChannelsTab({
                 Autres canaux ({rest.length - connectedRest.length})
               </button>
               {showAll && (
-                <div className="divide-y rounded-lg border bg-card">
+                <div className="divide-y overflow-hidden rounded-[22px] border bg-card">
                   {rest
                     .filter((c) => !isChannelConnected(c))
                     .map((channel) => (
@@ -220,6 +220,7 @@ function Header() {
   );
 }
 
+// A connected channel is one row to open (state, then a chevron); one to set up keeps its button.
 function ChannelRow({
   channel,
   canManage,
@@ -232,23 +233,37 @@ function ChannelRow({
   const { Icon, color } = channelBrand(channel.id);
   const connected = isChannelConnected(channel);
   const error = channelError(channel);
-  return (
-    <div className="flex items-center gap-3 px-4 py-3">
-      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-muted/20">
-        <Icon className="h-4 w-4 shrink-0" {...(color ? { style: { color } } : {})} />
+  const body = (
+    <>
+      <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[12px] border bg-muted/20">
+        <Icon className="h-5 w-5 shrink-0" {...(color ? { style: { color } } : {})} />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-medium">{channel.name}</p>
-          {connected && <Badge variant="success">Connecté</Badge>}
-          {!connected && error && <Badge variant="warning">À vérifier</Badge>}
-        </div>
-        <p className="truncate text-xs text-muted-foreground">
-          {error || channel.description || channelStateLabel(channel)}
-        </p>
+        <p className="truncate text-[15px] font-semibold">{channel.name}</p>
+        <p className="truncate text-[13px] text-muted-foreground">{error || channel.description || channelStateLabel(channel)}</p>
       </div>
+    </>
+  );
+  if (connected || error) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        disabled={!canManage}
+        aria-label={`Gérer ${channel.name}`}
+        className="flex min-h-[68px] w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-soft disabled:pointer-events-none"
+      >
+        {body}
+        {connected ? <Badge variant="success">Connecté</Badge> : <Badge variant="warning">À vérifier</Badge>}
+        <ChevronRight className="h-4 w-4 shrink-0 text-ink-3" />
+      </button>
+    );
+  }
+  return (
+    <div className="flex min-h-[68px] items-center gap-3 px-4 py-3">
+      {body}
       <Button variant="outline" size="sm" disabled={!canManage} onClick={onOpen} className="rounded-full max-sm:h-10">
-        {connected ? "Gérer" : isFeaturedChannel(channel.id) ? `Connecter ${channel.name}` : "Connecter"}
+        {isFeaturedChannel(channel.id) ? `Connecter ${channel.name}` : "Connecter"}
       </Button>
     </div>
   );

@@ -1,10 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Check, Loader2, MoreHorizontal, Plug, Plus, RotateCw, Search, Unplug } from "lucide-react";
+import { AlertCircle, Check, ChevronRight, Loader2, MoreHorizontal, Pencil, Plug, Plus, RotateCw, Search, Trash2, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { ACCOUNT_STATE_LABELS, accountState, accountsBySlug } from "@/lib/connection-accounts";
+import {
+  ACCOUNT_STATE_LABELS,
+  accountState,
+  accountSummary,
+  accountsBySlug,
+  needsReconnect,
+  splitAccounts,
+} from "@/lib/connection-accounts";
 import { isConnectionActive as isActive } from "@/lib/expert-tools";
 import { DEFAULT_INTEGRATION_TOOLKITS, catalogToolkit, composioLogoUrl } from "@/lib/integration-catalog";
 import type {
@@ -14,7 +21,10 @@ import type {
   IntegrationToolkit,
   IntegrationToolkitsResult,
 } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -74,6 +84,7 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
   const [connecting, setConnecting] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [open, setOpen] = useState<IntegrationToolkit | null>(null);
 
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollDeadline = useRef(0);
@@ -125,6 +136,11 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
   }, [q, agentId]);
 
   const accounts = useMemo(() => accountsBySlug(connections ?? []), [connections]);
+
+  // The panel closes once its last account is gone.
+  useEffect(() => {
+    if (open && connections && !accounts.has(slugKey(open.slug))) setOpen(null);
+  }, [open, connections, accounts]);
 
   // The catalog, plus any connected tool that is not in it (connected from a search).
   const base = useMemo(() => {
@@ -194,14 +210,15 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
     }
   }
 
-  // One account at a time: a duplicate or an unfinished connection goes without touching the others.
-  async function disconnect(toolkit: IntegrationToolkit, id: string) {
-    setDisconnecting(id);
+  // One account at a time, or every unfinished sign-in at once: the other accounts stay. Throws so
+  // the confirmation stays open on a failure.
+  async function disconnect(toolkit: IntegrationToolkit, ids: string[]) {
     try {
-      await apiFetch(`/api/agents/${agentId}/integrations/connections/${encodeURIComponent(id)}`, { method: "DELETE" });
-      toast.success(`Compte ${toolkit.name} retiré`);
-    } catch (e) {
-      toast.error((e as Error).message);
+      for (const id of ids) {
+        setDisconnecting(id);
+        await apiFetch(`/api/agents/${agentId}/integrations/connections/${encodeURIComponent(id)}`, { method: "DELETE" });
+      }
+      toast.success(ids.length > 1 ? `${ids.length} connexions ${toolkit.name} retirées` : `Compte ${toolkit.name} déconnecté`);
     } finally {
       await fetchConnections().catch(() => undefined);
       setDisconnecting(null);
@@ -242,9 +259,8 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
                 toolkit={t}
                 accounts={connections === null ? null : (accounts.get(k) ?? [])}
                 waiting={connecting === k || pending === k}
-                disconnecting={disconnecting}
                 onConnect={() => connect(t)}
-                onDisconnect={(id) => disconnect(t, id)}
+                onOpen={() => setOpen(t)}
               />
             );
           })}
@@ -263,7 +279,19 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
         </div>
       )}
 
-      {pending && (
+      {open && (
+        <AccountsPanel
+          toolkit={open}
+          accounts={accounts.get(slugKey(open.slug)) ?? []}
+          waiting={connecting === slugKey(open.slug) || pending === slugKey(open.slug)}
+          disconnecting={disconnecting}
+          onClose={() => setOpen(null)}
+          onConnect={() => connect(open)}
+          onDisconnect={(ids) => disconnect(open, ids)}
+        />
+      )}
+
+      {pending && !open && (
         <p className="flex items-center gap-2 text-[13px] text-ink-3">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Terminez la connexion dans l’onglet qui vient de s’ouvrir.
@@ -288,120 +316,285 @@ const dateFr = (ms: number | null | undefined): string => {
   return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", ...year });
 };
 
+// Composio gives an account no name: the member names it, in this browser until the back office
+// keeps a label per connection.
+const NAMES_KEY = "yelema.connector-names";
+
+function useAccountNames(): [Record<string, string>, (id: string, name: string) => void] {
+  const [names, setNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    try {
+      setNames(JSON.parse(localStorage.getItem(NAMES_KEY) || "{}"));
+    } catch {
+      // private window or blocked storage: the default labels stay
+    }
+  }, []);
+  const rename = useCallback((id: string, name: string) => {
+    setNames((prev) => {
+      const next = { ...prev };
+      if (name) next[id] = name;
+      else delete next[id];
+      try {
+        localStorage.setItem(NAMES_KEY, JSON.stringify(next));
+      } catch {
+        // kept for this visit only
+      }
+      return next;
+    });
+  }, []);
+  return [names, rename];
+}
+
 function ToolTile({
   toolkit,
   accounts,
   waiting,
-  disconnecting,
   onConnect,
-  onDisconnect,
+  onOpen,
 }: {
   toolkit: IntegrationToolkit;
   // null while the connections are still loading
   accounts: IntegrationConnection[] | null;
   waiting: boolean;
-  disconnecting: string | null;
   onConnect: () => void;
-  onDisconnect: (id: string) => void;
+  onOpen: () => void;
 }) {
-  const connected = accounts?.some(isActive) ?? false;
-  return (
-    <div className="rounded-[22px] border bg-card py-3 pl-4 pr-3">
-      <div className="flex min-h-[52px] items-center gap-3">
-        <ToolLogo logo={toolkit.logo} name={toolkit.name} />
-        <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 text-[15px] font-semibold leading-snug text-ink">{toolkit.name}</p>
-          {toolkit.description && <p className="truncate text-[13px] text-ink-3">{toolkit.description}</p>}
-        </div>
-
-        {accounts === null ? (
-          <span className="h-8 w-24 shrink-0 animate-pulse rounded-[10px] bg-soft" />
-        ) : accounts.length > 0 ? (
-          <div className="flex shrink-0 items-center gap-0.5">
-            {connected ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-ok-pale px-2.5 py-1 text-xs font-semibold text-ok">
-                <Check className="h-3.5 w-3.5" />
-                Connecté
-              </span>
-            ) : (
-              // No account answers any more: the tool says so in its head, not only line by line.
-              <span className="inline-flex items-center gap-1 rounded-full bg-coral-pale px-2.5 py-1 text-xs font-semibold text-coral-ink">
-                <AlertCircle className="h-3.5 w-3.5" />
-                À reconnecter
-              </span>
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={`Options pour ${toolkit.name}`}
-                  disabled={waiting}
-                  className="grid h-8 w-8 max-sm:size-10 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink disabled:opacity-60"
-                >
-                  {waiting ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onSelect={onConnect}>
-                  <Plus /> Ajouter un compte
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ) : waiting ? (
-          <Button size="sm" variant="outline" disabled className="shrink-0">
-            <Loader2 className="animate-spin" />
-            En attente
-          </Button>
+  const head = (
+    <>
+      <ToolLogo logo={toolkit.logo} name={toolkit.name} />
+      <div className="min-w-0 flex-1">
+        <p className="line-clamp-2 text-[15px] font-semibold leading-snug text-ink">{toolkit.name}</p>
+        {accounts && accounts.length > 0 ? (
+          <p className="truncate text-[13px] text-ink-3">{accountSummary(accounts)}</p>
         ) : (
-          <Button size="sm" className="shrink-0" onClick={onConnect}>
-            Connecter
-          </Button>
+          toolkit.description && <p className="truncate text-[13px] text-ink-3">{toolkit.description}</p>
         )}
       </div>
+    </>
+  );
 
-      {accounts && accounts.length > 0 && (
-        <ul className="mt-2 space-y-1 border-t pt-2">
-          {accounts.map((a, i) => {
-            const state = accountState(a);
-            // The account's date tells two accounts apart; its id stays in the tooltip.
-            const label = `Compte ${i + 1}`;
-            return (
-              <li key={a.id} className="flex items-center gap-2 text-[13px]">
-                <span className="min-w-0 flex-1 truncate text-ink-2" title={a.id}>
-                  {label}
-                  {dateFr(a.createdAt) && <span className="text-ink-3"> · {dateFr(a.createdAt)}</span>}
-                </span>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATE_TONE[state]}`}>
-                  {ACCOUNT_STATE_LABELS[state]}
-                </span>
-                {state !== "active" && (
-                  <button
-                    type="button"
-                    onClick={onConnect}
-                    disabled={waiting}
-                    aria-label={`Reconnecter ${toolkit.name}`}
-                    title="Reconnecter"
-                    className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink disabled:opacity-60 max-sm:size-10"
-                  >
-                    <RotateCw className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => onDisconnect(a.id)}
-                  disabled={disconnecting !== null}
-                  aria-label={`Déconnecter ${label}`}
-                  title="Déconnecter"
-                  className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-destructive disabled:opacity-60 max-sm:size-10"
-                >
-                  {disconnecting === a.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+  // A tool with accounts is one button: the card sums them up, the panel lists them.
+  if (accounts && accounts.length > 0) {
+    const broken = accounts.some(needsReconnect) || !accounts.some(isActive);
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Comptes ${toolkit.name}`}
+        className="flex min-h-[78px] w-full items-center gap-3 rounded-[22px] border bg-card py-3 pl-4 pr-3 text-left transition-colors hover:border-ink-3/40"
+      >
+        {head}
+        {waiting ? (
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ink-3" />
+        ) : broken ? (
+          <span title="Un compte est à reconnecter" className="grid size-6 shrink-0 place-items-center rounded-full bg-coral-pale text-coral-ink">
+            <AlertCircle className="h-3.5 w-3.5" />
+          </span>
+        ) : (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ok-pale px-2.5 py-1 text-xs font-semibold text-ok">
+            <Check className="h-3.5 w-3.5" />
+            Connecté
+          </span>
+        )}
+        <ChevronRight className="h-4 w-4 shrink-0 text-ink-3" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex min-h-[78px] items-center gap-3 rounded-[22px] border bg-card py-3 pl-4 pr-3">
+      {head}
+      {accounts === null ? (
+        <span className="h-8 w-24 shrink-0 animate-pulse rounded-[10px] bg-soft" />
+      ) : waiting ? (
+        <Button size="sm" variant="outline" disabled className="shrink-0">
+          <Loader2 className="animate-spin" />
+          En attente
+        </Button>
+      ) : (
+        <Button size="sm" className="shrink-0" onClick={onConnect}>
+          Connecter
+        </Button>
       )}
     </div>
+  );
+}
+
+// Every account of one tool: a drawer on the right on a computer, a sheet from the bottom on a phone.
+function AccountsPanel({
+  toolkit,
+  accounts,
+  waiting,
+  disconnecting,
+  onClose,
+  onConnect,
+  onDisconnect,
+}: {
+  toolkit: IntegrationToolkit;
+  accounts: IntegrationConnection[];
+  waiting: boolean;
+  disconnecting: string | null;
+  onClose: () => void;
+  onConnect: () => void;
+  onDisconnect: (ids: string[]) => Promise<void>;
+}) {
+  const [names, rename] = useAccountNames();
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [confirm, setConfirm] = useState<{ ids: string[]; title: string; description: string } | null>(null);
+  const { accounts: listed, unfinished } = splitAccounts(accounts);
+  const titleOf = (c: IntegrationConnection) => names[c.id] || `Compte ${listed.indexOf(c) + 1}`;
+
+  function saveName(id: string) {
+    rename(id, draft.trim());
+    setEditing(null);
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
+        className={cn(
+          "flex flex-col gap-0 overflow-y-auto p-0",
+          "sm:left-auto sm:right-0 sm:top-0 sm:h-full sm:w-[440px] sm:max-w-none sm:translate-x-0 sm:translate-y-0 sm:rounded-none sm:border-y-0 sm:border-r-0",
+          "max-sm:bottom-0 max-sm:left-0 max-sm:top-auto max-sm:max-h-[88vh] max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:rounded-t-[22px]"
+        )}
+      >
+        <div className="flex items-center gap-3 border-b px-5 py-4 pr-14">
+          <ToolLogo logo={toolkit.logo} name={toolkit.name} />
+          <div className="min-w-0">
+            <DialogTitle className="text-[19px] font-bold leading-tight text-ink">{toolkit.name}</DialogTitle>
+            <DialogDescription className="text-[13px] text-ink-3">{accountSummary(accounts)}</DialogDescription>
+          </div>
+        </div>
+
+        <div className="flex-1 px-5 py-2">
+          <ul className="divide-y">
+            {listed.map((a) => {
+              const state = accountState(a);
+              const title = titleOf(a);
+              return (
+                <li key={a.id} className="flex items-center gap-2 py-3">
+                  <div className="min-w-0 flex-1">
+                    {editing === a.id ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          saveName(a.id);
+                        }}
+                      >
+                        <Input
+                          autoFocus
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                          onBlur={() => saveName(a.id)}
+                          onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), setEditing(null))}
+                          placeholder={`Compte ${listed.indexOf(a) + 1}`}
+                          aria-label="Nom du compte"
+                          maxLength={40}
+                          className="h-10"
+                        />
+                      </form>
+                    ) : (
+                      <p className="truncate text-[15px] font-semibold text-ink" title={a.id}>
+                        {title}
+                      </p>
+                    )}
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-3">
+                      {dateFr(a.createdAt) && <span>Ajouté le {dateFr(a.createdAt)}</span>}
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATE_TONE[state]}`}>
+                        {ACCOUNT_STATE_LABELS[state]}
+                      </span>
+                    </p>
+                  </div>
+                  {needsReconnect(a) && (
+                    <Button size="sm" onClick={onConnect} disabled={waiting} className="shrink-0">
+                      <RotateCw />
+                      Reconnecter
+                    </Button>
+                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Options pour ${title}`}
+                        className="grid size-10 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink"
+                      >
+                        {disconnecting === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setDraft(names[a.id] ?? "");
+                          setEditing(a.id);
+                        }}
+                      >
+                        <Pencil /> Renommer
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onSelect={() =>
+                          setConfirm({
+                            ids: [a.id],
+                            title: `Déconnecter ${title} ?`,
+                            description: `Vos Experts n’auront plus accès à ce compte ${toolkit.name}. Vous pourrez le reconnecter quand vous voulez.`,
+                          })
+                        }
+                      >
+                        <Unplug /> Déconnecter
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </li>
+              );
+            })}
+          </ul>
+
+          {unfinished.length > 0 && (
+            <div className="mt-2 flex items-center justify-between gap-3 rounded-[14px] bg-soft py-1 pl-4 pr-1 text-[13px]">
+              <span className="text-ink-2">
+                {unfinished.length > 1 ? `${unfinished.length} connexions inachevées` : "1 connexion inachevée"}
+              </span>
+              <button
+                type="button"
+                disabled={disconnecting !== null}
+                onClick={() =>
+                  setConfirm({
+                    ids: unfinished.map((c) => c.id),
+                    title: "Faire le ménage ?",
+                    description: "Les connexions jamais terminées sont retirées. Vos comptes connectés ne bougent pas.",
+                  })
+                }
+                className="inline-flex h-10 items-center gap-1.5 rounded-full px-3 font-semibold text-ink transition-colors hover:bg-card disabled:opacity-60"
+              >
+                <Trash2 className="h-4 w-4" />
+                Faire le ménage
+              </button>
+            </div>
+          )}
+
+          <Button variant="outline" className="mt-4 w-full" onClick={onConnect} disabled={waiting}>
+            {waiting ? <Loader2 className="animate-spin" /> : <Plus />}
+            {waiting ? "En attente de la connexion" : `Ajouter un compte ${toolkit.name}`}
+          </Button>
+          {waiting && (
+            <p className="mt-2 text-center text-[13px] text-ink-3">Terminez la connexion dans l’onglet qui vient de s’ouvrir.</p>
+          )}
+          <div className="h-4" />
+        </div>
+      </DialogContent>
+
+      {confirm && (
+        <ConfirmDialog
+          open
+          onOpenChange={(o) => !o && setConfirm(null)}
+          title={confirm.title}
+          description={confirm.description}
+          confirmText={confirm.ids.length > 1 ? "Retirer" : "Déconnecter"}
+          destructive
+          onConfirm={() => onDisconnect(confirm.ids)}
+        />
+      )}
+    </Dialog>
   );
 }

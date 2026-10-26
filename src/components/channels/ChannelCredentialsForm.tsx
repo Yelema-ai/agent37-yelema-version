@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAsyncAction } from "@/components/useAsyncAction";
 import { isAllowlistField, isWritableField } from "@/lib/channel-rules";
+import { DisconnectButton } from "@/components/channels/DisconnectButton";
 
 // The form for every channel that is a credential rather than a flow: Slack, Discord, and the two
 // dozen others the harness supports. Nothing about it is channel-specific: the fields, their labels,
@@ -96,9 +97,7 @@ export function ChannelCredentialsForm({
           {connected ? "Enregistrer" : `Connecter ${channel.name}`}
         </Button>
         {channel.configured && (
-          <Button variant="ghost" onClick={disconnect} disabled={busy}>
-            Déconnecter
-          </Button>
+          <DisconnectButton name={channel.name} onConfirm={disconnect} disabled={busy} />
         )}
       </div>
     </div>
