@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { AudioLines, Loader2, Mic, MicOff, Minimize2, Phone, PhoneCall, PhoneOff, Search, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -20,8 +19,9 @@ const GREY = "#9696a0";
 
 /**
  * The call as shown, from its state alone: CallProvider wires it to the live call (Leslie, 23/10, as on
- * the mobile app). On a computer, the expert on the left (picture in its halo, what is happening, the
- * buttons) and what is said on the right, live; on a phone, one under the other.
+ * the mobile app). One column, the expert in the middle: picture in its halo, what is happening, the
+ * expert's last sentence under it, the buttons. What the member says never shows: its live
+ * transcription is not reliable enough (Leslie, 26/10).
  */
 export function CallView(p: {
   name: string;
@@ -45,8 +45,19 @@ export function CallView(p: {
   const timed = p.phase === "listening" || p.phase === "speaking" || p.phase === "thinking" || p.phase === "reconnecting" || (p.phase === "ended" && p.elapsed > 0);
   const first = p.name.split(" ")[0];
   return (
-    <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] sm:h-[600px] sm:grid-cols-[344px_minmax(0,1fr)] sm:grid-rows-1">
-      <div className="flex flex-col items-center px-6 pb-5 pt-7 text-center sm:border-r sm:border-line sm:pb-6 sm:pt-8">
+    <div className="relative flex min-h-0 flex-col max-sm:h-full sm:min-h-[600px]">
+      {p.onMinimize && (
+        <button
+          type="button"
+          onClick={p.onMinimize}
+          aria-label="Réduire l’appel"
+          title="Réduire : l’appel continue pendant que vous naviguez"
+          className="absolute left-3 top-3 z-10 grid size-11 place-items-center rounded-full border border-line bg-surface text-ink-3 transition-colors hover:bg-soft hover:text-ink"
+        >
+          <Minimize2 className="size-[17px]" />
+        </button>
+      )}
+      <div className="flex flex-1 flex-col items-center px-6 pb-6 pt-8 text-center">
         <DialogTitle className="font-display text-[22px] font-bold leading-tight">{p.name}</DialogTitle>
         {p.role && <p className="mt-0.5 text-[13px] text-ink-3">{p.role}</p>}
         <p className="mt-0.5 h-4 text-[12px] tabular-nums text-ink-3">{timed || p.phase === "connecting" ? clock(p.elapsed) : ""}</p>
@@ -61,7 +72,9 @@ export function CallView(p: {
           </div>
         </DialogDescription>
 
-        <div className="mt-auto flex justify-center gap-4 pt-3">
+        {inCall && <Subtitle captions={p.captions} first={first} speaking={p.phase === "speaking"} />}
+
+        <div className="mt-auto flex justify-center gap-4 pt-6">
           {inCall ? (
             <>
               <button
@@ -93,8 +106,6 @@ export function CallView(p: {
           )}
         </div>
       </div>
-
-      <Transcript captions={p.captions} first={first} speaking={p.phase === "speaking"} connecting={p.phase === "connecting"} onMinimize={p.onMinimize} />
     </div>
   );
 }
@@ -198,58 +209,27 @@ function Portrait({ photoUrl, name, halo }: { photoUrl: string | null; name: str
   );
 }
 
-/** What is said, live: the expert's lines on the left, the member's on the right. */
-function Transcript({ captions, first, speaking, connecting, onMinimize }: { captions: Caption[]; first: string; speaking: boolean; connecting: boolean; onMinimize?: () => void }) {
-  const end = useRef<HTMLDivElement>(null);
-  const count = captions.length;
-  const lastText = captions[count - 1]?.text;
-  useEffect(() => {
-    end.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-  }, [count, lastText]);
+/**
+ * The expert's last sentence, under the halo: in full while it speaks, quieter once it listens. The
+ * member's lines are left out.
+ */
+function Subtitle({ captions, first, speaking }: { captions: Caption[]; first: string; speaking: boolean }) {
+  const line = captions.findLast((c) => c.who === "expert");
   return (
-    <section aria-label="En direct" className="flex min-h-0 flex-col border-t border-line bg-bg/60 sm:rounded-r-[22px] sm:border-t-0">
-      <header className="flex h-14 shrink-0 items-center justify-between pl-5 pr-14">
-        <h3 className="text-[14px] font-bold">En direct</h3>
-        {onMinimize && (
-          <button
-            type="button"
-            onClick={onMinimize}
-            aria-label="Réduire l’appel"
-            title="Réduire : l’appel continue pendant que vous naviguez"
-            className="grid size-10 place-items-center rounded-full border border-line bg-surface text-ink-3 transition-colors hover:bg-soft hover:text-ink"
-          >
-            <Minimize2 className="size-[17px]" />
-          </button>
-        )}
-      </header>
-      <div className="min-h-[140px] flex-1 overflow-y-auto px-5 pb-5" data-call-transcript="">
-        {connecting && count === 0 ? (
-          <div aria-hidden className="flex h-full flex-col justify-center gap-3">
-            <span className="h-2.5 w-3/5 rounded-full bg-soft" />
-            <span className="h-2.5 w-1/2 self-end rounded-full bg-soft" />
-            <span className="h-2.5 w-2/3 rounded-full bg-soft" />
-          </div>
-        ) : (
-        <div className="flex min-h-full flex-col justify-end gap-3">
-          {captions.map((c, k) => {
-            const mine = c.who === "member";
-            const live = !mine && speaking && k === count - 1;
-            return (
-              <div key={`${c.at}-${k}`} className={cn("flex max-w-[85%] flex-col gap-1", mine ? "items-end self-end" : "items-start")}>
-                <span className={cn("text-[11.5px] font-bold", mine ? "text-[#14915A] dark:text-[#5BDDA0]" : "text-[var(--call-ink)]")}>{mine ? "Vous" : first}</span>
-                <p
-                  className={cn("rounded-2xl px-3.5 py-2.5 text-[14px] leading-snug text-ink", mine ? "rounded-tr-md" : "rounded-tl-md", live && "ring-2 ring-[var(--call)]")}
-                  style={{ backgroundColor: tint(mine ? GREEN : VIOLET, 0.12) }}
-                >
-                  {c.text}
-                </p>
-              </div>
-            );
-          })}
-          <div ref={end} />
-        </div>
-        )}
-      </div>
-    </section>
+    <p
+      aria-live="polite"
+      data-call-subtitle=""
+      className={cn(
+        "mt-4 line-clamp-4 min-h-[66px] max-w-[460px] text-balance leading-snug transition-colors",
+        speaking ? "text-[16px] text-ink" : "text-[14px] text-ink-3"
+      )}
+    >
+      {line && (
+        <>
+          <span className="mr-1.5 font-bold text-[var(--call-ink)]">{first}</span>
+          {line.text}
+        </>
+      )}
+    </p>
   );
 }
