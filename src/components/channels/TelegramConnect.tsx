@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
@@ -14,14 +14,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ChannelPanelHeader } from "@/components/channels/ChannelCredentialsForm";
-import { TelegramHub } from "@/components/channels/TelegramHub";
+import { TelegramChannel } from "@/components/channels/TelegramChannel";
 import { TelegramQrConnect } from "@/components/channels/TelegramQrConnect";
-import type { TelegramHubStatus } from "@/lib/agent37";
 import { useAsyncAction } from "@/components/useAsyncAction";
+import { DisconnectButton } from "@/components/channels/DisconnectButton";
 
 const OWNER_POLL_MS = 3000;
 
-type Step = "hub" | "qr" | "token" | "owner" | "connected";
+type Step = "qr" | "token" | "owner" | "connected";
 
 // Telegram is the channel worth building a real flow for: nobody has to install anything.
 //
@@ -40,11 +40,8 @@ export function TelegramConnect({
   channel: MessagingPlatform;
   onBack: () => void;
 }) {
-  // Par défaut, le bot du membre et son groupe à sujets (passerelle) ; QR et jeton BotFather en autres méthodes.
-  const [step, setStep] = useState<Step>(isChannelConnected(channel) ? "connected" : "hub");
-  const [hubState, setHubState] = useState<TelegramHubStatus["state"] | undefined>(undefined);
-  const toQr = useCallback(() => setStep((s) => (s === "hub" ? "qr" : s)), []);
-  const noHub = useCallback(() => setHubState(null), []);
+  // Onglet « Mon propre bot » : jeton BotFather d'abord, QR en alternative.
+  const [step, setStep] = useState<Step>(isChannelConnected(channel) ? "connected" : "token");
   const [qrBot, setQrBot] = useState<string | null>(null);
   const defaultBotName = (agentName ?? "").split("@")[0]?.trim() || "Mon assistant";
   const [token, setToken] = useState("");
@@ -54,6 +51,8 @@ export function TelegramConnect({
   // already wired to an agent looks like. Then there is nobody to wait for: offer to connect as-is.
   const [ownerUnavailable, setOwnerUnavailable] = useState(false);
   const { busy, run } = useAsyncAction();
+  // Bumped when this flow changes the bot the instance listens to.
+  const [revision, setRevision] = useState(0);
   const connecting = useRef(false);
 
   const post = <T,>(body: Record<string, unknown>) =>
@@ -82,6 +81,7 @@ export function TelegramConnect({
         }),
       });
       setStep("connected");
+      setRevision((r) => r + 1);
       toast.success("Telegram connecté");
     });
 
@@ -130,165 +130,163 @@ export function TelegramConnect({
       onBack();
     });
 
-  return (
-    <div className="space-y-5">
-      <ChannelPanelHeader channel={channel} onBack={onBack} />
-
-      {step === "hub" && (
-        <div className="space-y-4">
-          <TelegramHub agentId={agentId} canManage onUnavailable={toQr} onState={setHubState} />
-          {!hubState && (
-            <Button variant="ghost" onClick={() => setStep("qr")}>
-              Autres méthodes (QR seul, jeton BotFather)
-            </Button>
-          )}
-        </div>
-      )}
-
-      {step === "connected" && hubState !== null && <TelegramHub agentId={agentId} canManage hideWhenEmpty onState={setHubState} onUnavailable={noHub} />}
-
-      {step === "qr" && (
-        <div className="space-y-4">
-          <TelegramQrConnect
-            agentId={agentId}
-            defaultBotName={defaultBotName}
-            onConnected={(username) => {
-              setQrBot(username);
-              setStep("connected");
-            }}
-          />
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={() => setStep("token")}>
-              J’ai déjà un bot (coller son jeton)
-            </Button>
-            {channel.configured && (
-              <Button variant="ghost" onClick={disconnect} disabled={busy}>
-                Déconnecter
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {step === "token" && (
-        <div className="space-y-4">
-          <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
-            <li>
-              Ouvrez{" "}
-              <a
-                href="https://t.me/BotFather"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium text-foreground underline-offset-4 hover:underline"
-              >
-                @BotFather
-              </a>{" "}
-              dans Telegram et envoyez <span className="font-medium text-foreground">/newbot</span>.
-            </li>
-            <li>Choisissez un nom et un nom d’utilisateur pour votre bot.</li>
-            <li>Collez le jeton que BotFather vous envoie.</li>
-          </ol>
-          <div className="space-y-1.5">
-            <Label htmlFor="telegram-token" className="text-xs">
-              Jeton du bot
-            </Label>
-            <Input
-              id="telegram-token"
-              type="password"
-              autoComplete="off"
-              placeholder="123456789:AA..."
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
+  // `yelemaActive` : le bot Yelema sert l'instance (le canal Hermes paraît alors « connecté ») ; ce parcours
+  // repart du jeton, et connecter ici remplacera ce bot.
+  const legacy = (yelemaActive: boolean) => {
+    const view: Step = step === "connected" && yelemaActive ? "token" : step;
+    return (
+      <div className="space-y-5">
+        {yelemaActive && <p className="text-xs text-muted-foreground">Vos Experts utilisent aujourd’hui le bot Yelema : connecter votre bot ici le remplacera.</p>}
+        {view === "qr" && (
+          <div className="space-y-4">
+            <TelegramQrConnect
+              agentId={agentId}
+              defaultBotName={defaultBotName}
+              onConnected={(username) => {
+                setQrBot(username);
+                setStep("connected");
+              }}
             />
-          </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={check} disabled={busy || token.trim().length === 0}>
-              {busy ? <Loader2 className="animate-spin" /> : null}
-              Continuer
-            </Button>
-            <Button variant="ghost" onClick={() => setStep("qr")} disabled={busy}>
-              Utiliser plutôt un QR code
-            </Button>
-            {channel.configured && (
-              <Button variant="ghost" onClick={disconnect} disabled={busy}>
-                Déconnecter
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" onClick={() => setStep("token")}>
+                J’ai déjà un bot (coller son jeton)
               </Button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {step === "owner" && bot && (
-        <div className="space-y-4">
-          <p className="text-sm">
-            Ouvrez <span className="font-medium">@{bot.username}</span> et envoyez-lui un message. La première personne
-            qui lui écrit est la seule à qui vos Experts répondront en privé ; dans le groupe des Experts, tous ses
-            membres pourront leur écrire.
-          </p>
-          <div className="flex items-center gap-2">
-            <Button asChild variant="outline">
-              <a href={`https://t.me/${bot.username}`} target="_blank" rel="noopener noreferrer">
-                Ouvrir @{bot.username}
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            </Button>
-          </div>
-          {ownerUnavailable ? (
-            <p className="text-xs text-muted-foreground">
-              Ce bot est déjà relié à un autre service : Telegram ne nous indique pas à qui il appartient, et vos Experts
-              ne répondent qu’à une personne connue. Détachez-le de cet autre service, ou créez un nouveau bot.
-            </p>
-          ) : (
-            <p className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              En attente de votre message
-            </p>
-          )}
-        </div>
-      )}
-
-      {step === "connected" && hubState === null && (
-        <div className="space-y-4">
-          <div className="flex items-start gap-2">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
-            <div className="space-y-1">
-              <p className="text-sm font-medium">
-                {bot ? `@${bot.username} est connecté.` : qrBot ? `@${qrBot} est connecté.` : "Telegram est connecté."}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Écrivez au bot depuis Telegram : vos Experts vous répondent au même endroit.
-              </p>
+              {channel.configured && !yelemaActive && (
+                <DisconnectButton name="Telegram" onConfirm={disconnect} disabled={busy} />
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {(bot || qrBot) && (
-              <Button asChild>
-                <a href={`https://t.me/${bot?.username ?? qrBot}`} target="_blank" rel="noopener noreferrer">
-                  Ouvrir la conversation
+        )}
+
+        {view === "token" && (
+          <div className="space-y-4">
+            <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
+              <li>
+                Ouvrez{" "}
+                <a
+                  href="https://t.me/BotFather"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  @BotFather
+                </a>{" "}
+                dans Telegram et envoyez <span className="font-medium text-foreground">/newbot</span>.
+              </li>
+              <li>Choisissez un nom et un nom d’utilisateur pour votre bot.</li>
+              <li>Collez le jeton que BotFather vous envoie.</li>
+            </ol>
+            <div className="space-y-1.5">
+              <Label htmlFor="telegram-token" className="text-xs">
+                Jeton du bot
+              </Label>
+              <Input
+                id="telegram-token"
+                type="password"
+                autoComplete="off"
+                placeholder="123456789:AA..."
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button onClick={check} disabled={busy || token.trim().length === 0}>
+                {busy ? <Loader2 className="animate-spin" /> : null}
+                Continuer
+              </Button>
+              <Button variant="ghost" onClick={() => setStep("qr")} disabled={busy}>
+                Utiliser plutôt un QR code
+              </Button>
+              {channel.configured && !yelemaActive && (
+                <DisconnectButton name="Telegram" onConfirm={disconnect} disabled={busy} />
+              )}
+            </div>
+          </div>
+        )}
+
+        {view === "owner" && bot && (
+          <div className="space-y-4">
+            <p className="text-sm">
+              Ouvrez <span className="font-medium">@{bot.username}</span> et envoyez-lui un message. La première personne
+              qui lui écrit est la seule à qui vos Experts répondront en privé ; dans le groupe des Experts, tous ses
+              membres pourront leur écrire.
+            </p>
+            <div className="flex items-center gap-2">
+              <Button asChild variant="outline">
+                <a href={`https://t.me/${bot.username}`} target="_blank" rel="noopener noreferrer">
+                  Ouvrir @{bot.username}
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               </Button>
+            </div>
+            {ownerUnavailable ? (
+              <p className="text-xs text-muted-foreground">
+                Ce bot est déjà relié à un autre service : Telegram ne nous indique pas à qui il appartient, et vos Experts
+                ne répondent qu’à une personne connue. Détachez-le de cet autre service, ou créez un nouveau bot.
+              </p>
+            ) : (
+              <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                En attente de votre message
+              </p>
             )}
-            <Button
-              variant="outline"
-              onClick={() => {
-                connecting.current = false;
-                setToken("");
-                setBot(null);
-                setOwner(null);
-                setQrBot(null);
-                setStep("qr");
-              }}
-            >
-              Connecter un autre bot
-            </Button>
-            <Button variant="ghost" onClick={disconnect} disabled={busy}>
-              Déconnecter
-            </Button>
           </div>
-          {owner?.name && <p className="text-xs text-muted-foreground">En privé, répond uniquement à {owner.name}.</p>}
-        </div>
-      )}
+        )}
+
+        {view === "connected" && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-2">
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium">
+                  {bot ? `@${bot.username} est connecté.` : qrBot ? `@${qrBot} est connecté.` : "Telegram est connecté."}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Écrivez au bot depuis Telegram : vos Experts vous répondent au même endroit.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {(bot || qrBot) && (
+                <Button asChild>
+                  <a href={`https://t.me/${bot?.username ?? qrBot}`} target="_blank" rel="noopener noreferrer">
+                    Ouvrir la conversation
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  connecting.current = false;
+                  setToken("");
+                  setBot(null);
+                  setOwner(null);
+                  setQrBot(null);
+                  setStep("token");
+                }}
+              >
+                Connecter un autre bot
+              </Button>
+              <DisconnectButton name="Telegram" onConfirm={disconnect} disabled={busy} />
+            </div>
+            {owner?.name && <p className="text-xs text-muted-foreground">En privé, répond uniquement à {owner.name}.</p>}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-5">
+      <ChannelPanelHeader channel={channel} onBack={onBack} />
+      <TelegramChannel
+        agentId={agentId}
+        canManage
+        legacyConnected={step === "connected"}
+        legacyRevision={revision}
+        legacy={legacy}
+      />
     </div>
   );
 }

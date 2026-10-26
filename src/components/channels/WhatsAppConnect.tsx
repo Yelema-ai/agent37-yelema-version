@@ -8,6 +8,7 @@ import { isChannelConnected, type MessagingPlatform, type WhatsappPairingState }
 import { Button } from "@/components/ui/button";
 import { ChannelPanelHeader } from "@/components/channels/ChannelCredentialsForm";
 import { useAsyncAction } from "@/components/useAsyncAction";
+import { DisconnectButton } from "@/components/channels/DisconnectButton";
 
 const POLL_MS = 2500;
 
@@ -124,9 +125,7 @@ export function WhatsAppConnect({
               </p>
             </div>
           </div>
-          <Button variant="ghost" onClick={disconnect} disabled={busy}>
-            Déconnecter
-          </Button>
+          <DisconnectButton name="WhatsApp" onConfirm={disconnect} disabled={busy} />
         </div>
       ) : error ? (
         <div className="space-y-3">

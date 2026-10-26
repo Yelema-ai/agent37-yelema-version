@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import type { RelayChannel as Channel, RelayLink, RelayStatus } from "@/lib/agent37";
+import { DisconnectButton } from "@/components/channels/DisconnectButton";
 
 const LABELS: Record<Channel, { title: string; intro: string; install: string }> = {
   slack: { title: "Slack", intro: "Écrivez à vos experts en message direct au bot Yelema, ou mentionnez-le dans un canal.", install: "Ajouter à Slack" },
@@ -47,7 +48,7 @@ export function RelayChannel({ agentId, channel, canManage }: { agentId: string;
   const unlink = () =>
     act(async () => {
       await apiFetch(base, { method: "DELETE" });
-      toast.success(`${l.title} débranché`);
+      toast.success(`${l.title} déconnecté`);
       setLink(null);
       await load();
     });
@@ -67,7 +68,7 @@ export function RelayChannel({ agentId, channel, canManage }: { agentId: string;
               {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
               {status.accounts ? "Relier un autre compte" : `Connecter ${l.title}`}
             </Button>
-            {status.accounts > 0 && <Button variant="ghost" onClick={() => void unlink()} disabled={busy}>Débrancher</Button>}
+            {status.accounts > 0 && <DisconnectButton name={l.title} onConfirm={unlink} disabled={busy} />}
           </div>
         )}
       </div>

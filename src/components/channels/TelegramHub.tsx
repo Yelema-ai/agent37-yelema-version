@@ -1,140 +1,177 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, ExternalLink, Loader2, RefreshCw } from "lucide-react";
-import { toast } from "sonner";
+import { useState } from "react";
+import { AlertTriangle, Check, Copy, ExternalLink, Loader2, RefreshCw, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { apiFetch } from "@/lib/api";
-import type { TelegramHubStatus } from "@/lib/agent37";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { DisconnectButton } from "@/components/channels/DisconnectButton";
+import { isTelegramLink, type TelegramHubApi } from "@/components/channels/useTelegramHub";
 
-const POLL_MS = 4_000;
-const TG_LINK = /^https:\/\/t\.me\//;
+const WARN_ICON = "mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400";
 
-// Telegram d'une instance (Hermes ou Claude Code), par le bot gestionnaire de Yelema : le membre crée SON
-// bot en un geste, l'ajoute à un groupe à sujets, et chaque expert y reçoit son sujet. Tant qu'une étape
-// attend Telegram, l'état est relu ; `onUnavailable` masque le bloc là où la passerelle ne l'offre pas.
-export function TelegramHub({ agentId, canManage, onUnavailable, onState, hideWhenEmpty }: { agentId: string; canManage: boolean; onUnavailable?: () => void; onState?: (state: TelegramHubStatus["state"]) => void; hideWhenEmpty?: boolean }) {
-  const [status, setStatus] = useState<TelegramHubStatus | null>(null);
-  const [waiting, setWaiting] = useState(false);
-  const [busy, setBusy] = useState<"link" | "sync" | "off" | null>(null);
+// A Telegram the runtime gateway prepares: the bot (Yelema's, or the member's own for `source="own"`), a group
+// with Topics, one topic per expert, then the bot handed to the instance. Every step can be cancelled; a failed
+// one says why and resumes where it stopped; a bot the instance no longer listens to says so.
+export function TelegramHub({ hub, source, canManage }: { hub: TelegramHubApi; source: "yelema" | "own"; canManage: boolean }) {
   const [copied, setCopied] = useState(false);
-  const base = `/api/agents/${agentId}/channels/telegram/hub`;
+  const [confirmReplace, setConfirmReplace] = useState(false);
+  const s = hub.state && (hub.state.source ?? "yelema") === source ? hub.state : null;
+  const other = hub.instanceBot && hub.instanceBot.id !== s?.botId ? hub.instanceBot : null;
+  const busy = hub.busy !== null;
 
-  const load = useCallback(async () => {
-    try {
-      const next = await apiFetch<TelegramHubStatus>(base);
-      setStatus(next);
-      onState?.(next.state);
-    } catch {
-      onUnavailable?.();
-    }
-  }, [base, onUnavailable, onState]);
-
-  useEffect(() => void load(), [load]);
-
-  const phase = status?.state?.phase;
-  useEffect(() => {
-    if (!(waiting || phase === "awaiting_group" || phase === "needs_topics")) return;
-    const t = setTimeout(() => void load(), POLL_MS);
-    return () => clearTimeout(t);
-  }, [waiting, phase, status, load]);
-  useEffect(() => {
-    if (phase) setWaiting(false);
-  }, [phase]);
-
-  const act = async (what: NonNullable<typeof busy>, fn: () => Promise<void>) => {
-    setBusy(what);
-    try {
-      await fn();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const connect = () =>
-    act("link", async () => {
-      const { url } = await apiFetch<{ url: string }>(base, { method: "POST", body: "{}" });
-      if (TG_LINK.test(url)) window.open(url, "_blank", "noopener,noreferrer");
-      setWaiting(true);
-    });
-  const sync = () =>
-    act("sync", async () => {
-      const out = await apiFetch<{ topics: number }>(`${base}/sync`, { method: "POST" });
-      toast.success(`Sujets à jour (${out.topics})`);
-      await load();
-    });
-  const disconnect = () =>
-    act("off", async () => {
-      await apiFetch(base, { method: "DELETE" });
-      toast.success("Telegram débranché");
-      await load();
-    });
   const copy = async (text: string) => {
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
 
-  if (!status) return hideWhenEmpty ? null : <div className="h-24 animate-pulse rounded-lg border bg-card" />;
-  if (!status.connected || (hideWhenEmpty && !status.state)) return null;
-  const s = status.state;
-
-  return (
-    <div className="space-y-3 rounded-lg border bg-card p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-semibold">Telegram</p>
-          <p className="text-xs text-muted-foreground">
-            {s ? <>Bot : <a className="font-semibold text-brand hover:underline" href={`https://t.me/${s.bot}`} target="_blank" rel="noopener noreferrer">@{s.bot}</a>{s.chatTitle ? <> · groupe « {s.chatTitle} »</> : null}</> : "Un bot à vous et un groupe où chaque expert a son sujet."}
-          </p>
+  if (!s) {
+    if (source === "own") return null;
+    return (
+      <div className="space-y-3 rounded-lg border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold">Bot Yelema</p>
+            <p className="text-xs text-muted-foreground">Un bot à vous, créé en un geste, et un groupe où chaque Expert a son sujet.</p>
+          </div>
+          {canManage && (
+            <Button onClick={() => (other ? setConfirmReplace(true) : void hub.connect())} disabled={busy || hub.waiting}>
+              {hub.busy === "link" || hub.waiting ? <><Loader2 className="animate-spin" />{hub.waiting ? "En attente de Telegram…" : "Ouverture…"}</> : "Connecter Telegram"}
+            </Button>
+          )}
         </div>
-        {canManage && !s && (
-          <Button onClick={() => void connect()} disabled={busy !== null || waiting}>
-            {busy === "link" || waiting ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />{waiting ? "En attente de Telegram…" : "Ouverture…"}</> : "Connecter Telegram"}
-          </Button>
+        {hub.waiting && (
+          <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            Dans Telegram : appuyez sur Démarrer, puis sur « Créer mon bot Yelema » et confirmez.
+            <button type="button" onClick={hub.stopWaiting} className="font-semibold text-ink-2 hover:underline">Annuler</button>
+          </p>
         )}
+        <ConfirmDialog
+          open={confirmReplace}
+          onOpenChange={setConfirmReplace}
+          title="Remplacer le bot actuel ?"
+          description={`Vos Experts répondent aujourd’hui via @${other?.username ?? "votre bot"}. Le bot Yelema prendra sa place dès que son groupe sera prêt ; d’ici là, rien ne change.`}
+          confirmText="Continuer"
+          onConfirm={async () => {
+            await hub.connect();
+          }}
+        />
       </div>
+    );
+  }
 
-      {!s && waiting && <p className="text-xs text-muted-foreground">Dans Telegram : appuyez sur Démarrer, puis sur « Créer mon bot Yelema » et confirmez.</p>}
+  const topicCount = Object.keys(s.topics ?? {}).length;
+  const botLink = (
+    <a className="font-semibold text-brand hover:underline" href={`https://t.me/${s.bot}`} target="_blank" rel="noopener noreferrer">@{s.bot}</a>
+  );
 
-      {s && s.phase !== "ready" && (
+  if (s.phase === "failed") {
+    return (
+      <div className="space-y-3 rounded-lg border bg-card p-4">
+        <p className="flex items-start gap-2 text-sm">
+          <AlertTriangle className={WARN_ICON} />
+          <span>La préparation de {botLink} s’est arrêtée{s.error ? <> : <span className="text-muted-foreground">{s.error}</span></> : "."}</span>
+        </p>
+        {canManage && (
+          <div className="flex flex-wrap gap-2">
+            {source === "yelema" && (
+              <Button variant="outline" size="sm" onClick={() => void hub.connect()} disabled={busy}>
+                {hub.busy === "link" ? <Loader2 className="animate-spin" /> : <RotateCcw />}Reprendre
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={() => void hub.disconnect()} disabled={busy}>Annuler</Button>
+          </div>
+        )}
+        {source === "own" && <p className="text-xs text-muted-foreground">Pour reprendre, collez à nouveau le jeton du bot ci-dessous.</p>}
+      </div>
+    );
+  }
+
+  if (s.phase !== "ready") {
+    return (
+      <div className="space-y-3 rounded-lg border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm">Bot : {botLink}{s.chatTitle ? <> · groupe « {s.chatTitle} »</> : null}</p>
+          {canManage && <Button variant="ghost" size="sm" onClick={() => void hub.disconnect()} disabled={busy}>Annuler</Button>}
+        </div>
         <ol className="list-decimal space-y-1.5 pl-5 text-xs text-muted-foreground">
           <li>Créez un groupe Telegram et activez-y les <span className="font-semibold">Sujets</span> (réglages du groupe).</li>
           <li>
-            {s.groupUrl && TG_LINK.test(s.groupUrl) ? (
+            {isTelegramLink(s.groupUrl) ? (
               <a className="inline-flex items-center gap-1 font-semibold text-brand hover:underline" href={s.groupUrl} target="_blank" rel="noopener noreferrer">Ajouter le bot à mon groupe <ExternalLink className="h-3 w-3" /></a>
             ) : "Ajoutez le bot au groupe"}
             {" "}puis choisissez ce groupe.
           </li>
           {s.phase === "needs_topics" && <li className="font-semibold">Le bot est dans le groupe : activez maintenant les Sujets.</li>}
-          <li><span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Chaque expert reçoit son sujet dès que c’est fait.</span></li>
+          <li><span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Chaque Expert reçoit son sujet dès que c’est fait.</span></li>
         </ol>
-      )}
+        {other && <p className="text-xs text-muted-foreground">D’ici là, vos Experts répondent toujours via @{other.username ?? "votre bot actuel"}.</p>}
+      </div>
+    );
+  }
 
-      {s?.phase === "ready" && (
-        <div className="space-y-2 text-xs text-muted-foreground">
-          <p>{Object.keys(s.topics ?? {}).length} expert(s) ont leur sujet ; tous les membres du groupe peuvent leur écrire.</p>
-          {s.inviteLink && TG_LINK.test(s.inviteLink) && (
-            <p className="flex flex-wrap items-center gap-2">
-              Inviter des collègues :
-              <a className="font-semibold text-brand hover:underline" href={s.inviteLink} target="_blank" rel="noopener noreferrer">{s.inviteLink}</a>
-              <button type="button" aria-label="Copier le lien" onClick={() => void copy(s.inviteLink!)} className="hover:text-foreground">
-                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              </button>
-            </p>
-          )}
+  // Connected: the group, the experts' topics, the colleagues to invite, then the way out.
+  return (
+    <div className="space-y-2 rounded-lg border bg-card p-4">
+      {s.active === false && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border px-4 py-3">
+          <p className="flex items-start gap-2 text-sm">
+            <AlertTriangle className={WARN_ICON} />
+            <span>Vos Experts n’écoutent plus @{s.bot}{other ? <> : ils répondent via @{other.username ?? "un autre bot"}</> : null}.</span>
+          </p>
           {canManage && (
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Button variant="outline" size="sm" onClick={() => void sync()} disabled={busy !== null}>
-                {busy === "sync" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}Resynchroniser les sujets
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void disconnect()} disabled={busy !== null}>Débrancher</Button>
-            </div>
+            <Button variant="outline" size="sm" onClick={() => void hub.sync()} disabled={busy}>
+              {hub.busy === "sync" ? <Loader2 className="animate-spin" /> : <RotateCcw />}Le rétablir
+            </Button>
           )}
         </div>
       )}
+      <Block title="Votre groupe">
+        <p className="text-sm text-ink-2">{s.chatTitle ? <>« {s.chatTitle} » avec </> : null}{botLink}</p>
+      </Block>
+      <Block
+        title="Sujets des Experts"
+        action={
+          canManage && s.active !== false && (
+            <Button variant="outline" size="sm" onClick={() => void hub.sync()} disabled={busy} className="max-sm:h-10">
+              {hub.busy === "sync" ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+              Mettre à jour
+            </Button>
+          )
+        }
+      >
+        <p className="text-sm text-ink-2">{topicCount > 1 ? `${topicCount} Experts ont leur sujet` : topicCount === 1 ? "1 Expert a son sujet" : "Aucun sujet pour l’instant"}</p>
+      </Block>
+      {isTelegramLink(s.inviteLink) && (
+        <Block
+          title="Inviter des collègues"
+          action={
+            <Button variant="outline" size="sm" onClick={() => void copy(s.inviteLink!)} className="max-sm:h-10">
+              {copied ? <Check /> : <Copy />}
+              {copied ? "Lien copié" : "Copier le lien"}
+            </Button>
+          }
+        >
+          <p className="text-sm text-ink-2">Ils écrivent à vos Experts dans le même groupe.</p>
+        </Block>
+      )}
+      {canManage && (
+        <div className="flex justify-end pt-2">
+          <DisconnectButton name="Telegram" onConfirm={hub.disconnect} disabled={busy} />
+        </div>
+      )}
     </div>
+  );
+}
+
+function Block({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] bg-soft px-4 py-3">
+      <div className="min-w-0">
+        <h4 className="text-[13px] font-semibold text-ink-3">{title}</h4>
+        {children}
+      </div>
+      {action}
+    </section>
   );
 }
