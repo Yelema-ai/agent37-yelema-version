@@ -1,5 +1,7 @@
 import "server-only";
 
+import { TOPIC_ICONS_PY } from "./telegram-topic-icons";
+
 // "Un sujet par expert" on Telegram: one bot (the default profile), one forum topic per expert
 // profile, all served by the default profile in multiplex mode. A port of the back office's
 // ROUTE_PROFILES_COMMAND (apps/control-plane/.../tenant-apps/lib/shortcuts.ts) and of the
@@ -74,7 +76,8 @@ export function routingFailure(output: string): string {
 export const TOPICS_CREATED = "Les sujets des Experts sont créés : tous les membres du groupe peuvent écrire à chacun dans son sujet.";
 export const RESTART_FAILED = "Les sujets sont créés, mais la messagerie n’a pas redémarré. Réessayez dans un instant.";
 
-// hermes-experts/scripts/add_profile_route.py, verbatim except punctuation in comments and messages.
+// hermes-experts/scripts/add_profile_route.py, verbatim except punctuation in comments and messages, plus the
+// topic icon (lib/telegram-topic-icons): set at creation and on every re-run, never a reason to fail.
 export const ADD_PROFILE_ROUTE_PY = `#!/usr/bin/env python3
 """Create (if needed) a Telegram forum topic for a profile and write/update its
 numeric-thread-id route in the default profile's config.yaml (gateway.profile_routes).
@@ -110,15 +113,32 @@ Uses ruamel.yaml (round-trip mode) instead of plain PyYAML so existing comments 
 order in config.yaml are preserved, config.yaml ships with extensive inline
 documentation comments that a safe_load/safe_dump round-trip would silently destroy.
 """
+import re
 import sys
 
 import requests
 from ruamel.yaml import YAML
 
 TELEGRAM_API_TIMEOUT_S = 20
+ICONS = ${TOPIC_ICONS_PY}
 
 
-def create_forum_topic(bot_token: str, chat_id: str, name: str) -> int:
+def icon_for(profile: str):
+    return ICONS.get(profile) or ICONS.get(re.split(r"[-_]", profile)[0])
+
+
+def set_topic_icon(bot_token: str, chat_id: str, thread_id: str, icon: str) -> None:
+    """Best effort: an icon Telegram refuses (or one already set) leaves the topic as it is."""
+    try:
+        resp = requests.post(f"https://api.telegram.org/bot{bot_token}/editForumTopic",
+                             json={"chat_id": chat_id, "message_thread_id": int(thread_id), "icon_custom_emoji_id": icon},
+                             timeout=TELEGRAM_API_TIMEOUT_S)
+        print(f"icon: thread_id={thread_id} {'ok' if resp.json().get('ok') else resp.json().get('description')}")
+    except Exception as exc:
+        print(f"icon: thread_id={thread_id} not set ({exc})")
+
+
+def create_forum_topic(bot_token: str, chat_id: str, name: str, icon=None) -> int:
     """POST createForumTopic; returns the new topic's numeric message_thread_id.
 
     Raises RuntimeError with Telegram's own error description on failure (e.g. the bot
@@ -128,8 +148,13 @@ def create_forum_topic(bot_token: str, chat_id: str, name: str) -> int:
     structured code).
     """
     url = f"https://api.telegram.org/bot{bot_token}/createForumTopic"
-    resp = requests.post(url, json={"chat_id": chat_id, "name": name}, timeout=TELEGRAM_API_TIMEOUT_S)
-    data = resp.json()
+    data = {}
+    if icon:
+        resp = requests.post(url, json={"chat_id": chat_id, "name": name, "icon_custom_emoji_id": icon}, timeout=TELEGRAM_API_TIMEOUT_S)
+        data = resp.json()
+    if not data.get("ok"):
+        resp = requests.post(url, json={"chat_id": chat_id, "name": name}, timeout=TELEGRAM_API_TIMEOUT_S)
+        data = resp.json()
     if not data.get("ok"):
         raise RuntimeError(data.get("description", f"HTTP {resp.status_code}"))
     return int(data["result"]["message_thread_id"])
@@ -159,13 +184,16 @@ def main():
         (r for r in routes if dict(r).get("platform") == "telegram" and dict(r).get("profile") == profile),
         None,
     )
+    icon = icon_for(profile)
     if existing is not None and str(dict(existing).get("thread_id", "")).isdigit():
+        if icon:
+            set_topic_icon(bot_token, chat_id, str(dict(existing)["thread_id"]), icon)
         print(f"skip: profile={profile} already has a numeric topic (thread_id="
               f"{dict(existing)['thread_id']}), not recreating")
         return
 
     try:
-        thread_id = create_forum_topic(bot_token, chat_id, profile)
+        thread_id = create_forum_topic(bot_token, chat_id, profile, icon)
     except RuntimeError as exc:
         print(f"ERROR: could not create Telegram topic for profile={profile}: {exc}", file=sys.stderr)
         print("       If a topic with this name already exists (e.g. created manually or by a "
