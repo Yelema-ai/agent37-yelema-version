@@ -31,6 +31,7 @@ interface SharedDashboardResponse {
   htmlUrl?: string | null;
   reason?: "login_required" | "forbidden";
   message?: string;
+  currentUserEmail?: string | null;
   error?: string;
 }
 
@@ -139,10 +140,10 @@ export default function SharedDashboardViewPage() {
             <Button
               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium shadow-lg shadow-orange-500/20"
               onClick={() => {
-                window.location.href = `/login?returnTo=${returnUrl}`;
+                window.location.href = `/login?next=${returnUrl}`;
               }}
             >
-              Se connecter à Mstudio
+              Se connecter
             </Button>
           </div>
         </div>
@@ -162,6 +163,11 @@ export default function SharedDashboardViewPage() {
           <p className="text-sm text-slate-300 mb-6 leading-relaxed">
             {data.error || "Ce tableau de bord n’est pas partagé avec vous."}
           </p>
+          {data.currentUserEmail && (
+            <div className="mb-6 rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
+              Connecté en tant que <span className="font-semibold text-slate-200">{data.currentUserEmail}</span>
+            </div>
+          )}
           <div className="flex gap-2 justify-center">
             <Button
               variant="outline"
@@ -226,7 +232,7 @@ export default function SharedDashboardViewPage() {
               </h1>
               {data.mode === "link" && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 ring-1 ring-emerald-500/20">
-                  <Globe className="size-2.5" /> Lien
+                  <Globe className="size-2.5" /> Public
                 </span>
               )}
               {data.mode === "team" && (
@@ -236,7 +242,7 @@ export default function SharedDashboardViewPage() {
               )}
               {data.mode === "people" && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-400 ring-1 ring-purple-500/20">
-                  <Lock className="size-2.5" /> Personnes choisies
+                  <Lock className="size-2.5" /> E-mails
                 </span>
               )}
             </div>
