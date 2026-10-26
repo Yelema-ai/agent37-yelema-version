@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Eye, Loader2, Lock } from "lucide-react";
+import { Eye, Loader2, Lock, MessageSquarePlus } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Markdown } from "./Markdown";
 
@@ -21,6 +21,21 @@ const when = (at: number) =>
 export function SharedConversation({ token }: { token: string }) {
   const [data, setData] = useState<Shared | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resuming, setResuming] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+
+  // La conversation devient le début d'une conversation à soi, chez soi : rien n'est écrit chez le propriétaire.
+  const resume = async () => {
+    setResuming(true);
+    setResumeError(null);
+    try {
+      const { href } = await apiFetch<{ href: string }>("/api/conversations/partagee/reprendre", { method: "POST", body: JSON.stringify({ c: token }) });
+      window.location.href = href;
+    } catch (e) {
+      setResumeError((e as Error).message || "La conversation n’a pas pu être reprise.");
+      setResuming(false);
+    }
+  };
 
   useEffect(() => {
     apiFetch<Shared>(`/api/conversations/partagee?c=${encodeURIComponent(token)}`)
@@ -90,7 +105,20 @@ export function SharedConversation({ token }: { token: string }) {
                 )
               )}
             </ol>
-            <p className="mt-10 text-center text-[12px] text-ink-3">
+            <div className="mt-10 flex flex-col items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void resume()}
+                disabled={resuming}
+                className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {resuming ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <MessageSquarePlus className="size-4" aria-hidden />}
+                Reprendre dans mon espace
+              </button>
+              <p className="text-[12px] text-ink-3">Une copie part chez vous ; la suite reste à vous, la conversation d’origine ne change pas.</p>
+              {resumeError && <p className="text-[12.5px] text-destructive">{resumeError}</p>}
+            </div>
+            <p className="mt-6 text-center text-[12px] text-ink-3">
               Lien valable jusqu’au {new Date(data.expiresAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}. Powered by Yelema
             </p>
           </>

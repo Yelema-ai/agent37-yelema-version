@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     const { db, user } = await requireUser();
     await requireMember(db, claims.w, user.id);
 
-    const detail = await agent37.getSession(claims.a, claims.s, profileQuery(claims.p));
+    const detail = await agent37.getSession(claims.a, claims.s, profileQuery(claims.p), claims.u);
     const messages = (detail.history ?? [])
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({ id: m.id, role: m.role, at: m.created_at, content: m.role === "assistant" ? cleanReply(m.content ?? "") : (m.content ?? "").trim() }))

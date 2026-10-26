@@ -4,10 +4,11 @@ import { useSafeDashboard } from "@/components/experts/DashboardProvider";
 
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ClipboardCheck, CornerDownLeft, FileText, Image as ImageIcon, Loader2, PhoneCall, Repeat } from "lucide-react";
-import { turnDocs, turnWindow } from "@/lib/drive-links";
+import { turnDocs } from "@/lib/drive-links";
 import { kanbanNotice } from "@/lib/kanban-notice";
 import { isRoutineRun, isSilentRun, routineRunText, SILENT_RUN_LABEL } from "@/lib/routines";
 import { isCallTranscript } from "@/lib/voice";
+import { isResumeSeed } from "@/lib/conversation-resume";
 import { cn } from "@/lib/utils";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import type { Expert } from "@/lib/types";
@@ -17,6 +18,8 @@ import { Markdown } from "./Markdown";
 import { cleanReply } from "@/lib/chat-errors";
 import { LiveStep, StepsList } from "./ChatSteps";
 import type { ChatMessage, MessageAttachment } from "./types";
+
+const PAGE = 80;
 
 // Files that rode along with a user turn, shown as compact chips above the message bubble.
 export function MessageAttachments({ attachments }: { attachments: MessageAttachment[] }) {
@@ -118,14 +121,16 @@ export function ChatMessages({
   // A routine's run: its [SILENT] answer reads as "nothing to report".
   const routineThread = messages.some((m) => m.role === "user" && isRoutineRun(m.content));
   const liveIndex = isStreaming ? messages.findLastIndex((m) => m.role === "assistant") : -1;
-  // Each finished reply's turn, and the oldest of them (to the minute): the drive is listed once
-  // for all of them, again after each turn.
-  const windows = useMemo(() => {
-    const now = Date.now();
-    return messages.map((m, i) => (m.role === "assistant" && i !== liveIndex ? turnWindow(messages, i, now) : null));
-  }, [messages, liveIndex]);
-  const oldest = windows.reduce<number | null>((min, w) => (w && (min == null || w.start < min) ? w.start : min), null);
-  const since = oldest == null ? null : Math.floor(oldest / 60_000) * 60_000;
+  // The drive is listed once for all finished replies (from the oldest, to the minute), again after each turn:
+  // it gives the cards their size and date, and tells a made-up path from a real one.
+  const oldest = useMemo(
+    () => messages.reduce<number | null>((min, m, i) => (m.role === "assistant" && i !== liveIndex && m.at != null && (min == null || m.at < min) ? m.at : min), null),
+    [messages, liveIndex]
+  );
+  // A long conversation (the full history, compressions included) opens on its last messages.
+  const [shown, setShown] = useState(PAGE);
+  const start = Math.max(0, messages.length - shown);
+  const since = oldest == null ? null : Math.floor((oldest - 60_000) / 60_000) * 60_000;
   const listing = useDriveListing(agentId, isStreaming ? null : driveFolder, since, String(messages.length));
       const dashboard = useSafeDashboard();
 
@@ -153,7 +158,15 @@ export function ChatMessages({
 
   return (
     <div onClick={handleContainerClick} className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6 sm:px-6">
-      {messages.map((m, i) => {
+      {start > 0 && (
+        <div className="flex justify-center">
+          <button type="button" onClick={() => setShown((n) => n + PAGE)} className="rounded-full border border-line px-3 py-1 text-xs text-ink-3 hover:bg-surface">
+            Afficher les messages précédents ({start})
+          </button>
+        </div>
+      )}
+      {messages.slice(start).map((m, j) => {
+        const i = start + j;
         if (m.role === "user" && isCallTranscript(m.content)) {
           return (
             <p key={m.id} className="flex items-center justify-center gap-2 text-xs text-ink-3">
@@ -166,6 +179,20 @@ export function ChatMessages({
           return (
             <p key={m.id} className="flex items-center justify-center gap-2 text-center text-xs text-ink-3">
               <ClipboardCheck className="h-3.5 w-3.5 shrink-0" /> {notice.who} {notice.verb} la tâche confiée : « {notice.title} »
+            </p>
+          );
+        }
+        if (m.role === "system") {
+          return (
+            <p key={m.id} className="flex items-center gap-3 text-center text-xs text-ink-3 before:h-px before:flex-1 before:bg-line after:h-px after:flex-1 after:bg-line">
+              {m.content}
+            </p>
+          );
+        }
+        if (m.role === "user" && isResumeSeed(m.content)) {
+          return (
+            <p key={m.id} className="flex items-center justify-center gap-2 text-center text-xs text-ink-3">
+              <CornerDownLeft className="h-3.5 w-3.5 shrink-0" /> Conversation partagée reprise ici : l’Expert en a le contexte
             </p>
           );
         }
@@ -212,7 +239,7 @@ export function ChatMessages({
               ) : showDots ? (
                 <TypingDots />
               ) : null}
-              {!live && windows[i] && m.content && <DocumentCards agentId={agentId} docs={turnDocs(m.content, listing, windows[i]!)} />}
+              {!live && m.content && <DocumentCards agentId={agentId} docs={turnDocs(m.content, listing, m.files)} />}
             </div>
           </div>
         );

@@ -55,33 +55,6 @@ export function docKind(name: string): DocKind {
   return "other";
 }
 
-const SLACK_MS = 5_000;
-// Without a start of its own, a turn is not looked back further than this.
-const MAX_LOOKBACK_MS = 30 * 60_000;
-
-/**
- * When the turn of the reply at `index` ran: from its question to its end (the reply's own time, or
- * `now` while it is written). The transcript may stamp a whole turn at its end; then the turn
- * starts after the previous reply, half an hour back at most.
- */
-export function turnWindow(messages: readonly { role: string; at?: number }[], index: number, now: number): { start: number; end: number } {
-  const end = messages[index]?.at ?? now;
-  let j = index - 1;
-  while (j >= 0 && messages[j].role !== "user") j--;
-  let first = j;
-  while (first > 0 && messages[first - 1].role === "user") first--;
-  const asked = first >= 0 ? messages[first].at : undefined;
-  let start: number;
-  if (asked != null && asked < end - 1_000) start = asked;
-  else {
-    let k = first - 1;
-    while (k >= 0 && messages[k].role !== "assistant") k--;
-    const previous = k >= 0 ? messages[k].at : undefined;
-    start = Math.max(previous ?? end - MAX_LOOKBACK_MS, end - MAX_LOOKBACK_MS);
-  }
-  return { start: start - SLACK_MS, end: end + SLACK_MS };
-}
-
 export interface DriveFile {
   name: string;
   path: string;
@@ -102,16 +75,16 @@ export interface TurnDoc {
 const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"));
 
 /**
- * The cards of one reply: the files its text names first, then the files of the drive written
- * during its turn, newest first; each file once. The memory folder and hidden files are not
- * deliverables. A named file missing from a folder the listing covers does not exist (a path the
- * expert made up): no card for it. Technical files (JSON, scripts, logs) get no card either.
+ * The cards of one reply: the files its text names first, then the deliverables its own turn wrote
+ * (`written`, as the runtime's history reports them), each once. Never a file written by another
+ * conversation at the same time. Memory, notes and technical files get no card. A named file missing
+ * from a folder the listing covers does not exist (a path the expert made up): no card for it.
  */
 /** Working files (data, code, logs) are the Expert's own kitchen, never a deliverable shown under a reply. */
 const TECHNICAL = /\.(json|jsonl|py|js|mjs|ts|sh|yaml|yml|toml|log|lock|env|ini|cfg|pyc|sqlite|db)$/i;
 export const isTechnicalFile = (name: string) => TECHNICAL.test(name);
 
-export function turnDocs(text: string, listing: readonly DriveFile[], window: { start: number; end: number }): TurnDoc[] {
+export function turnDocs(text: string, listing: readonly DriveFile[], written: readonly string[] = []): TurnDoc[] {
   const byPath = new Map(listing.map((f) => [normDrivePath(f.path), f]));
   const listed = new Set([...byPath.keys()].map(parentOf));
   const out: TurnDoc[] = [];
@@ -123,10 +96,10 @@ export function turnDocs(text: string, listing: readonly DriveFile[], window: { 
     out.push({ name, path, size: f?.size ?? null, modified: f?.modified ?? null, kind: docKind(name) });
   };
   for (const p of drivePathsIn(text)) if (byPath.has(p) || !listed.has(parentOf(p))) add(p, byPath.get(p));
-  const written = listing
-    .filter((f) => f.type === "file" && !f.hidden && f.modified >= window.start && f.modified <= window.end)
-    .filter((f) => !normDrivePath(f.path).split("/").slice(2, -1).some(isMemoryFolder))
-    .sort((a, b) => b.modified - a.modified);
-  for (const f of written) add(normDrivePath(f.path), f);
+  for (const w of written) {
+    const p = normDrivePath(w.startsWith("Livrables/") ? `~/${w}` : w);
+    if (/\.md$/i.test(p) || p.split("/").slice(2, -1).some(isMemoryFolder)) continue;
+    add(p, byPath.get(p));
+  }
   return out;
 }

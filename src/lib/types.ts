@@ -310,6 +310,8 @@ export interface ChatHistoryMessage {
   role: "user" | "assistant" | "system";
   content: string;
   thinking?: string;
+  /** Deliverables the turn of this reply wrote (home-relative, under Livrables/). */
+  files?: string[];
   created_at: number;
 }
 

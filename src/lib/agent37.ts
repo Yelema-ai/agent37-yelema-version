@@ -117,7 +117,7 @@ async function asUser(init: RequestInit): Promise<RequestInit> {
   const id = await import("./auth").then((m) => m.getSession()).then((s) => s.user?.id ?? null, () => null);
   if (!id) return init;
   const headers = new Headers(init.headers);
-  headers.set("X-Yelema-User", id);
+  if (!headers.has("X-Yelema-User")) headers.set("X-Yelema-User", id);
   return { ...init, headers };
 }
 
@@ -251,8 +251,9 @@ export const agent37 = {
   // message, and timestamps — the sessions route turns these into the rail's label + ordering.
   listSessions: (id: string, profileQuery = "") =>
     instanceCall<SessionListResponse>(id, `/v1/sessions${profileQuery}`),
-  getSession: (id: string, sessionId: string, profileQuery = "") =>
-    instanceCall<SessionDetail>(id, `/v1/sessions/${encodeURIComponent(sessionId)}${profileQuery}`),
+  // `asOwner`: read as the conversation's owner (a shared link opened by a colleague), not as the caller.
+  getSession: (id: string, sessionId: string, profileQuery = "", asOwner?: string) =>
+    instanceCall<SessionDetail>(id, `/v1/sessions/${encodeURIComponent(sessionId)}${profileQuery}`, asOwner ? { headers: { "X-Yelema-User": asOwner } } : undefined),
   deleteSession: (id: string, sessionId: string, profileQuery = "") =>
     instanceCall<{ id: string; deleted: boolean }>(
       id,
