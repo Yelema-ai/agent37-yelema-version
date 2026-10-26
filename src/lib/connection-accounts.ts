@@ -47,3 +47,30 @@ export function accountLabel(c: IntegrationConnection, index: number): string {
   const tail = c.id.replace(/^ca_/, "").slice(-8);
   return `Compte ${index + 1} · ${tail}`;
 }
+
+/** Accounts that work or did, apart from the sign-ins never finished (cleared together). */
+export function splitAccounts(list: readonly IntegrationConnection[]): {
+  accounts: IntegrationConnection[];
+  unfinished: IntegrationConnection[];
+} {
+  return {
+    accounts: list.filter((c) => accountState(c) !== "pending"),
+    unfinished: list.filter((c) => accountState(c) === "pending"),
+  };
+}
+
+export const needsReconnect = (c: IntegrationConnection): boolean => {
+  const s = accountState(c);
+  return s === "failed" || s === "disabled";
+};
+
+const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+
+/** The tool card's one line: « 3 comptes · 1 à reconnecter ». */
+export function accountSummary(list: readonly IntegrationConnection[]): string {
+  const { accounts, unfinished } = splitAccounts(list);
+  if (accounts.length === 0) return unfinished.length ? ACCOUNT_STATE_LABELS.pending : "";
+  const broken = accounts.filter(needsReconnect).length;
+  const head = plural(accounts.length, "compte", "comptes");
+  return broken ? `${head} · ${broken} à reconnecter` : head;
+}

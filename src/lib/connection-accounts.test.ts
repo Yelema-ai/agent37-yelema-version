@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { accountLabel, accountState, accountsBySlug } from "./connection-accounts.ts";
+import { accountLabel, accountState, accountSummary, accountsBySlug, splitAccounts } from "./connection-accounts.ts";
 import type { IntegrationConnection } from "./types.ts";
 
 const conn = (id: string, status: string, slug = "unipile", updatedAt = 0, isDisabled = false): IntegrationConnection => ({
@@ -35,4 +35,13 @@ test("les doublons d'un outil sont tous listés, l'actif d'abord puis le plus r�
 test("un compte se distingue par la fin de son identifiant", () => {
   assert.equal(accountLabel(conn("unipile_vino-hew", "ACTIVE"), 0), "Compte 1 · vino-hew");
   assert.equal(accountLabel(conn("ca_AbCdEf123456", "ACTIVE"), 1), "Compte 2 · Ef123456");
+});
+
+test("la carte d'un outil résume ses comptes, les connexions inachevées à part", () => {
+  const list = [conn("a", "ACTIVE"), conn("b", "ACTIVE"), conn("c", "EXPIRED"), conn("d", "INITIATED"), conn("e", "INITIATED")];
+  assert.equal(accountSummary(list), "3 comptes · 1 à reconnecter");
+  assert.deepEqual(splitAccounts(list).unfinished.map((c) => c.id), ["d", "e"]);
+  assert.equal(accountSummary([conn("a", "ACTIVE")]), "1 compte");
+  assert.equal(accountSummary([conn("d", "INITIATED")]), "Connexion non terminée");
+  assert.equal(accountSummary([]), "");
 });
