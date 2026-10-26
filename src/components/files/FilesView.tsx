@@ -134,16 +134,13 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
     if (!editingPath) setSelectedPath(null);
   }
 
-  // Shared row/card interaction: click selects, double-click opens, Space/Enter from the keyboard.
+  // Shared row/card interaction: one click opens (a folder, or the file's preview: Leslie, 26/10, a
+  // double click is unknown on a phone), Space selects, Enter opens from the keyboard.
   // `stopPropagation` keeps the click from bubbling to the container's clear-selection handler.
   function entryHandlers(entry: FileEntry) {
     return {
       tabIndex: 0,
       onClick: (e: ReactMouseEvent<HTMLElement>) => {
-        e.stopPropagation();
-        selectEntry(entry);
-      },
-      onDoubleClick: (e: ReactMouseEvent<HTMLElement>) => {
         e.stopPropagation();
         openEntry(entry);
       },

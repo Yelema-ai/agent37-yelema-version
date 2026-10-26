@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { AudioLines, Loader2, Mic, MicOff, Minimize2, Phone, PhoneCall, PhoneOff, Search, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -72,7 +73,7 @@ export function CallView(p: {
           </div>
         </DialogDescription>
 
-        {inCall && <Subtitle captions={p.captions} first={first} speaking={p.phase === "speaking"} />}
+        {inCall && <Subtitle captions={p.captions} speaking={p.phase === "speaking"} />}
 
         <div className="mt-auto flex justify-center gap-4 pt-6">
           {inCall ? (
@@ -209,27 +210,42 @@ function Portrait({ photoUrl, name, halo }: { photoUrl: string | null; name: str
   );
 }
 
+// A French voice at an even pace, about 160 words a minute.
+const WORD_MS = 370;
+
 /**
- * The expert's last sentence, under the halo: in full while it speaks, quieter once it listens. The
- * member's lines are left out.
+ * The expert's last sentence, under the halo, without its name (Leslie, 26/10). Aethex sends it whole
+ * before saying it: it is written word by word at the voice's pace while the expert speaks, the next
+ * word greyed, and shown whole once it stops. The member's lines are left out.
  */
-function Subtitle({ captions, first, speaking }: { captions: Caption[]; first: string; speaking: boolean }) {
-  const line = captions.findLast((c) => c.who === "expert");
+function Subtitle({ captions, speaking }: { captions: Caption[]; speaking: boolean }) {
+  const lines = captions.filter((c) => c.who === "expert");
+  const words = (lines.at(-1)?.text ?? "").split(/\s+/).filter(Boolean);
+  const [n, setN] = useState(0);
+  useEffect(() => setN(0), [lines.length]);
+  useEffect(() => {
+    if (!speaking) return setN(words.length);
+    if (n >= words.length) return;
+    const t = setTimeout(() => setN((k) => k + 1), WORD_MS);
+    return () => clearTimeout(t);
+  }, [n, words.length, speaking]);
+  const said = words.slice(0, n).join(" ");
+  const next = words[n];
   return (
     <p
-      aria-live="polite"
       data-call-subtitle=""
       className={cn(
         "mt-4 line-clamp-4 min-h-[66px] max-w-[460px] text-balance leading-snug transition-colors",
         speaking ? "text-[16px] text-ink" : "text-[14px] text-ink-3"
       )}
     >
-      {line && (
-        <>
-          <span className="mr-1.5 font-bold text-[var(--call-ink)]">{first}</span>
-          {line.text}
-        </>
-      )}
+      <span className="sr-only" aria-live="polite">
+        {words.join(" ")}
+      </span>
+      <span aria-hidden>
+        {said}
+        {next && <span className="text-ink-3/50">{`${said ? " " : ""}${next}`}</span>}
+      </span>
     </p>
   );
 }

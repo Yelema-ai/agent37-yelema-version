@@ -80,28 +80,34 @@ function FileRow({ agentId, doc }: { agentId: string; doc: TurnDoc }) {
   );
 }
 
-// The format's own thumbnail: what is shown for a PowerPoint or anything without a renderer, while a
-// preview loads, and whenever a preview fails.
-function FormatThumb({ doc }: { doc: TurnDoc }) {
+// The format's own thumbnail: what is shown for anything without a renderer, while a preview
+// loads, and whenever a preview fails (opened full size, it then says so and points at the download).
+function FormatThumb({ doc, failed }: { doc: TurnDoc; failed?: boolean }) {
   const { icon: Icon, tone } = KINDS[doc.kind];
   return (
     <span className={cn("flex size-full flex-col items-center justify-center gap-3 px-6 text-center", tone)}>
       <Icon className="size-16" strokeWidth={1.3} />
       <span className="line-clamp-2 max-w-sm text-[14px] font-semibold">{doc.name}</span>
+      {failed && <span className="text-[13px] opacity-80">Aperçu indisponible. Téléchargez le fichier pour l’ouvrir.</span>}
     </span>
   );
 }
 
-/** A document drawn as in the chat (first page, first rows, start of the text); its format otherwise. */
-export function Preview({ agentId, doc }: { agentId: string; doc: TurnDoc }) {
+/**
+ * A document drawn as in the chat (first page, first rows, start of the text, first slide); its format
+ * otherwise. `full`: opened from Livrables or from a card, the whole of it that can be read here (the
+ * rows of the first sheet, the whole text, every slide), scrolling.
+ */
+export function Preview({ agentId, doc, full }: { agentId: string; doc: TurnDoc; full?: boolean }) {
   const url = contentUrl(agentId, doc.path, "inline");
   const e = ext(doc.name);
-  if ((doc.size ?? 0) > MAX_PREVIEW_BYTES) return <FormatThumb doc={doc} />;
+  if ((doc.size ?? 0) > MAX_PREVIEW_BYTES) return <FormatThumb doc={doc} failed={full} />;
   if (doc.kind === "image") return <ImagePreview url={url} thumb={thumbUrl(agentId, doc.path, 960, doc.modified)} doc={doc} />;
-  if (doc.kind === "pdf") return <Lazy doc={doc} url={url} render={renderPdf} />;
-  if (e === "xlsx" || e === "xlsm" || e === "csv") return <Lazy doc={doc} url={url} render={renderSheet} />;
-  if (e === "docx") return <Lazy doc={doc} url={url} render={renderDocx} />;
-  return <FormatThumb doc={doc} />;
+  if (doc.kind === "pdf") return <Lazy doc={doc} url={url} render={renderPdf} full={full} />;
+  if (e === "xlsx" || e === "xlsm" || e === "csv") return <Lazy doc={doc} url={url} render={renderSheet} full={full} />;
+  if (e === "docx") return <Lazy doc={doc} url={url} render={renderDocx} full={full} />;
+  if (e === "pptx") return <Lazy doc={doc} url={url} render={renderPptx} full={full} />;
+  return <FormatThumb doc={doc} failed={full} />;
 }
 
 function ImagePreview({ url, thumb, doc }: { url: string; thumb: string; doc: TurnDoc }) {
@@ -110,7 +116,7 @@ function ImagePreview({ url, thumb, doc }: { url: string; thumb: string; doc: Tu
   return <ReducedImage thumb={thumb} original={url} alt={doc.name} onFail={() => setFailed(true)} className="size-full object-contain" />;
 }
 
-type Render = (data: ArrayBuffer, doc: TurnDoc, width: number) => Promise<ReactNode>;
+type Render = (data: ArrayBuffer, doc: TurnDoc, width: number, full: boolean) => Promise<ReactNode>;
 
 // The body of a preview's response, given up past MAX_PREVIEW_BYTES: on its announced length first,
 // then while it streams in (a response without one).
@@ -141,7 +147,7 @@ async function readCapped(res: Response, abort: AbortController): Promise<ArrayB
 
 // Fetches the document once it is on screen, then hands it to its renderer; the thumbnail stays
 // while it loads and comes back if anything fails.
-function Lazy({ doc, url, render }: { doc: TurnDoc; url: string; render: Render }) {
+function Lazy({ doc, url, render, full = false }: { doc: TurnDoc; url: string; render: Render; full?: boolean }) {
   const box = useRef<HTMLSpanElement>(null);
   const [node, setNode] = useState<ReactNode | null>(null);
   const [failed, setFailed] = useState(false);
@@ -158,7 +164,7 @@ function Lazy({ doc, url, render }: { doc: TurnDoc; url: string; render: Render 
       try {
         const res = await fetch(url, { signal: abort.signal });
         if (!res.ok) throw new Error(String(res.status));
-        const out = await render(await readCapped(res, abort), docRef.current, el.clientWidth || 600);
+        const out = await render(await readCapped(res, abort), docRef.current, el.clientWidth || 600, full);
         if (alive) setNode(out);
       } catch {
         if (alive) setFailed(true);
@@ -176,10 +182,10 @@ function Lazy({ doc, url, render }: { doc: TurnDoc; url: string; render: Render 
       abort.abort();
       seen.disconnect();
     };
-  }, [url, name, render]);
+  }, [url, name, render, full]);
   return (
     <span ref={box} className="block size-full">
-      {node && !failed ? node : <FormatThumb doc={doc} />}
+      {node && !failed ? node : <FormatThumb doc={doc} failed={failed && full} />}
     </span>
   );
 }
@@ -228,12 +234,15 @@ const renderPdf: Render = async (data, _doc, width) => {
 
 const ROWS = 9;
 const COLS = 7;
+// Opened full size: enough of the sheet to read it, never a whole database.
+const FULL_ROWS = 300;
+const FULL_COLS = 26;
 
-function Table({ sheet, rows }: { sheet: string | null; rows: string[][] }) {
-  const width = Math.min(COLS, Math.max(1, ...rows.map((r) => r.length)));
+function Table({ sheet, rows, full }: { sheet: string | null; rows: string[][]; full?: boolean }) {
+  const width = Math.min(full ? FULL_COLS : COLS, Math.max(1, ...rows.map((r) => r.length)));
   return (
     <span className="flex size-full flex-col bg-white text-[#1e1e28]">
-      <span className="min-h-0 flex-1 overflow-hidden">
+      <span className={cn("min-h-0 flex-1", full ? "overflow-auto" : "overflow-hidden")}>
         <table className="w-full border-collapse text-[12.5px]">
           <tbody>
             {rows.map((r, i) => (
@@ -253,12 +262,12 @@ function Table({ sheet, rows }: { sheet: string | null; rows: string[][] }) {
   );
 }
 
-function parseCsv(text: string): string[][] {
+function parseCsv(text: string, max = ROWS): string[][] {
   const lines = text
     .replace(/^﻿/, "")
     .split(/\r?\n/)
     .filter((l) => l.trim())
-    .slice(0, ROWS);
+    .slice(0, max);
   const sep = (lines[0]?.match(/;/g)?.length ?? 0) > (lines[0]?.match(/,/g)?.length ?? 0) ? ";" : ",";
   return lines.map((line) => {
     const cells: string[] = [];
@@ -285,7 +294,7 @@ function parseCsv(text: string): string[][] {
 // Read with jszip rather than SheetJS, whose npm release carries unfixed advisories.
 const colIndex = (ref: string) => [...(ref.match(/^[A-Z]+/)?.[0] ?? "A")].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
 
-async function readXlsx(data: ArrayBuffer): Promise<{ sheet: string | null; rows: string[][] }> {
+async function readXlsx(data: ArrayBuffer, maxRows = ROWS, maxCols = COLS): Promise<{ sheet: string | null; rows: string[][] }> {
   const JSZip = (await import("jszip")).default;
   const zip = await JSZip.loadAsync(data);
   const xml = async (path: string) => {
@@ -304,11 +313,11 @@ async function readXlsx(data: ArrayBuffer): Promise<{ sheet: string | null; rows
   if (!sheet) throw new Error("no sheet");
   const shared = [...((await xml("xl/sharedStrings.xml"))?.getElementsByTagName("si") ?? [])].map((si) => si.textContent ?? "");
   const number = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
-  const rows = [...sheet.getElementsByTagName("row")].slice(0, ROWS).map((row) => {
+  const rows = [...sheet.getElementsByTagName("row")].slice(0, maxRows).map((row) => {
     const cells: string[] = [];
     for (const c of row.getElementsByTagName("c")) {
       const j = colIndex(c.getAttribute("r") ?? "");
-      if (j < 0 || j >= COLS) continue;
+      if (j < 0 || j >= maxCols) continue;
       const type = c.getAttribute("t");
       const v = c.getElementsByTagName("v")[0]?.textContent ?? "";
       if (type === "s") cells[j] = shared[Number(v)] ?? "";
@@ -320,10 +329,11 @@ async function readXlsx(data: ArrayBuffer): Promise<{ sheet: string | null; rows
   return { sheet: first?.getAttribute("name") ?? null, rows };
 }
 
-const renderSheet: Render = async (data, doc) => {
-  const { sheet, rows } = ext(doc.name) === "csv" ? { sheet: null, rows: parseCsv(new TextDecoder().decode(data)) } : await readXlsx(data);
+const renderSheet: Render = async (data, doc, _width, full) => {
+  const [r, c] = full ? [FULL_ROWS, FULL_COLS] : [ROWS, COLS];
+  const { sheet, rows } = ext(doc.name) === "csv" ? { sheet: null, rows: parseCsv(new TextDecoder().decode(data), r) } : await readXlsx(data, r, c);
   if (!rows.length) throw new Error("empty");
-  return <Table sheet={sheet} rows={rows} />;
+  return <Table sheet={sheet} rows={rows} full={full} />;
 };
 
 // --- Word: the start of the text, kept to plain structure, fading out ------------------------------
@@ -345,19 +355,79 @@ function cleanHtml(html: string): string {
   return root.innerHTML;
 }
 
-const renderDocx: Render = async (data) => {
+const renderDocx: Render = async (data, _doc, _width, full) => {
   const mammoth = await import("mammoth");
   // Pictures are dropped by cleanHtml anyway: not inlined as base64 in the first place.
   const { value } = await mammoth.convertToHtml({ arrayBuffer: data }, { convertImage: mammoth.images.imgElement(async () => ({ src: "" })) });
   const html = cleanHtml(value);
   if (!html.trim()) throw new Error("empty");
   return (
-    <span className="relative block size-full overflow-hidden bg-white px-6 py-5 text-[#1e1e28]">
+    <span className={cn("relative block size-full bg-white px-6 py-5 text-[#1e1e28]", full ? "overflow-auto" : "overflow-hidden")}>
       <span
         className="block text-[13px] leading-relaxed [&_h1]:mb-2 [&_h1]:text-[18px] [&_h1]:font-bold [&_h2]:mb-1.5 [&_h2]:text-[15px] [&_h2]:font-bold [&_li]:ml-5 [&_li]:list-disc [&_p]:mb-2 [&_td]:border [&_td]:px-1.5"
         dangerouslySetInnerHTML={{ __html: html }}
       />
-      <span aria-hidden className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-white to-transparent" />
+      {!full && <span aria-hidden className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-white to-transparent" />}
+    </span>
+  );
+};
+
+// --- PowerPoint: each slide's text, title first, on a 16:9 card (the first one in the chat) --------
+
+const slideNo = (path: string) => Number(path.match(/slide(\d+)\.xml$/)?.[1] ?? 0);
+
+async function readPptx(data: ArrayBuffer): Promise<string[][]> {
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(data);
+  const parts = Object.keys(zip.files)
+    .filter((p) => /^ppt\/slides\/slide\d+\.xml$/.test(p))
+    .sort((a, b) => slideNo(a) - slideNo(b))
+    .slice(0, 60);
+  const slides: string[][] = [];
+  for (const p of parts) {
+    const part = zip.file(p);
+    if (((part as unknown as { _data?: { uncompressedSize?: number } } | null)?._data?.uncompressedSize ?? 0) > MAX_XML_PART_BYTES) continue;
+    const xml = new DOMParser().parseFromString((await part?.async("string")) ?? "", "application/xml");
+    // One line per paragraph (a:p), its runs (a:t) joined.
+    const lines = [...xml.getElementsByTagName("a:p")]
+      .map((para) => [...para.getElementsByTagName("a:t")].map((t) => t.textContent ?? "").join("").trim())
+      .filter(Boolean);
+    slides.push(lines);
+  }
+  if (!slides.length) throw new Error("no slide");
+  return slides;
+}
+
+function Slide({ lines, n, of }: { lines: string[]; n: number; of: number }) {
+  const [title, ...rest] = lines;
+  return (
+    <span className="relative block aspect-video w-full overflow-hidden rounded-lg border border-[#e3e3ea] bg-white px-[6%] py-[5%] text-left text-[#1e1e28] shadow-sm">
+      <span className="block text-[clamp(14px,2.2vw,22px)] font-bold leading-tight">{title ?? ""}</span>
+      {rest.slice(0, 8).map((l, i) => (
+        <span key={i} className="mt-1.5 block truncate text-[clamp(11px,1.4vw,14px)] text-[#4a4a58]">
+          {l}
+        </span>
+      ))}
+      <span className="absolute bottom-2 right-3 text-[11px] font-semibold text-[#8a8a98]">
+        {n}/{of}
+      </span>
+    </span>
+  );
+}
+
+const renderPptx: Render = async (data, _doc, _width, full) => {
+  const slides = await readPptx(data);
+  if (!full)
+    return (
+      <span className="flex size-full items-center justify-center bg-[#FDEEDF] p-5">
+        <Slide lines={slides[0]} n={1} of={slides.length} />
+      </span>
+    );
+  return (
+    <span className="flex size-full flex-col gap-4 overflow-auto bg-[#f6f6f9] p-4">
+      {slides.map((lines, i) => (
+        <Slide key={i} lines={lines} n={i + 1} of={slides.length} />
+      ))}
     </span>
   );
 };

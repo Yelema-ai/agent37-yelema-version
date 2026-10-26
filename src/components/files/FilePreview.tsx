@@ -15,6 +15,7 @@ import { contentUrl, previewKind, thumbUrl, type FileEntry } from "./types";
 //  - text   -> fetched and shown escaped in a <pre>
 //  - sandbox (html/svg) -> a SANDBOXED <iframe> with all permissions stripped, so embedded
 //    scripts can't run and can't reach this origin's session — the XSS guard for active documents
+//  - Word, Excel, PowerPoint -> read in the page (DocumentCards' renderers, in full)
 //  - none   -> no inline preview; offer the download instead
 export function FilePreview({
   agentId,
@@ -77,12 +78,13 @@ function PreviewBody({ agentId, entry }: { agentId: string; entry: FileEntry }) 
     return <TextPreview url={inline} />;
   }
 
-  // Word, Excel and PowerPoint: drawn as in the chat (Leslie, 23/10: they open in Livrables too).
+  // Word, Excel and PowerPoint: read here in full, as far as it goes (Leslie, 26/10: the preview opens
+  // from Livrables on the web as on the app).
   const doc = docKind(entry.name);
   if (doc === "word" || doc === "excel" || doc === "powerpoint") {
     return (
-      <div className="h-[60vh] overflow-auto rounded-md border bg-white">
-        <DocPreview agentId={agentId} doc={{ name: entry.name, path: entry.path, size: entry.size ?? null, modified: entry.modified ?? null, kind: doc }} />
+      <div className="h-[65vh] overflow-hidden rounded-md border bg-white">
+        <DocPreview full agentId={agentId} doc={{ name: entry.name, path: entry.path, size: entry.size ?? null, modified: entry.modified ?? null, kind: doc }} />
       </div>
     );
   }
