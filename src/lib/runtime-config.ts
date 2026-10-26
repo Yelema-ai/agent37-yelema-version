@@ -85,6 +85,12 @@ export function appVersion(): string {
   return read("APP_VERSION") ?? read("VERCEL_GIT_COMMIT_REF") ?? "dev";
 }
 
+// One value per deployment, so an open page can tell it now runs an older one. The commit ref above
+// is a branch or a tag, which a redeploy of the same tag would not change.
+export function deployVersion(): string {
+  return read("VERCEL_DEPLOYMENT_ID") ?? read("VERCEL_GIT_COMMIT_SHA") ?? appVersion();
+}
+
 // Names of the required variables that are unset. Used by /api/health, which reports only
 // whether the deployment is complete — never which values it holds.
 export function missingRequired(): string[] {

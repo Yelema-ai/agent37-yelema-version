@@ -11,6 +11,7 @@ import { isCallTranscript } from "@/lib/voice";
 import { isResumeSeed } from "@/lib/conversation-resume";
 import { cn } from "@/lib/utils";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
+import { UpdateSpinner, useDeployPhase } from "@/components/app/DeployStatus";
 import type { Expert } from "@/lib/types";
 import { useChatContext } from "./ChatProvider";
 import { DocumentCards, useDriveListing } from "./DocumentCards";
@@ -117,6 +118,7 @@ export function ChatMessages({
 }) {
   // The instance whose drive the paths in a reply point into (they become download links).
   const { agentId } = useChatContext();
+  const updating = useDeployPhase() === "maintenance";
   // The reply being written: the last assistant bubble, even with queued messages below it.
   // A routine's run: its [SILENT] answer reads as "nothing to report".
   const routineThread = messages.some((m) => m.role === "user" && isRoutineRun(m.content));
@@ -236,6 +238,12 @@ export function ChatMessages({
                 <p className="text-sm italic text-ink-3">{SILENT_RUN_LABEL}</p>
               ) : m.content ? (
                 <Markdown content={cleanReply(m.content)} agentId={agentId} />
+              ) : showDots && updating ? (
+                // A reply held by the update: said to be received, so the wait does not read as a bug.
+                <p role="status" className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3.5 py-2 text-sm font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+                  <UpdateSpinner />
+                  {face ? `${face.displayName} reprend` : "Votre Expert reprend"} dans un instant, votre message est bien reçu.
+                </p>
               ) : showDots ? (
                 <TypingDots />
               ) : null}
