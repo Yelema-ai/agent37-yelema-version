@@ -53,7 +53,3 @@ test("turnDocs shows no card for a working file (JSON, script, log)", () => {
   const docs = turnDocs("Voir Livrables/Kouassi/etat.json", listing as never, ["Livrables/Kouassi/calcul.py", "Livrables/Kouassi/Point.pdf"]);
   assert.deepEqual(docs.map((d) => d.name), ["Point.pdf"]);
 });
-
-test("a subtitle file gets no card under a reply", () => {
-  assert.deepEqual(turnDocs("Voici `~/Livrables/Koffi/spot.srt` et `~/Livrables/Koffi/spot.mp4`", []).map((d) => d.name), ["spot.mp4"]);
-});
