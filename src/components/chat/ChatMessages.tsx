@@ -3,13 +3,15 @@
 import { useSafeDashboard } from "@/components/experts/DashboardProvider";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, ClipboardCheck, CornerDownLeft, FileText, Image as ImageIcon, Loader2, PhoneCall, Repeat } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ClipboardCheck, Copy, CornerDownLeft, FileText, Image as ImageIcon, Loader2, PhoneCall, Repeat } from "lucide-react";
 import { turnDocs } from "@/lib/drive-links";
 import { kanbanNotice } from "@/lib/kanban-notice";
 import { isRoutineRun, isSilentRun, routineRunText, SILENT_RUN_LABEL } from "@/lib/routines";
 import { isCallTranscript } from "@/lib/voice";
 import { isResumeSeed } from "@/lib/conversation-resume";
 import { cn } from "@/lib/utils";
+import { copyLater } from "@/lib/clipboard";
+import { toast } from "sonner";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import type { Expert } from "@/lib/types";
 import { useChatContext } from "./ChatProvider";
@@ -240,10 +242,36 @@ export function ChatMessages({
                 <TypingDots />
               ) : null}
               {!live && m.content && <DocumentCards agentId={agentId} docs={turnDocs(m.content, listing, m.files)} />}
+              {!live && m.content && !(routineThread && isSilentRun(m.content)) && <CopyReply text={cleanReply(m.content)} />}
             </div>
           </div>
         );
       })}
     </div>
+  );
+}
+
+// Under each finished reply: copies its text, as « Copier » under a ChatGPT answer.
+function CopyReply({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  async function copy() {
+    try {
+      await copyLater(Promise.resolve(text));
+      setDone(true);
+      setTimeout(() => setDone(false), 1500);
+    } catch {
+      toast.error("La réponse n’a pas pu être copiée. Réessayez.");
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      aria-label="Copier la réponse"
+      title="Copier la réponse"
+      className="-mb-2 -ml-3 mt-0.5 flex size-11 items-center justify-center rounded-lg text-ink-3 hover:bg-surface hover:text-ink"
+    >
+      {done ? <Check className="h-4 w-4 text-ok" /> : <Copy className="h-4 w-4" />}
+    </button>
   );
 }
