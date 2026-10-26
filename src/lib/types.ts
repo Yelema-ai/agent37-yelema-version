@@ -236,6 +236,8 @@ export interface IntegrationConnection {
   isDisabled?: boolean;
   createdAt?: number | null;
   updatedAt?: number | null;
+  alias?: string | null;
+  label?: string | null;
 }
 
 export interface IntegrationConnectionsResult {

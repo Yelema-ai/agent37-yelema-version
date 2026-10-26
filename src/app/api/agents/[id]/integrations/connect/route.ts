@@ -11,12 +11,12 @@ export async function POST(request: Request, { params }: Ctx) {
     const { id } = await params;
     const { row } = await requireAgentAccess(id);
 
-    const { toolkit } = await readJson<{ toolkit?: string }>(request);
+    const { toolkit, alias } = await readJson<{ toolkit?: string; alias?: string }>(request);
     if (!toolkit || typeof toolkit !== "string") {
       throw new ApiError(400, "invalid_request", "Choisissez un outil");
     }
 
-    return json(await integrations.connect(row, toolkit));
+    return json(await integrations.connect(row, toolkit, typeof alias === "string" ? alias : undefined));
   } catch (e) {
     return handleError(e);
   }

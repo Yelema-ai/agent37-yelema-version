@@ -85,10 +85,25 @@ function normalizeToolkit(raw: unknown): IntegrationToolkit {
 // ---- Connect ---------------------------------------------------------------------------------
 
 // A toolkit with no auth config in Yelema's Composio project fails with 4308 "NoManagedAuth".
-export async function connectToolkit(userId: string, toolkit: string): Promise<IntegrationConnectResult> {
+export async function connectToolkit(userId: string, toolkit: string, alias?: string): Promise<IntegrationConnectResult> {
   try {
-    const session = await client().toolRouter.create(userId, { manageConnections: true });
-    const request = await session.authorize(toolkit);
+    const session = await client().toolRouter.create(userId, {
+      manageConnections: { waitForConnections: true },
+      multiAccount: { enable: true },
+    });
+
+    let targetAlias = alias?.trim();
+    if (!targetAlias) {
+      const { connections } = await listConnections(userId);
+      const existing = connections.filter(
+        (c) => (c.toolkitSlug ?? "").toLowerCase() === toolkit.toLowerCase() && !c.isDisabled && c.status === "ACTIVE"
+      );
+      if (existing.length > 0) {
+        targetAlias = `${toolkit}-${existing.length + 1}`;
+      }
+    }
+
+    const request = await session.authorize(toolkit, targetAlias ? { alias: targetAlias } : undefined);
     return { toolkit, connectedAccountId: request.id, redirectUrl: request.redirectUrl ?? "" };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -110,13 +125,111 @@ interface RawConnectedAccount {
   toolkit?: { slug?: string; name?: string };
   authConfig?: { id?: string; authScheme?: string };
   auth_config?: { id?: string; auth_scheme?: string };
-  state?: { authScheme?: string };
+  state?: { authScheme?: string; val?: Record<string, unknown> };
+  data?: Record<string, unknown>;
+  params?: Record<string, unknown>;
+  alias?: string | null;
   isDisabled?: boolean;
   is_disabled?: boolean;
   createdAt?: string | number;
   created_at?: string | number;
   updatedAt?: string | number;
   updated_at?: string | number;
+}
+
+const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+
+function findEmailInRecord(obj: unknown): string | null {
+  if (!obj || typeof obj !== "object") return null;
+  const record = obj as Record<string, unknown>;
+
+  const candidateKeys = [
+    "email",
+    "user_email",
+    "userEmail",
+    "mail",
+    "displayName",
+    "display_name",
+    "username",
+    "login",
+    "account_id",
+  ];
+  for (const k of candidateKeys) {
+    const val = record[k];
+    if (typeof val === "string") {
+      const match = val.match(EMAIL_REGEX);
+      if (match) return match[0];
+    }
+  }
+
+  for (const [key, val] of Object.entries(record)) {
+    const lowerKey = key.toLowerCase();
+    if (
+      lowerKey.includes("token") ||
+      lowerKey.includes("secret") ||
+      lowerKey.includes("url") ||
+      lowerKey.includes("scope") ||
+      lowerKey.includes("key")
+    ) {
+      continue;
+    }
+    if (typeof val === "string") {
+      const match = val.match(EMAIL_REGEX);
+      if (match) return match[0];
+    } else if (typeof val === "object" && val !== null) {
+      const found = findEmailInRecord(val);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function findNameOrIdentity(obj: unknown): string | null {
+  if (!obj || typeof obj !== "object") return null;
+  const record = obj as Record<string, unknown>;
+  const candidateKeys = [
+    "displayName",
+    "display_name",
+    "name",
+    "username",
+    "login",
+    "workspace_name",
+    "workspaceName",
+    "subdomain",
+  ];
+  for (const k of candidateKeys) {
+    const val = record[k];
+    if (typeof val === "string" && val.trim() && !val.includes("http")) {
+      return val.trim();
+    }
+  }
+  return null;
+}
+
+function extractAccountLabel(c: RawConnectedAccount): string | null {
+  const data = (c.data ?? {}) as Record<string, unknown>;
+  const stateVal = ((c.state as { val?: Record<string, unknown> })?.val ??
+    (typeof c.state === "object" ? c.state : {})) as Record<string, unknown>;
+  const params = (c.params ?? {}) as Record<string, unknown>;
+
+  // 1. Prioritize email address (matches user request: "mieux vaut mettre l'email")
+  const email = findEmailInRecord(data) || findEmailInRecord(stateVal) || findEmailInRecord(params);
+  if (email) return email;
+
+  // 2. Second priority: displayName or identity (e.g. Canva, Notion, Slack)
+  const name = findNameOrIdentity(data) || findNameOrIdentity(stateVal) || findNameOrIdentity(params);
+  if (name) return name;
+
+  // 3. Third priority: User alias (ignore auto-generated ones like "gmail-2", "toolkit-1")
+  if (c.alias && typeof c.alias === "string" && c.alias.trim()) {
+    const trimmed = c.alias.trim();
+    const isAutoAlias = /^[a-z0-9_-]+-\d+$/i.test(trimmed);
+    if (!isAutoAlias) {
+      return trimmed;
+    }
+  }
+
+  return null;
 }
 
 function toEpochMs(value: string | number | undefined): number | null {
@@ -141,6 +254,8 @@ function normalizeConnection(raw: unknown): IntegrationConnection {
     isDisabled: !!(c.isDisabled ?? c.is_disabled) || status === "INACTIVE" || status === "DISABLED",
     createdAt: toEpochMs(c.createdAt ?? c.created_at),
     updatedAt: toEpochMs(c.updatedAt ?? c.updated_at),
+    alias: c.alias ?? null,
+    label: extractAccountLabel(c),
   };
 }
 

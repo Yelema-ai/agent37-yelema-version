@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Loader2, MoreHorizontal, Plug, Plus, Search, Unplug } from "lucide-react";
+import { Check, Loader2, MoreHorizontal, Plug, Plus, Search, Trash2, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { isConnectionActive as isActive } from "@/lib/expert-tools";
@@ -19,6 +19,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ToolLogo } from "./ToolLogo";
@@ -182,8 +184,24 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
     }
   }
 
+  // Disconnect a specific account of this tool.
+  async function disconnectAccount(connectionId: string, toolkitName: string, accountLabel?: string | null) {
+    setDisconnecting(connectionId);
+    try {
+      await apiFetch(`/api/agents/${agentId}/integrations/connections/${encodeURIComponent(connectionId)}`, {
+        method: "DELETE",
+      });
+      toast.success(accountLabel ? `${toolkitName} (${accountLabel}) est déconnecté` : `${toolkitName} est déconnecté`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      await fetchConnections().catch(() => undefined);
+      setDisconnecting(null);
+    }
+  }
+
   // Disconnect every account of this tool.
-  async function disconnect(toolkit: IntegrationToolkit) {
+  async function disconnectAll(toolkit: IntegrationToolkit) {
     const ids = (connections ?? [])
       .filter((c) => isActive(c) && slugKey(c.toolkitSlug) === slugKey(toolkit.slug))
       .map((c) => c.id);
@@ -231,15 +249,20 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {visible.map((t) => {
             const k = slugKey(t.slug);
+            const toolConns =
+              connections === null
+                ? null
+                : (connections ?? []).filter((c) => isActive(c) && slugKey(c.toolkitSlug) === k);
             return (
               <ToolTile
                 key={k}
                 toolkit={t}
-                connected={connections === null ? null : connectedSlugs.has(k)}
+                toolConnections={toolConns}
                 waiting={connecting === k || pending === k}
-                disconnecting={disconnecting === k}
+                disconnectingId={disconnecting}
                 onConnect={() => connect(t)}
-                onDisconnect={() => disconnect(t)}
+                onDisconnectAccount={(connId, label) => disconnectAccount(connId, t.name, label)}
+                onDisconnectAll={() => disconnectAll(t)}
               />
             );
           })}
@@ -270,58 +293,123 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
 
 function ToolTile({
   toolkit,
-  connected,
+  toolConnections,
   waiting,
-  disconnecting,
+  disconnectingId,
   onConnect,
-  onDisconnect,
+  onDisconnectAccount,
+  onDisconnectAll,
 }: {
   toolkit: IntegrationToolkit;
   // null while the connections are still loading
-  connected: boolean | null;
+  toolConnections: IntegrationConnection[] | null;
   waiting: boolean;
-  disconnecting: boolean;
+  disconnectingId: string | null;
   onConnect: () => void;
-  onDisconnect: () => void;
+  onDisconnectAccount: (connectionId: string, label?: string | null) => void;
+  onDisconnectAll: () => void;
 }) {
+  const count = toolConnections?.length ?? 0;
+  const isDisconnectingThis =
+    disconnectingId !== null &&
+    ((toolConnections ?? []).some((c) => c.id === disconnectingId) || disconnectingId === slugKey(toolkit.slug));
+
+  const accountsSummary = useMemo(() => {
+    if (!toolConnections || toolConnections.length === 0) return null;
+    const labels = toolConnections.map((c, idx) => c.label || c.alias || (c.id ? `Compte (${c.id.slice(-4)})` : `Compte ${idx + 1}`));
+    return labels.join(", ");
+  }, [toolConnections]);
+
   return (
     <div className="flex min-h-[76px] items-center gap-3 rounded-[22px] border bg-card py-3 pl-4 pr-3">
       <ToolLogo logo={toolkit.logo} name={toolkit.name} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[15px] font-semibold text-ink">{toolkit.name}</p>
-        {toolkit.description && <p className="truncate text-[13px] text-ink-3">{toolkit.description}</p>}
+        {accountsSummary ? (
+          <p className="truncate text-[13px] font-medium text-ink-2" title={accountsSummary}>
+            {accountsSummary}
+          </p>
+        ) : toolkit.description ? (
+          <p className="truncate text-[13px] text-ink-3">{toolkit.description}</p>
+        ) : null}
       </div>
 
-      {connected === null ? (
+      {toolConnections === null ? (
         <span className="h-8 w-24 shrink-0 animate-pulse rounded-[10px] bg-soft" />
-      ) : connected ? (
+      ) : count > 0 ? (
         <div className="flex shrink-0 items-center gap-0.5">
           <span className="inline-flex items-center gap-1 rounded-full bg-ok-pale px-2.5 py-1 text-xs font-semibold text-ok">
             <Check className="h-3.5 w-3.5" />
-            Connecté
+            {count === 1 ? "Connecté" : `${count} comptes`}
           </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
                 aria-label={`Options pour ${toolkit.name}`}
-                disabled={disconnecting || waiting}
+                disabled={isDisconnectingThis || waiting}
                 className="grid h-8 w-8 max-sm:size-10 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink disabled:opacity-60"
               >
-                {disconnecting || waiting ? (
+                {isDisconnectingThis || waiting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <MoreHorizontal className="h-4 w-4" />
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onSelect={onConnect}>
-                <Plus /> Connecter un autre compte
+            <DropdownMenuContent align="end" className="w-72 p-1.5">
+              <DropdownMenuLabel className="px-2 py-1 text-xs font-semibold text-ink-3">
+                {count === 1 ? "Compte connecté" : `Comptes connectés (${count})`}
+              </DropdownMenuLabel>
+
+              <div className="space-y-0.5">
+                {toolConnections.map((conn, idx) => {
+                  const label = conn.label || conn.alias || (conn.id ? `Compte (${conn.id.slice(-4)})` : `Compte ${idx + 1}`);
+                  const isDeleting = disconnectingId === conn.id;
+                  return (
+                    <div
+                      key={conn.id}
+                      className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-soft"
+                    >
+                      <span className="truncate font-medium text-ink" title={label}>
+                        {label}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDisconnectAccount(conn.id, label);
+                        }}
+                        disabled={Boolean(disconnectingId)}
+                        title={`Déconnecter ${label}`}
+                        className="grid h-6 w-6 place-items-center rounded text-ink-3 transition-colors hover:bg-ko-pale hover:text-ko disabled:opacity-50"
+                      >
+                        {isDeleting ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <DropdownMenuSeparator className="my-1.5" />
+
+              <DropdownMenuItem onSelect={onConnect} className="cursor-pointer">
+                <Plus className="h-4 w-4" /> Connecter un autre compte
               </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onSelect={onDisconnect}>
-                <Unplug /> Déconnecter
-              </DropdownMenuItem>
+
+              {count > 1 && (
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={onDisconnectAll}
+                  className="cursor-pointer text-ko"
+                >
+                  <Unplug className="h-4 w-4" /> Déconnecter tous les comptes
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

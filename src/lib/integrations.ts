@@ -20,10 +20,10 @@ export const integrations = {
   toolkits: (row: AgentRow, search?: string): Promise<IntegrationToolkitsResult> =>
     onYelemaComposio(row) ? listToolkits(search) : agent37.listIntegrationToolkits(row.agent37_id, { search }),
 
-  connect: (row: AgentRow, toolkit: string): Promise<IntegrationConnectResult> =>
+  connect: (row: AgentRow, toolkit: string, alias?: string): Promise<IntegrationConnectResult> =>
     onYelemaComposio(row)
-      ? connectToolkit(composioUserId(row), toolkit)
-      : agent37.connectIntegration(row.agent37_id, { toolkit }),
+      ? connectToolkit(composioUserId(row), toolkit, alias)
+      : agent37.connectIntegration(row.agent37_id, { toolkit, alias }),
 
   connections: (row: AgentRow): Promise<IntegrationConnectionsResult> =>
     onYelemaComposio(row) ? listConnections(composioUserId(row)) : agent37.listIntegrationConnections(row.agent37_id),
