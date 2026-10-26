@@ -88,9 +88,9 @@ export function TelegramHub({ agentId, canManage, onUnavailable, onState, hideWh
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm font-semibold">Telegram</p>
-          <p className="text-xs text-muted-foreground">
+          {s?.phase !== "ready" && <p className="text-xs text-muted-foreground">
             {s ? <>Bot : <a className="font-semibold text-brand hover:underline" href={`https://t.me/${s.bot}`} target="_blank" rel="noopener noreferrer">@{s.bot}</a>{s.chatTitle ? <> · groupe « {s.chatTitle} »</> : null}</> : "Un bot à vous et un groupe où chaque expert a son sujet."}
-          </p>
+          </p>}
         </div>
         {canManage && !s && (
           <Button onClick={() => void connect()} disabled={busy !== null || waiting}>
