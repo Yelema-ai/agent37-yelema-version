@@ -8,6 +8,7 @@ import { isChannelConnected, type MessagingPlatform } from "@/lib/channels";
 import { Button } from "@/components/ui/button";
 import { ChannelPanelHeader, FieldInput } from "@/components/channels/ChannelCredentialsForm";
 import { useAsyncAction } from "@/components/useAsyncAction";
+import { DisconnectButton } from "@/components/channels/DisconnectButton";
 
 // Microsoft Teams: the member creates an Azure Bot in their own Microsoft tenant, gives it the address
 // the back office opened on their instance, and hands us its three identifiers plus who may talk to it.
@@ -99,9 +100,7 @@ export function TeamsConnect({
             <Button variant="outline" onClick={() => setEditing(true)} disabled={busy}>
               <Pencil className="h-3.5 w-3.5" /> Modifier
             </Button>
-            <Button variant="ghost" onClick={disconnect} disabled={busy}>
-              Déconnecter
-            </Button>
+            <DisconnectButton name="Microsoft Teams" onConfirm={disconnect} disabled={busy} />
           </div>
         </>
       ) : (

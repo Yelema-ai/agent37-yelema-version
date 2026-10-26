@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
 import type { TelegramHubStatus } from "@/lib/agent37";
+import { DisconnectButton } from "@/components/channels/DisconnectButton";
 
 const POLL_MS = 4_000;
 const TG_LINK = /^https:\/\/t\.me\//;
@@ -68,7 +69,7 @@ export function TelegramHub({ agentId, canManage, onUnavailable, onState, hideWh
   const disconnect = () =>
     act("off", async () => {
       await apiFetch(base, { method: "DELETE" });
-      toast.success("Telegram débranché");
+      toast.success("Telegram déconnecté");
       await load();
     });
   const copy = async (text: string) => {
@@ -80,6 +81,7 @@ export function TelegramHub({ agentId, canManage, onUnavailable, onState, hideWh
   if (!status) return hideWhenEmpty ? null : <div className="h-24 animate-pulse rounded-lg border bg-card" />;
   if (!status.connected || (hideWhenEmpty && !status.state)) return null;
   const s = status.state;
+  const topicCount = Object.keys(s?.topics ?? {}).length;
 
   return (
     <div className="space-y-3 rounded-lg border bg-card p-4">
@@ -113,28 +115,62 @@ export function TelegramHub({ agentId, canManage, onUnavailable, onState, hideWh
         </ol>
       )}
 
+      {/* Connected: the group, the experts' topics, the colleagues to invite, then the way out. */}
       {s?.phase === "ready" && (
-        <div className="space-y-2 text-xs text-muted-foreground">
-          <p>{Object.keys(s.topics ?? {}).length} expert(s) ont leur sujet ; tous les membres du groupe peuvent leur écrire.</p>
-          {s.inviteLink && TG_LINK.test(s.inviteLink) && (
-            <p className="flex flex-wrap items-center gap-2">
-              Inviter des collègues :
-              <a className="font-semibold text-brand hover:underline" href={s.inviteLink} target="_blank" rel="noopener noreferrer">{s.inviteLink}</a>
-              <button type="button" aria-label="Copier le lien" onClick={() => void copy(s.inviteLink!)} className="hover:text-foreground">
-                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              </button>
+        <div className="space-y-2">
+          <Block title="Votre groupe">
+            <p className="text-sm text-ink-2">
+              {s.chatTitle ? <>« {s.chatTitle} » avec </> : null}
+              <a className="font-semibold text-brand hover:underline" href={`https://t.me/${s.bot}`} target="_blank" rel="noopener noreferrer">@{s.bot}</a>
             </p>
+          </Block>
+          <Block
+            title="Sujets des Experts"
+            action={
+              canManage && (
+                <Button variant="outline" size="sm" onClick={() => void sync()} disabled={busy !== null} className="max-sm:h-10">
+                  {busy === "sync" ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                  Mettre à jour
+                </Button>
+              )
+            }
+          >
+            <p className="text-sm text-ink-2">
+              {topicCount > 1 ? `${topicCount} Experts ont leur sujet` : topicCount === 1 ? "1 Expert a son sujet" : "Aucun sujet pour l’instant"}
+            </p>
+          </Block>
+          {s.inviteLink && TG_LINK.test(s.inviteLink) && (
+            <Block
+              title="Inviter des collègues"
+              action={
+                <Button variant="outline" size="sm" onClick={() => void copy(s.inviteLink!)} className="max-sm:h-10">
+                  {copied ? <Check /> : <Copy />}
+                  {copied ? "Lien copié" : "Copier le lien"}
+                </Button>
+              }
+            >
+              <p className="text-sm text-ink-2">Ils écrivent à vos Experts dans le même groupe.</p>
+            </Block>
           )}
           {canManage && (
-            <div className="flex flex-wrap gap-2 pt-1">
-              <Button variant="outline" size="sm" onClick={() => void sync()} disabled={busy !== null}>
-                {busy === "sync" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}Resynchroniser les sujets
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void disconnect()} disabled={busy !== null}>Débrancher</Button>
+            <div className="flex justify-end pt-2">
+              <DisconnectButton name="Telegram" onConfirm={disconnect} disabled={busy !== null} />
             </div>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+function Block({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] bg-soft px-4 py-3">
+      <div className="min-w-0">
+        <h4 className="text-[13px] font-semibold text-ink-3">{title}</h4>
+        {children}
+      </div>
+      {action}
+    </section>
   );
 }

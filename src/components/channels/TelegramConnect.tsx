@@ -18,6 +18,7 @@ import { TelegramHub } from "@/components/channels/TelegramHub";
 import { TelegramQrConnect } from "@/components/channels/TelegramQrConnect";
 import type { TelegramHubStatus } from "@/lib/agent37";
 import { useAsyncAction } from "@/components/useAsyncAction";
+import { DisconnectButton } from "@/components/channels/DisconnectButton";
 
 const OWNER_POLL_MS = 3000;
 
@@ -162,9 +163,7 @@ export function TelegramConnect({
               J’ai déjà un bot (coller son jeton)
             </Button>
             {channel.configured && (
-              <Button variant="ghost" onClick={disconnect} disabled={busy}>
-                Déconnecter
-              </Button>
+              <DisconnectButton name="Telegram" onConfirm={disconnect} disabled={busy} />
             )}
           </div>
         </div>
@@ -210,9 +209,7 @@ export function TelegramConnect({
               Utiliser plutôt un QR code
             </Button>
             {channel.configured && (
-              <Button variant="ghost" onClick={disconnect} disabled={busy}>
-                Déconnecter
-              </Button>
+              <DisconnectButton name="Telegram" onConfirm={disconnect} disabled={busy} />
             )}
           </div>
         </div>
@@ -282,9 +279,7 @@ export function TelegramConnect({
             >
               Connecter un autre bot
             </Button>
-            <Button variant="ghost" onClick={disconnect} disabled={busy}>
-              Déconnecter
-            </Button>
+            <DisconnectButton name="Telegram" onConfirm={disconnect} disabled={busy} />
           </div>
           {owner?.name && <p className="text-xs text-muted-foreground">En privé, répond uniquement à {owner.name}.</p>}
         </div>
