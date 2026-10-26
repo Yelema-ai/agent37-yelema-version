@@ -132,6 +132,18 @@ export interface ExpertAvatarDraft {
 export type DashboardShareMode = "team" | "people" | "link";
 
 /** A dashboard's share as the back office keeps it; `number` is sealed into the link and never sent to a browser. */
+/** `/app/integrations/connections` : what the back office keeps about one connected account. */
+export interface BoConnectorAccount {
+  id: string;
+  toolkit: string;
+  email: string | null;
+  name: string | null;
+  label: string | null;
+  isDefault: boolean;
+  addedBy: { email: string; name: string | null } | null;
+  createdAt: string | null;
+}
+
 export interface BoDashboardShareView {
   share: { id: string; number: string; mode: DashboardShareMode; people: string[]; updatedAt: string | null } | null;
   candidates: { email: string; name: string | null }[];
@@ -332,6 +344,11 @@ function dashboardSharePath(profile: string): string {
   const p = profile.toLowerCase();
   if (!/^[a-z0-9_-]{1,64}$/.test(p)) throw new BackofficeError(404, "not_found", "Tableau de bord introuvable.");
   return `/app/dashboards/shares/${p}`;
+}
+
+function connectorAccountPath(id: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(id)) throw new BackofficeError(404, "not_found", "Compte inconnu.");
+  return `/app/integrations/connections/${id}`;
 }
 
 function usageQuery(filter: BoUsageFilter, page?: number): string {
@@ -579,6 +596,15 @@ export const backoffice = {
   // opens to that member. A reasoned answer goes through a model on the provider's side.
   // `profile`: the expert asking, when its instance says which one (header X-Yelema-Profile).
   // Chat d'entreprise : whose apps an agent (`u-…`) of the enterprise instance calls — its own member's account.
+  // The member's connected accounts: e-mail read once by the back office, label, default per tool, author.
+  connectorAccounts: (token: string) => call<{ accounts: BoConnectorAccount[] }>("/app/integrations/connections", { token }),
+  recordConnectorAccount: (token: string, body: { connectedAccountId: string; toolkit: string }) =>
+    call<BoConnectorAccount>("/app/integrations/connections", { method: "POST", token, body }),
+  updateConnectorAccount: (token: string, id: string, body: { label?: string | null; isDefault?: boolean }) =>
+    call<{ accounts: BoConnectorAccount[] }>(connectorAccountPath(id), { method: "PATCH", token, body }),
+  // In the instance's name: the default account of each tool, pinned in the experts' Composio session.
+  appsAccounts: (instanceToken: string, workspace: string, profile?: string) =>
+    call<{ user: string | null; defaults: Record<string, string> }>("/app/apps/accounts", { method: "POST", token: instanceToken, workspace, body: profile ? { profile } : {}, timeoutMs: 5_000 }),
   seatAppsUser: (instanceToken: string, workspace: string, profile: string) =>
     call<{ user: string }>("/app/apps/seat", { method: "POST", token: instanceToken, workspace, body: { profile } }),
   memoryAsk: (instanceToken: string, workspace: string, question: string, profile?: string) =>

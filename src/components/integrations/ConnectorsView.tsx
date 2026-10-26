@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Check, ChevronRight, Loader2, MoreHorizontal, Pencil, Plug, Plus, RotateCw, Search, Trash2, Unplug } from "lucide-react";
+import { AlertCircle, Check, ChevronRight, Loader2, MoreHorizontal, Pencil, Plug, Plus, RotateCw, Search, Star, Trash2, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import {
   ACCOUNT_STATE_LABELS,
   accountState,
   accountSummary,
+  accountTitle,
   accountsBySlug,
   needsReconnect,
   splitAccounts,
@@ -225,6 +226,18 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
     }
   }
 
+  // Label and default are kept by the back office, so they follow the member on every device.
+  async function updateAccount(id: string, body: { label?: string | null; isDefault?: boolean }) {
+    try {
+      await apiFetch(`/api/agents/${agentId}/integrations/connections/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) });
+      if (body.isDefault) toast.success("Vos Experts utiliseront ce compte par défaut");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      await fetchConnections().catch(() => undefined);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1.5">
@@ -288,6 +301,7 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
           onClose={() => setOpen(null)}
           onConnect={() => connect(open)}
           onDisconnect={(ids) => disconnect(open, ids)}
+          onUpdate={updateAccount}
         />
       )}
 
@@ -315,35 +329,6 @@ const dateFr = (ms: number | null | undefined): string => {
   const year = d.getFullYear() !== new Date().getFullYear() ? { year: "numeric" as const } : {};
   return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", ...year });
 };
-
-// Composio gives an account no name: the member names it, in this browser until the back office
-// keeps a label per connection.
-const NAMES_KEY = "yelema.connector-names";
-
-function useAccountNames(): [Record<string, string>, (id: string, name: string) => void] {
-  const [names, setNames] = useState<Record<string, string>>({});
-  useEffect(() => {
-    try {
-      setNames(JSON.parse(localStorage.getItem(NAMES_KEY) || "{}"));
-    } catch {
-      // private window or blocked storage: the default labels stay
-    }
-  }, []);
-  const rename = useCallback((id: string, name: string) => {
-    setNames((prev) => {
-      const next = { ...prev };
-      if (name) next[id] = name;
-      else delete next[id];
-      try {
-        localStorage.setItem(NAMES_KEY, JSON.stringify(next));
-      } catch {
-        // kept for this visit only
-      }
-      return next;
-    });
-  }, []);
-  return [names, rename];
-}
 
 function ToolTile({
   toolkit,
@@ -429,6 +414,7 @@ function AccountsPanel({
   onClose,
   onConnect,
   onDisconnect,
+  onUpdate,
 }: {
   toolkit: IntegrationToolkit;
   accounts: IntegrationConnection[];
@@ -437,17 +423,18 @@ function AccountsPanel({
   onClose: () => void;
   onConnect: () => void;
   onDisconnect: (ids: string[]) => Promise<void>;
+  onUpdate: (id: string, body: { label?: string | null; isDefault?: boolean }) => Promise<void>;
 }) {
-  const [names, rename] = useAccountNames();
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [confirm, setConfirm] = useState<{ ids: string[]; title: string; description: string } | null>(null);
   const { accounts: listed, unfinished } = splitAccounts(accounts);
-  const titleOf = (c: IntegrationConnection) => names[c.id] || `Compte ${listed.indexOf(c) + 1}`;
+  const titleOf = (c: IntegrationConnection) => accountTitle(c, listed.indexOf(c));
 
-  function saveName(id: string) {
-    rename(id, draft.trim());
+  function saveName(c: IntegrationConnection) {
     setEditing(null);
+    const label = draft.trim() || null;
+    if (label !== (c.label ?? null)) void onUpdate(c.id, { label });
   }
 
   return (
@@ -468,6 +455,9 @@ function AccountsPanel({
         </div>
 
         <div className="flex-1 px-5 py-2">
+          {listed.length > 1 && !listed.some((a) => a.isDefault) && (
+            <p className="pt-2 text-[13px] text-ink-3">Plusieurs comptes : choisissez celui que vos Experts utilisent (menu « … », Utiliser par défaut).</p>
+          )}
           <ul className="divide-y">
             {listed.map((a) => {
               const state = accountState(a);
@@ -479,18 +469,18 @@ function AccountsPanel({
                       <form
                         onSubmit={(e) => {
                           e.preventDefault();
-                          saveName(a.id);
+                          saveName(a);
                         }}
                       >
                         <Input
                           autoFocus
                           value={draft}
                           onChange={(e) => setDraft(e.target.value)}
-                          onBlur={() => saveName(a.id)}
+                          onBlur={() => saveName(a)}
                           onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), setEditing(null))}
-                          placeholder={`Compte ${listed.indexOf(a) + 1}`}
+                          placeholder={a.email || a.accountName || `Compte ${listed.indexOf(a) + 1}`}
                           aria-label="Nom du compte"
-                          maxLength={40}
+                          maxLength={80}
                           className="h-10"
                         />
                       </form>
@@ -499,11 +489,23 @@ function AccountsPanel({
                         {title}
                       </p>
                     )}
+                    {a.email && a.email !== title && <p className="truncate text-[13px] text-ink-2">{a.email}</p>}
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-3">
-                      {dateFr(a.createdAt) && <span>Ajouté le {dateFr(a.createdAt)}</span>}
+                      {dateFr(a.createdAt) && (
+                        <span>
+                          Ajouté le {dateFr(a.createdAt)}
+                          {a.addedBy && ` par ${a.addedBy.name || a.addedBy.email}`}
+                        </span>
+                      )}
                       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATE_TONE[state]}`}>
                         {ACCOUNT_STATE_LABELS[state]}
                       </span>
+                      {a.isDefault && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-ok-pale px-2 py-0.5 text-[11px] font-semibold text-ok">
+                          <Star className="h-3 w-3" />
+                          Par défaut
+                        </span>
+                      )}
                     </p>
                   </div>
                   {needsReconnect(a) && (
@@ -525,12 +527,17 @@ function AccountsPanel({
                     <DropdownMenuContent align="end" className="w-52">
                       <DropdownMenuItem
                         onSelect={() => {
-                          setDraft(names[a.id] ?? "");
+                          setDraft(a.label ?? "");
                           setEditing(a.id);
                         }}
                       >
                         <Pencil /> Renommer
                       </DropdownMenuItem>
+                      {!a.isDefault && listed.length > 1 && state === "active" && (
+                        <DropdownMenuItem onSelect={() => void onUpdate(a.id, { isDefault: true })}>
+                          <Star /> Utiliser par défaut
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
                         onSelect={() =>
