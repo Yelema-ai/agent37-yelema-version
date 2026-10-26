@@ -7,10 +7,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Preview as DocPreview } from "@/components/chat/DocumentCards";
 import { docKind } from "@/lib/drive-links";
-import { contentUrl, previewKind, type FileEntry } from "./types";
+import { contentUrl, previewKind, thumbUrl, type FileEntry } from "./types";
 
 // Preview one file in a dialog. Rendering is chosen by extension:
-//  - image  -> <img> (an <img> never executes script, even for same-origin sources)
+//  - image  -> <img> of a reduced copy, the original one click away (an <img> never runs script)
 //  - pdf    -> the browser's PDF viewer in an <iframe>
 //  - text   -> fetched and shown escaped in a <pre>
 //  - sandbox (html/svg) -> a SANDBOXED <iframe> with all permissions stripped, so embedded
@@ -58,10 +58,9 @@ function PreviewBody({ agentId, entry }: { agentId: string; entry: FileEntry }) 
 
   if (kind === "image") {
     return (
-      <div className="flex max-h-[70vh] justify-center overflow-auto rounded-md border bg-secondary/30 p-4">
-        {/* eslint-disable-next-line @next/next/no-img-element -- streamed via our BFF, not a remote asset */}
-        <img src={inline} alt={entry.name} className="max-h-[66vh] max-w-full object-contain" />
-      </div>
+      <a href={inline} target="_blank" rel="noopener" title="Ouvrir en taille réelle" className="flex max-h-[70vh] justify-center overflow-auto rounded-md border bg-secondary/30 p-4">
+        <ReducedImage thumb={thumbUrl(agentId, entry.path, 1600, entry.modified)} original={inline} alt={entry.name} className="max-h-[66vh] max-w-full object-contain" />
+      </a>
     );
   }
 
@@ -93,6 +92,16 @@ function PreviewBody({ agentId, entry }: { agentId: string; entry: FileEntry }) 
       <p>Pas d’aperçu pour ce type de fichier.</p>
       <p>Téléchargez-le pour l’ouvrir.</p>
     </div>
+  );
+}
+
+/** The reduced copy first; the original if the copy cannot be made. */
+export function ReducedImage({ thumb, original, alt, className, onFail }: { thumb: string; original: string; alt: string; className?: string; onFail?: () => void }) {
+  const [src, setSrc] = useState(thumb);
+  useEffect(() => setSrc(thumb), [thumb]);
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- streamed via our BFF, not a remote asset
+    <img src={src} alt={alt} loading="lazy" decoding="async" className={className} onError={() => (src === thumb ? setSrc(original) : onFail?.())} />
   );
 }
 
