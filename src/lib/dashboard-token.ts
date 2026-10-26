@@ -25,7 +25,7 @@ export function sealShare(claims: ShareClaims, key: Buffer | null = shareKey()):
   if (!key) return null;
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const body = Buffer.concat([cipher.update(JSON.stringify({ v: 2, ...claims }), "utf8"), cipher.final()]);
+  const body = Buffer.concat([cipher.update(JSON.stringify({ v: 2, w: claims.w, s: claims.s, n: claims.n }), "utf8"), cipher.final()]);
   return Buffer.concat([iv, cipher.getAuthTag(), body]).toString("base64url");
 }
 

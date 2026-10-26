@@ -24,6 +24,12 @@ describe("jeton de partage d'un tableau", () => {
     assert.equal(openShare("x".repeat(600), KEY), null);
   });
 
+  it("ne garde que le client, le partage et son numéro : ni instance ni profil dans le lien", () => {
+    const token = sealShare({ ...CLAIMS, agentId: "7p5qy2effr", profile: "fatima" } as typeof CLAIMS, KEY)!;
+    assert.deepEqual(openShare(token, KEY), CLAIMS);
+    assert.ok(!/7p5qy2effr|fatima/.test(Buffer.from(token, "base64url").toString("latin1")));
+  });
+
   it("sans clé, le partage est coupé", () => {
     assert.equal(shareKey({}), null);
     assert.equal(sealShare(CLAIMS, null), null);
