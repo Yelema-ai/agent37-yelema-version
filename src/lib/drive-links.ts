@@ -80,8 +80,8 @@ const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"));
  * conversation at the same time. Memory, notes and technical files get no card. A named file missing
  * from a folder the listing covers does not exist (a path the expert made up): no card for it.
  */
-/** Working files (data, code, logs) are the Expert's own kitchen, never a deliverable shown under a reply. */
-const TECHNICAL = /\.(json|jsonl|py|js|mjs|ts|sh|yaml|yml|toml|log|lock|env|ini|cfg|pyc|sqlite|db)$/i;
+/** Working files (data, code, logs, subtitle tracks) are the Expert's own kitchen, never a deliverable shown under a reply. */
+const TECHNICAL = /\.(srt|vtt|json|jsonl|py|js|mjs|ts|sh|yaml|yml|toml|log|lock|env|ini|cfg|pyc|sqlite|db)$/i;
 export const isTechnicalFile = (name: string) => TECHNICAL.test(name);
 
 export function turnDocs(text: string, listing: readonly DriveFile[], written: readonly string[] = []): TurnDoc[] {
