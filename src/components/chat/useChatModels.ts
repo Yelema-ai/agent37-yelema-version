@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { cached, remember } from "@/lib/client-cache";
+import { modelsKey } from "@/components/experts/expert-preload";
 import { profileQuery } from "@/lib/profile-id";
 import type { ModelsResponse } from "@/lib/types";
 import type { ModelGroup, ModelOption } from "./types";
@@ -16,10 +18,10 @@ export interface ChatModelsState {
 // composer's model switcher. Failures degrade to an empty list (the agent default still runs).
 export function useChatModels(agentId: string, profile: string | null = null): ChatModelsState {
   const q = profileQuery(profile);
-  const [state, setState] = useState<ChatModelsState>({
-    groups: [],
-    defaultModel: null,
-    loading: true,
+  // Read ahead by the menu (expert-preload): the switcher is ready when the page opens.
+  const [state, setState] = useState<ChatModelsState>(() => {
+    const kept = cached<ModelsResponse>(modelsKey(agentId, profile));
+    return kept ? toState(kept) : { groups: [], defaultModel: null, loading: true };
   });
 
   useEffect(() => {
@@ -27,27 +29,7 @@ export function useChatModels(agentId: string, profile: string | null = null): C
     apiFetch<ModelsResponse>(`/api/agents/${agentId}/chat/models${q}`)
       .then((res) => {
         if (cancelled) return;
-        const byProvider = new Map<string, ModelOption[]>();
-        for (const m of res.data ?? []) {
-          // Current builds report the provider slug as `owned_by`; the older metered build used
-          // `provider`. Group + send whichever the instance provides.
-          const provider = m.owned_by ?? m.provider ?? "model";
-          const arr = byProvider.get(provider) ?? [];
-          arr.push({ id: m.id, label: m.label, provider });
-          byProvider.set(provider, arr);
-        }
-        // Prefer the explicit default; fall back to whichever model is flagged is_default.
-        const defaultModel = res.default_model ?? (res.data ?? []).find((m) => m.is_default)?.id ?? null;
-        const groups = [...byProvider.entries()].map(([provider, models]) => ({ provider, models }));
-        // Open the menu on the default model's provider: float the group that owns it to the top.
-        if (defaultModel) {
-          groups.sort((a, b) => {
-            const aHas = a.models.some((m) => m.id === defaultModel) ? 0 : 1;
-            const bHas = b.models.some((m) => m.id === defaultModel) ? 0 : 1;
-            return aHas - bHas;
-          });
-        }
-        setState({ groups, defaultModel, loading: false });
+        setState(toState(remember(modelsKey(agentId, profile), res)));
       })
       .catch(() => {
         if (!cancelled) setState((s) => ({ ...s, loading: false }));
@@ -55,7 +37,31 @@ export function useChatModels(agentId: string, profile: string | null = null): C
     return () => {
       cancelled = true;
     };
-  }, [agentId, q]);
+  }, [agentId, profile, q]);
 
   return state;
+}
+
+function toState(res: ModelsResponse): ChatModelsState {
+  const byProvider = new Map<string, ModelOption[]>();
+  for (const m of res.data ?? []) {
+    // Current builds report the provider slug as `owned_by`; the older metered build used
+    // `provider`. Group + send whichever the instance provides.
+    const provider = m.owned_by ?? m.provider ?? "model";
+    const arr = byProvider.get(provider) ?? [];
+    arr.push({ id: m.id, label: m.label, provider });
+    byProvider.set(provider, arr);
+  }
+  // Prefer the explicit default; fall back to whichever model is flagged is_default.
+  const defaultModel = res.default_model ?? (res.data ?? []).find((m) => m.is_default)?.id ?? null;
+  const groups = [...byProvider.entries()].map(([provider, models]) => ({ provider, models }));
+  // Open the menu on the default model's provider: float the group that owns it to the top.
+  if (defaultModel) {
+    groups.sort((a, b) => {
+      const aHas = a.models.some((m) => m.id === defaultModel) ? 0 : 1;
+      const bHas = b.models.some((m) => m.id === defaultModel) ? 0 : 1;
+      return aHas - bHas;
+    });
+  }
+  return { groups, defaultModel, loading: false };
 }

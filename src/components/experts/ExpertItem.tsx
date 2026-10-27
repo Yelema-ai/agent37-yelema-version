@@ -5,6 +5,7 @@ import { useExpertActivity } from "@/components/activity/hooks";
 import { expertKey } from "@/lib/activity";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { agentTabPath } from "@/lib/expert-tabs";
+import { preloadExpert } from "@/components/experts/expert-preload";
 import type { Expert } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +54,10 @@ export function ExpertItem({
         e.preventDefault();
         bell.open(waiting);
       }}
+      // A finger or a pointer on its way: read the Expert's page now, ahead of the menu's own turn.
+      onPointerEnter={() => void preloadExpert(expert.agentId, expert.profileId)}
+      onTouchStart={() => void preloadExpert(expert.agentId, expert.profileId)}
+      onFocus={() => void preloadExpert(expert.agentId, expert.profileId)}
       title={hint ? `${expert.displayName} · ${hint}` : expert.displayName}
       className={cn(
         "flex min-h-12 items-center gap-2.5 rounded-[11px] px-2 text-sm font-semibold transition-colors",

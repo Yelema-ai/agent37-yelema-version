@@ -10,6 +10,7 @@ import { usePathname } from "next/navigation";
 import { ActivityProvider } from "@/components/activity/ActivityProvider";
 import { Sidebar } from "@/components/app/Sidebar";
 import { NavProgress } from "@/components/app/NavProgress";
+import { ReadAhead } from "@/components/app/ReadAhead";
 import { TopBar } from "@/components/app/TopBar";
 import { DeployStatusProvider, UpdateStrip } from "@/components/app/DeployStatus";
 import { ComputerProvider } from "@/components/experts/ComputerProvider";
@@ -96,6 +97,7 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
         <Suspense fallback={null}>
           <NavProgress />
         </Suspense>
+        <ReadAhead />
         <DeliverableWatcher />
         <SearchDialog />
         <div

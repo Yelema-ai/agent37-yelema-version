@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from "sonner";
 import { useChatPresence } from "@/components/activity/hooks";
 import { apiFetch } from "@/lib/api";
+import { cached, remember } from "@/lib/client-cache";
+import { sessionsKey } from "@/components/experts/expert-preload";
 import { mergeRail, movedUpstream } from "@/lib/chat-rail";
 import { profileQuery } from "@/lib/profile-id";
 import type { MergedAgent } from "@/lib/types";
@@ -82,10 +84,11 @@ export function ChatProvider({
 }) {
   // Every chat route takes the expert as ?profile=; threads of one expert are invisible to another.
   const q = profileQuery(profile);
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  // Read ahead by the menu (expert-preload): the rail paints at once, the fresh read follows.
+  const [sessions, setSessions] = useState<ChatSession[]>(() => cached<ChatSession[]>(sessionsKey(agentId, profile)) ?? []);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(urlSessionId);
   const [composerFocusToken, setComposerFocusToken] = useState(0);
-  const [loadingSessions, setLoadingSessions] = useState(true);
+  const [loadingSessions, setLoadingSessions] = useState(() => !cached(sessionsKey(agentId, profile)));
 
   // Adopt the thread from the URL whenever it changes — a rail click, Back/Forward, or a refresh.
   // Done during render (React's "adjust state when a prop changes" pattern) so there's no extra
@@ -126,6 +129,7 @@ export function ChatProvider({
       try {
         const res = await apiFetch<{ sessions: ChatSession[] }>(`/api/agents/${agentId}/chat/sessions${q}`);
         if (seq !== loadSeq.current) return;
+        remember(sessionsKey(agentId, profile), res.sessions);
         if (movedUpstream(serverRail.current, res.sessions, openRef.current)) setThreadVersion((v) => v + 1);
         serverRail.current = res.sessions;
         setSessions((prev) => mergeRail(res.sessions, prev));
@@ -145,13 +149,14 @@ export function ChatProvider({
         }
       }
     },
-    [agentId, q]
+    [agentId, profile, q]
   );
 
   useEffect(() => {
     serverRail.current = null;
-    setSessions([]);
-    setLoadingSessions(true);
+    const kept = cached<ChatSession[]>(sessionsKey(agentId, profile));
+    setSessions(kept ?? []);
+    setLoadingSessions(!kept);
     void reloadSessions(3);
     const tick = () => {
       if (document.visibilityState === "visible") void reloadSessions();

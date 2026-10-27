@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, readApiError } from "@/lib/api";
 import { cached, remember } from "@/lib/client-cache";
+import { finishTiming, keepLast, mark, startTiming, type TurnTiming } from "@/lib/chat-timing";
 import { chatFailureMessage } from "@/lib/chat-errors";
 import { batchQueued, insertBefore, isSteer, steerText, unreadSteerCount } from "@/lib/chat-queue";
 import { profileQuery } from "@/lib/profile-id";
@@ -132,6 +133,9 @@ interface LiveRun {
   sent?: { role: "user"; content: string; at: number };
   /** The text written before each tool: a step, taken out of the reply. */
   narration: string[];
+  /** Where this turn's wait went (absent for a reattached run): see lib/chat-timing. */
+  timing?: TurnTiming;
+  model?: string | null;
 }
 
 interface Queued {
@@ -294,6 +298,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
           (event, data) => {
             switch (event) {
               case "response.created": {
+                if (run.timing) mark(run.timing, "created", performance.now());
                 run.responseId = str(data.id) ?? run.responseId;
                 const sid = str(data.session_id);
                 if (!run.sessionId && sid) {
@@ -313,11 +318,13 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
                 break;
               }
               case "response.reasoning.delta": {
+                if (run.timing) mark(run.timing, "first", performance.now());
                 const t = str(data.text);
                 if (t) patchRun(run, (m) => ({ ...m, thinking: (m.thinking ?? "") + t }));
                 break;
               }
               case "response.output_text.delta": {
+                if (run.timing) mark(run.timing, "first", performance.now());
                 const t = str(data.text);
                 if (t) patchRun(run, (m) => ({ ...m, content: m.content + t }));
                 break;
@@ -327,6 +334,10 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
                 const tool = str(data.tool) ?? "tool";
                 const args = data.arguments && typeof data.arguments === "object" ? (data.arguments as Record<string, unknown>) : undefined;
                 const generating = event === "response.tool_call.generating";
+                if (run.timing) {
+                  mark(run.timing, "first", performance.now());
+                  if (!generating) run.timing.tools += 1;
+                }
                 const said = run.assistant.content.trim();
                 if (said) run.narration.push(said);
                 patchRun(run, (m) => ({ ...m, content: "", tools: openTool(m.tools, { tool, status: "running", phrase: toolPhrase(tool, args), generating }) }));
@@ -365,7 +376,10 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
         while (run.steers.size) await Promise.allSettled([...run.steers]);
         run.done = true;
         // No terminal event: the turn may still run upstream, the tracker follows it (no-op once stopped).
-        if (sawTerminal) turns.end(run, streamError ? "failed" : "completed", streamError ?? undefined);
+        if (sawTerminal) {
+          turns.end(run, streamError ? "failed" : "completed", streamError ?? undefined);
+          reportTiming(run, profile, streamError ? "failed" : "completed");
+        }
         else turns.detach(run);
         // Sweep any still-running tool spinners, and put a failure into the bubble itself so it
         // shows wherever the thread is next viewed — covers terminal events and a bare stream-end.
@@ -399,7 +413,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
         if (next.length) startTurnRef.current(run.sessionId, next);
       }
     },
-    [patchRun, isViewed, forgetRun, refreshHistory, turns]
+    [patchRun, isViewed, forgetRun, refreshHistory, turns, profile]
   );
 
   // Reattach to a turn that outlived this component (page reload / workspace re-entry): register
@@ -565,7 +579,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
       const startedAt = Date.now();
       const users = batch.map((q): ChatMessage => ({ ...q.user, at: startedAt, queued: undefined, steered: undefined }));
       const assistant: ChatMessage = { id: uid("a"), role: "assistant", content: "", tools: [] };
-      const run: LiveRun = { sessionId, responseId: null, abort: new AbortController(), users, assistant, done: false, steered: [], steers: new Set(), queue: [], sent: { role: "user", content: text, at: startedAt }, narration: [] };
+      const run: LiveRun = { sessionId, responseId: null, abort: new AbortController(), users, assistant, done: false, steered: [], steers: new Set(), queue: [], sent: { role: "user", content: text, at: startedAt }, narration: [], timing: startTiming(performance.now()), model: settings.model ?? null };
       turns.start(run);
       if (sessionId) {
         runsRef.current.set(sessionId, run);
@@ -606,6 +620,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
           if (run.abort.signal.aborted) throw new DOMException("Arrêté", "AbortError");
         }
 
+        if (run.timing) mark(run.timing, "accepted", performance.now());
         if (!res.ok || !res.body) {
           if (res.status === 409) {
             throw new Error("Votre expert termine sa réponse précédente. Patientez un instant, puis réessayez.");
@@ -621,7 +636,10 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
         // thread rediscovers it from the session's active_response_id and reattaches.
         forgetRun(run);
         const aborted = (e as Error).name === "AbortError";
-        if (!aborted) turns.end(run, "failed", chatFailureMessage((e as Error).message, ""));
+        if (!aborted) {
+          turns.end(run, "failed", chatFailureMessage((e as Error).message, ""));
+          reportTiming(run, profile, "failed");
+        }
         const next = !aborted && run.sessionId ? run.queue.splice(0) : [];
         // consume() may already have handed the queue to a newer turn: leave its state alone.
         const current = run.sessionId ? runsRef.current.get(run.sessionId) : newChatRunRef.current;
@@ -736,4 +754,28 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
   }, []);
 
   return { messages, isStreaming, loadingHistory, error, send, stop, killRun, unqueue };
+}
+
+// The turn's times go to the host's logs (one line, see /api/metrics/chat) and stay in this
+// browser, the last 50, under `yelema:latence`. Once per turn; never in the member's way.
+const TIMING_STORE = "yelema:latence";
+function reportTiming(run: LiveRun, profile: string | null, outcome: "completed" | "failed") {
+  const t = run.timing;
+  if (!t) return;
+  run.timing = undefined;
+  const record = finishTiming(t, performance.now(), { at: new Date(), profile, model: run.model ?? null, outcome });
+  try {
+    const kept = JSON.parse(localStorage.getItem(TIMING_STORE) ?? "[]");
+    localStorage.setItem(TIMING_STORE, JSON.stringify(keepLast(Array.isArray(kept) ? kept : [], record)));
+  } catch {
+    // Private window or full storage: the server's line is enough.
+  }
+  try {
+    const body = new Blob([JSON.stringify(record)], { type: "application/json" });
+    if (!navigator.sendBeacon?.("/api/metrics/chat", body)) {
+      void fetch("/api/metrics/chat", { method: "POST", body, keepalive: true }).catch(() => {});
+    }
+  } catch {
+    // Measuring must never break a chat.
+  }
 }
