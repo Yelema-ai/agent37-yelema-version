@@ -217,8 +217,8 @@ export function ChannelsTab({
 function Header() {
   return (
     <header className="space-y-1">
-      <h2 className="text-lg font-semibold">Messageries</h2>
-      <p className="text-sm text-muted-foreground">Écrivez à vos Experts depuis les messageries que vous utilisez déjà.</p>
+      <h2 className="text-lg font-semibold">Parler à vos Experts</h2>
+      <p className="text-sm text-muted-foreground">Depuis les messageries que vous utilisez déjà.</p>
     </header>
   );
 }
