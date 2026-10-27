@@ -84,9 +84,9 @@ const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"));
 const TECHNICAL = /\.(srt|vtt|json|jsonl|py|js|mjs|ts|sh|yaml|yml|toml|log|lock|env|ini|cfg|pyc|sqlite|db)$/i;
 export const isTechnicalFile = (name: string) => TECHNICAL.test(name);
 
-/** Never a card nor a link in the chat: working files, notes (.md) and anything in the memory folder. */
+/** Never a card nor a link in the chat: working files, notes (.md, .txt: Leslie, 27/10) and anything in the memory folder. */
 export const isHiddenInChat = (path: string) =>
-  isTechnicalFile(path) || /\.(md|markdown)$/i.test(path) || path.split("/").slice(0, -1).some(isMemoryFolder);
+  isTechnicalFile(path) || /\.(md|markdown|txt)$/i.test(path) || path.split("/").slice(0, -1).some(isMemoryFolder);
 
 export function turnDocs(text: string, listing: readonly DriveFile[], written: readonly string[] = []): TurnDoc[] {
   const byPath = new Map(listing.map((f) => [normDrivePath(f.path), f]));

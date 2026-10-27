@@ -59,4 +59,5 @@ test("a note (.md) or a memory file named in the reply or by a MEDIA tag gets no
   const docs = turnDocs(text, [], ["~/Livrables/Koffi/notes.md", "~/Livrables/Koffi/Mémoire/suivi.docx", "~/Livrables/Koffi/deck.pdf"]);
   assert.deepEqual(docs.map((d) => d.name), ["affiche.png", "deck.pdf"]);
   assert.ok(isHiddenInChat("~/Livrables/Koffi/brief.MD") && !isHiddenInChat("~/Livrables/Koffi/deck.pdf"));
+  assert.ok(isHiddenInChat("~/Livrables/Koffi/compte-rendu.txt") && isHiddenInChat("Livrables/Koffi/notes.TXT"));
 });
