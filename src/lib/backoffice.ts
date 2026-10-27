@@ -376,6 +376,9 @@ export const backoffice = {
   forgot: (email: string) => call<{ ok: true }>("/app/auth/forgot", { method: "POST", body: { email } }),
   logout: (token: string) => call<{ ok: true }>("/app/auth/logout", { method: "POST", token }),
 
+  // Whether Yelema's team is shipping an update right now (switched on before a push, off after).
+  // Public and per workspace; a short timeout: it is asked every minute by every open page.
+  platformStatus: () => call<{ maintenance?: boolean }>("/app/platform-status", { timeoutMs: 4_000 }),
   me: (token: string) => call<BoMe>("/app/me", { token }),
   updateMe: (token: string, patch: MePatch) => call<BoMe>("/app/me", { method: "PATCH", token, body: patch }),
   // The member's own photo (multipart, field `file`): the back office checks the type and the size,

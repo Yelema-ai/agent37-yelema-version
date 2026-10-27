@@ -10,6 +10,7 @@ import { usePathname } from "next/navigation";
 import { ActivityProvider } from "@/components/activity/ActivityProvider";
 import { Sidebar } from "@/components/app/Sidebar";
 import { TopBar } from "@/components/app/TopBar";
+import { DeployStatusProvider, UpdateStrip } from "@/components/app/DeployStatus";
 import { ComputerProvider } from "@/components/experts/ComputerProvider";
 import { ExpertsProvider } from "@/components/experts/ExpertsProvider";
 import type { InitialExperts } from "@/components/experts/useExperts";
@@ -86,6 +87,7 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
 
   return (
     <ExpertsProvider initial={initialExperts}>
+      <DeployStatusProvider>
       <ActivityProvider>
         {/* The call lives above the pages: it goes on, folded or not, while the member navigates. */}
         <CallProvider>
@@ -117,6 +119,7 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
               fichiers gardent leur barre de saisie en bas, les pages longues défilant à l'intérieur. */}
           <main className="flex h-screen min-w-0 flex-col overflow-y-auto">
             <TopBar onMenu={() => setDrawerOpen(true)} />
+            <UpdateStrip />
             <CallStrip />
             <ComputerProvider key={computerAgentId ?? "none"} agentId={computerAgentId}>
               {children}
@@ -126,6 +129,7 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
         </div>
         </CallProvider>
       </ActivityProvider>
+      </DeployStatusProvider>
     </ExpertsProvider>
   );
 }
