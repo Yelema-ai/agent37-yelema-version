@@ -20,7 +20,7 @@ import { DocumentCards, useDriveListing } from "./DocumentCards";
 import { Markdown } from "./Markdown";
 import { cleanReply } from "@/lib/chat-errors";
 import { mediaTags } from "@/lib/media-tags";
-import { LiveStep, StepsList } from "./ChatSteps";
+import { LiveWait, StepsList } from "./ChatSteps";
 import type { ChatMessage, MessageAttachment } from "./types";
 
 const PAGE = 80;
@@ -88,20 +88,6 @@ function RoutineBrief({ content }: { content: string }) {
       </button>
       {open && <div className="whitespace-pre-wrap break-words border-t border-line px-3 py-2 text-[13px] text-ink-2">{routineRunText(content)}</div>}
     </div>
-  );
-}
-
-function TypingDots() {
-  return (
-    <span className="inline-flex items-center gap-1 py-2 text-ink-3">
-      {[0, 150, 300].map((d) => (
-        <span
-          key={d}
-          className="h-1.5 w-1.5 animate-pulse rounded-full bg-current"
-          style={{ animationDelay: `${d}ms` }}
-        />
-      ))}
-    </span>
   );
 }
 
@@ -255,7 +241,8 @@ export function ChatMessages({
             {face && <ExpertAvatar expert={face} size="xs" className="mt-0.5" />}
             <div className="min-w-0 max-w-full flex-1 text-[15px] text-ink">
               {m.thinking && <ThinkingBlock content={m.thinking} live={live && !m.content} />}
-              {working ? <LiveStep tools={tools} /> : !live && tools.length > 0 && <StepsList tools={tools} />}
+              {(working || (showDots && !updating)) && <LiveWait tools={tools} name={face?.displayName ?? null} since={messages.slice(0, i).findLast((x) => x.role === "user")?.at} />}
+              {!live && tools.length > 0 && <StepsList tools={tools} />}
               {routineThread && !live && isSilentRun(m.content) ? (
                 <p className="text-sm italic text-ink-3">{SILENT_RUN_LABEL}</p>
               ) : m.content && !working ? (
@@ -266,8 +253,6 @@ export function ChatMessages({
                   <UpdateSpinner />
                   {face ? `${face.displayName} reprend` : "Votre Expert reprend"} dans un instant, votre message est bien reçu.
                 </p>
-              ) : showDots ? (
-                <TypingDots />
               ) : null}
               {!live && m.content && <DocumentCards agentId={agentId} docs={turnDocs(cleanReply(m.content), listing, [...(m.files ?? []), ...mediaTags(m.content).paths])} />}
               {!live && m.content && !(routineThread && isSilentRun(m.content)) && <CopyReply text={cleanReply(m.content)} />}
