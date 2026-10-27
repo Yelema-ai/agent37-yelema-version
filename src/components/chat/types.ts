@@ -33,6 +33,8 @@ export interface ChatMessage {
   queued?: boolean;
   /** Added to the reply in progress (steer): part of that reply, not a new question. */
   steered?: boolean;
+  /** The deliverables this reply's own turn wrote (home-relative), as the runtime's history reports them. */
+  files?: string[];
 }
 
 export interface ModelOption {

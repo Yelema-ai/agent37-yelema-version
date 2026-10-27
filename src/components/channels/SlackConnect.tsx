@@ -8,6 +8,7 @@ import { isChannelConnected, type MessagingPlatform } from "@/lib/channels";
 import { Button } from "@/components/ui/button";
 import { ChannelPanelHeader, FieldInput } from "@/components/channels/ChannelCredentialsForm";
 import { useAsyncAction } from "@/components/useAsyncAction";
+import { DisconnectButton } from "@/components/channels/DisconnectButton";
 
 // Slack in Socket Mode (outbound, no public address): the member creates the app from the manifest
 // below, installs it, and hands us its two tokens plus the member ids allowed to talk to it. Scopes and
@@ -125,9 +126,7 @@ export function SlackConnect({ agentId, agentName, channel, onBack }: { agentId:
           {connected ? "Enregistrer" : "Connecter Slack"}
         </Button>
         {channel.configured && (
-          <Button variant="ghost" onClick={disconnect} disabled={busy}>
-            Déconnecter
-          </Button>
+          <DisconnectButton name="Slack" onConfirm={disconnect} disabled={busy} />
         )}
       </div>
     </div>

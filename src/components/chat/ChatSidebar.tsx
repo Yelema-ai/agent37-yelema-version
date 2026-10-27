@@ -1,19 +1,20 @@
 "use client";
 
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useConversationStatus } from "@/components/activity/hooks";
-import { CheckCheck, ChevronRight, Copy, Loader2, MoreHorizontal, Pencil, Plus, Repeat, RotateCw, Search, Trash2, X } from "lucide-react";
+import { Archive, CheckCheck, ChevronRight, Link2, Loader2, MoreHorizontal, Pencil, Pin, PinOff, Plus, Repeat, RotateCw, Search, Trash2, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNotifications } from "@/components/activity/ActivityProvider";
 import { convKey } from "@/lib/activity";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useChatMarks } from "@/components/conversations/useChatMarks";
+import { arrange } from "@/lib/chat-marks";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { conversationText } from "@/lib/conversation-text";
-import { expertDisplayName } from "@/lib/experts";
+import { agentTabPath } from "@/lib/expert-tabs";
+import { copyLater } from "@/lib/clipboard";
 import { profileQuery } from "@/lib/profile-id";
-import type { SessionDetail } from "@/lib/types";
 import { useChatContext } from "./ChatProvider";
 import type { ChatSession } from "./types";
 
@@ -34,6 +35,16 @@ function shortWhen(at: number): string {
 // Search ignores case and accents (« reference » finds « Référencement »).
 const fold = (t: string) => t.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
+const FOLDED_KEY = "yelema:rail-folded";
+function readFolded(): Record<string, boolean> {
+  try {
+    const v = JSON.parse(localStorage.getItem(FOLDED_KEY) ?? "{}") as unknown;
+    return v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([, b]) => typeof b === "boolean")) : {};
+  } catch {
+    return {};
+  }
+}
+
 // Conversations grouped Aujourd'hui / Hier / Cette semaine / Plus ancien by last activity.
 function groupSessions(sessions: ChatSession[]): { label: string; items: ChatSession[] }[] {
   const startOfToday = new Date();
@@ -53,6 +64,7 @@ function groupSessions(sessions: ChatSession[]): { label: string; items: ChatSes
   return groups.filter((g) => g.items.length > 0);
 }
 
+// No « Archivées » here (Leslie, 25/10): archived conversations are found under Toutes les conversations.
 type Filter = "all" | "unread" | "routines";
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "Tout" },
@@ -92,20 +104,49 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const pendingDelete = sessions.find((s) => s.session_id === pendingDeleteId) ?? null;
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const [folded, setFolded] = useState<Record<string, boolean>>({ "Plus ancien": true });
+  // A group the person folded stays folded (kept in this browser); « Plus ancien » starts folded.
+  const [folded, setFolded] = useState<Record<string, boolean>>({});
+  useEffect(() => setFolded(readFolded()), []);
+  const setFold = (label: string, shut: boolean) =>
+    setFolded((prev) => {
+      const next = { ...prev, [label]: shut };
+      try {
+        localStorage.setItem(FOLDED_KEY, JSON.stringify(next));
+      } catch {
+        /* storage off: the choice lasts for this visit */
+      }
+      return next;
+    });
   const unreadIds = sessions.filter((s) => statusOf(s.session_id) === "unread").map((s) => s.session_id);
   const unreadCount = unreadIds.length;
   const { markRead } = useNotifications();
+  const { marks, mark } = useChatMarks();
+  const keyOf = (s: ChatSession) => convKey(agentId, profile, s.session_id);
+  const pinnedIds = new Set(marks.pinned);
+  // Archived conversations leave the rail (Toutes les conversations keeps them under « Archivées »); pinned
+  // ones head it, above the dates.
+  const archivedIds = new Set(marks.archived);
   const groups = useMemo(() => {
     const q = fold(query.trim());
     let found = q ? sessions.filter((s) => fold(s.routine ?? s.title ?? "Nouvelle conversation").includes(q)) : sessions;
     if (filter === "unread") found = found.filter((s) => statusOf(s.session_id) === "unread");
     if (filter === "routines") found = found.filter((s) => s.routine);
-    return groupSessions(found);
-  }, [sessions, query, filter, statusOf]);
+    const { pinned, rest } = arrange(found, (s) => convKey(agentId, profile, s.session_id), marks);
+    return [...(pinned.length ? [{ label: "Épinglées", items: pinned }] : []), ...groupSessions(rest)];
+  }, [sessions, query, filter, statusOf, marks, agentId, profile]);
+
+  function archive(s: ChatSession) {
+    const key = keyOf(s);
+    mark(key, "archived", true);
+    toast("Conversation archivée", {
+      description: "Elle reste dans Toutes les conversations, sous Archivées.",
+      action: { label: "Annuler", onClick: () => mark(key, "archived", false) },
+    });
+  }
   // A search or a filter shows everything it finds, and the open thread is never hidden in a folded group.
+  // Only the default fold of « Plus ancien » gives way to the open thread; a fold the person chose holds.
   const isFolded = (g: { label: string; items: ChatSession[] }) =>
-    !query.trim() && filter === "all" && !!folded[g.label] && !g.items.some((s) => s.session_id === highlightedSessionId);
+    !query.trim() && filter === "all" && (folded[g.label] ?? g.label === "Plus ancien") && (g.label in folded || !g.items.some((s) => s.session_id === highlightedSessionId));
   const pick = (sessionId: string) => {
     selectSession(sessionId);
     onNavigate?.();
@@ -117,16 +158,30 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [draft, setDraft] = useState("");
   const skipBlur = useRef(false);
 
-  // « Copier la conversation »: the whole thread as text, to paste to a colleague or a developer.
-  // A shareable read-only link needs the back office (an expert's space is its owner's only).
-  async function copyConversation(s: ChatSession) {
+  // « Copier le lien »: the conversation's own address (?session=), so its owner reopens it later and
+  // keeps writing. With sharing on, the link also carries a sealed token (c=, 30 days, see
+  // conversation-token.ts): a signed-in colleague of the same company who opens it is sent to the
+  // read-only view instead of a 404. Without it, the link still works for the owner.
+  async function copyLink(s: ChatSession) {
+    const link = new URL(`${agentTabPath(agentId, "chat", profile)}?session=${encodeURIComponent(s.session_id)}`, window.location.origin);
+    const mint = apiFetch<{ path: string; days: number }>(
+      `/api/agents/${agentId}/chat/sessions/${s.session_id}/share${profileQuery(profile)}`,
+      { method: "POST", body: JSON.stringify({ title: s.routine ?? s.title ?? "" }) }
+    ).then(
+      (res) => ({ token: new URL(res.path, window.location.origin).searchParams.get("c"), days: res.days }),
+      () => ({ token: null, days: 0 })
+    );
+    // Started during the click: see copyLater.
+    const url = mint.then(({ token }) => {
+      if (token) link.searchParams.set("c", token);
+      return link.toString();
+    });
     try {
-      const res = await apiFetch<SessionDetail>(`/api/agents/${agentId}/chat/sessions/${s.session_id}${profileQuery(profile)}`);
-      const expert = profile ? expertDisplayName(profile) : "L’Expert";
-      await navigator.clipboard.writeText(conversationText(s.routine ?? s.title ?? "Conversation", expert, res.history ?? []));
-      toast.success("Conversation copiée. Collez-la où vous voulez.");
+      await copyLater(url);
+      const { token, days } = await mint;
+      toast.success(token ? `Lien copié. Il rouvre cette conversation, et vos collègues la lisent pendant ${days} jours.` : "Lien copié. Il rouvre cette conversation.");
     } catch {
-      toast.error("La conversation n’a pas pu être copiée. Réessayez.");
+      toast.error("Le lien n’a pas pu être copié. Réessayez.");
     }
   }
 
@@ -195,11 +250,11 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           {/* The date gives way to the row's actions on hover. */}
           <span className="shrink-0 text-[11.5px] font-normal tabular-nums text-ink-3 group-hover:invisible group-has-[[data-state=open]]:invisible pointer-coarse:mr-7 pointer-coarse:group-hover:visible pointer-coarse:group-has-[[data-state=open]]:visible">{shortWhen(activeAt(s))}</span>
         </button>
-        {/* Renommer, Copier la conversation and Supprimer behind « … »: on hover with a mouse, always shown on a touch screen. */}
+        {/* Renommer, Épingler, Copier, Archiver and Supprimer behind « … »: on hover with a mouse, always shown on a touch screen. */}
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={`Actions pour ${label}`}
-            title="Renommer, copier ou supprimer"
+            title="Renommer, épingler, copier, archiver ou supprimer"
             className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-ink-3 opacity-0 transition-opacity hover:bg-soft-2 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100"
           >
             <MoreHorizontal className="h-4 w-4" />
@@ -208,8 +263,22 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
             <DropdownMenuItem onSelect={() => startRename(s.session_id, s.title)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
               <Pencil className="size-4" /> Renommer
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void copyConversation(s)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
-              <Copy className="size-4" /> Copier la conversation
+            <DropdownMenuItem onSelect={() => mark(keyOf(s), "pinned", !pinnedIds.has(keyOf(s)))} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
+              {pinnedIds.has(keyOf(s)) ? (
+                <>
+                  <PinOff className="size-4" /> Désépingler
+                </>
+              ) : (
+                <>
+                  <Pin className="size-4" /> Épingler
+                </>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void copyLink(s)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
+              <Link2 className="size-4" /> Copier le lien
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => (archivedIds.has(keyOf(s)) ? mark(keyOf(s), "archived", false) : archive(s))} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm">
+              <Archive className="size-4" /> {archivedIds.has(keyOf(s)) ? "Désarchiver" : "Archiver"}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setPendingDeleteId(s.session_id)} className="gap-2.5 rounded-[10px] px-2.5 py-2 text-sm text-ko">
               <Trash2 className="size-4" /> Supprimer
@@ -238,18 +307,6 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
             className="grid h-8 w-8 place-items-center rounded-lg text-ink-3 hover:bg-soft hover:text-ink disabled:opacity-60"
           >
             <RotateCw className={`h-4 w-4${refreshingSessions ? " animate-spin" : ""}`} />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              startNewChat();
-              onNavigate?.();
-            }}
-            aria-label="Nouvelle conversation"
-            title="Nouvelle conversation"
-            className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-on-brand hover:opacity-90"
-          >
-            <Plus className="h-4 w-4" />
           </button>
           </span>
         </div>
@@ -286,7 +343,7 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
         )}
 
         {sessions.length > 0 && (
-          <div role="group" aria-label="Filtrer les conversations" className="mx-1 mb-2 flex gap-1.5 border-b border-line pb-2.5">
+          <div role="group" aria-label="Filtrer les conversations" className="mx-1 mb-2 flex flex-wrap gap-1.5 border-b border-line pb-2.5">
             {FILTERS.map(({ id, label }) => (
               <button
                 key={id}
@@ -294,7 +351,7 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                 onClick={() => setFilter(id)}
                 aria-pressed={filter === id}
                 className={cn(
-                  "h-8 shrink-0 whitespace-nowrap rounded-full border px-2.5 text-[12.5px] font-semibold transition-colors",
+                  "h-8 whitespace-nowrap rounded-full border px-2.5 text-[12.5px] font-semibold transition-colors",
                   filter === id ? "border-brand/40 bg-tint text-brand-ink" : "border-line text-ink-2 hover:bg-soft"
                 )}
               >
@@ -330,7 +387,7 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                 <div key={g.label} className="mb-1.5">
                   <button
                     type="button"
-                    onClick={() => setFolded({ ...folded, [g.label]: !shut })}
+                    onClick={() => setFold(g.label, !shut)}
                     aria-expanded={!shut}
                     className="flex min-h-9 w-full items-center gap-1.5 rounded-[10px] px-2 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3 hover:bg-soft"
                   >

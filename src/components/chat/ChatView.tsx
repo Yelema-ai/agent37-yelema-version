@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import { ComputerButton, ComputerDialog, ComputerPanel } from "@/components/experts/ExpertComputer";
 import { DashboardProvider } from "@/components/experts/DashboardProvider";
-import { DashboardButton, DashboardPanel, DashboardDialog, ShareDashboardModal } from "@/components/experts/ExpertDashboard";
+import { DashboardButton, DashboardPanel, DashboardDialog, ShareDashboardModal, SidePanelSync } from "@/components/experts/ExpertDashboard";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { expertDisplayName } from "@/lib/experts";
@@ -13,6 +13,7 @@ import { DropOverlay } from "@/components/DropOverlay";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessages } from "./ChatMessages";
 import { ChatSessionsPanel } from "./ChatSessionsPanel";
+import { setChatFull, setChatListHidden, useChatFull, useChatListHidden, useChatSidePanel } from "./chat-layout";
 import { useChatContext } from "./ChatProvider";
 import { useChat } from "./useChat";
 import { useChatAttachments } from "./useChatAttachments";
@@ -79,20 +80,48 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
   }, [initialMessage, activeSessionId, send]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   // Whether the user is pinned near the bottom — controls whether new tokens auto-scroll.
   const stickRef = useRef(true);
+  // The distance from the bottom kept while earlier messages load above; dropped as soon as the user scrolls.
+  const holdRef = useRef<number | null>(null);
 
   const onScroll = () => {
     const el = scrollRef.current;
     if (el) stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
+  const release = () => {
+    holdRef.current = null;
+  };
 
-  // Follow the stream only when the user is already near the bottom.
+  // A conversation opens on its last message.
   useEffect(() => {
-    if (!stickRef.current) return;
+    stickRef.current = true;
+    holdRef.current = null;
+  }, [activeSessionId]);
+
+  const settle = useCallback(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, loadingHistory]);
+    if (!el) return;
+    if (stickRef.current) el.scrollTop = el.scrollHeight;
+    else if (holdRef.current != null) el.scrollTop = el.scrollHeight - holdRef.current;
+  }, []);
+  useEffect(settle, [messages, loadingHistory, settle]);
+  // Replies, cards and pictures lay out after the render: follow them too.
+  const hasMessages = messages.length > 0;
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(settle);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [settle, hasMessages, loadingHistory]);
+  const showEarlier = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickRef.current = false;
+    holdRef.current = el.scrollHeight - el.scrollTop;
+  }, []);
 
   const showWelcome = !loadingHistory && messages.length === 0;
   // Memoized so the per-token re-renders during streaming don't re-scan the thread list.
@@ -109,14 +138,16 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
     [experts, agentId, profile]
   );
   const instance = useMemo(() => agents.find((x) => x.agent37_id === agentId) ?? null, [agents, agentId]);
-  // The expert's name when the chat targets one, the instance's otherwise.
-  const agentName = profile
-    ? (expert?.displayName ?? expertDisplayName(profile))
-    : instance?.name?.trim() || agentId;
+  // The expert's name when the chat targets one; the company chat otherwise (never the instance's
+  // name, which the back office writes as the list of its Experts).
+  const agentName = profile ? (expert?.displayName ?? expertDisplayName(profile)) : "Chat d’entreprise";
   // The avatar shown in the header, the welcome and beside each reply.
   const face = profile ? { displayName: agentName, photoUrl: expert?.photoUrl ?? null, gateway: null } : null;
   // "Son ordinateur" needs the screen the yelema-hermes image streams, from its revision 5 on
   // (image v1.1.0); an instance on another image, or on an older revision, has none to show.
+  const listHidden = useChatListHidden();
+  const full = useChatFull();
+  const sidePanel = useChatSidePanel();
   const hasComputer =
     Boolean(profile) &&
     instance?.image?.template === SCREEN_TEMPLATE &&
@@ -135,17 +166,29 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
       isStreaming={isStreaming}
       messages={messages}
     >
+    <SidePanelSync hasComputer={hasComputer} />
     <div className="flex h-full min-h-0">
     <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col wide:min-w-[400px]" {...att.dragHandlers}>
       {att.dragOver && <DropOverlay label="Déposez vos fichiers pour les joindre" />}
       <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          {profile && <ChatSessionsPanel />}
-          {/* On a phone the expert's photo and name already head the page: shown once. */}
-          {face && <ExpertAvatar expert={face} size="sm" className="max-sm:hidden" />}
+          <ChatSessionsPanel />
+          {/* Wide screen: the column of conversations folds away and comes back from here. */}
+          <button
+            type="button"
+            onClick={() => setChatListHidden(!listHidden)}
+            aria-label={listHidden ? "Afficher les conversations" : "Masquer les conversations"}
+            title={listHidden ? "Afficher les conversations" : "Masquer les conversations"}
+            className="-ml-1.5 hidden size-9 shrink-0 place-items-center rounded-full text-ink-2 hover:bg-soft hover:text-ink xl:grid"
+          >
+            {listHidden ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+          </button>
+          {/* On an expert's page its photo and name already head the page: shown once. */}
+          {face && !profile && <ExpertAvatar expert={face} size="sm" />}
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold leading-tight text-ink">{headerTitle}</h1>
-            <p className={cn("truncate text-xs text-ink-3", profile && "max-sm:hidden")}>{agentName}</p>
+            {/* The company chat: never the instance's name (the back office names it after its Experts). */}
+            {!profile && <p className="truncate text-xs text-ink-3">{agentName}</p>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -158,7 +201,18 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
           className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-[13px] font-semibold text-ink hover:bg-soft"
         >
           <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">Nouvelle conversation</span>
+          {/* Beside an open panel the chat is narrow: the icon says enough, the title keeps its room. */}
+          <span className={cn("hidden sm:inline", sidePanel && "wide:hidden")}>Nouvelle conversation</span>
+        </button>
+        {/* Plein écran: in the corner, where a window is enlarged. */}
+        <button
+          type="button"
+          onClick={() => setChatFull(!full)}
+          aria-label={full ? "Réduire" : "Plein écran"}
+          title={full ? "Réduire (Échap)" : "Plein écran"}
+          className="hidden size-9 shrink-0 place-items-center rounded-full text-ink-2 hover:bg-soft hover:text-ink lg:grid"
+        >
+          {full ? <Minimize2 className="h-[18px] w-[18px]" /> : <Maximize2 className="h-[18px] w-[18px]" />}
         </button>
         </div>
       </header>
@@ -167,6 +221,9 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
       <div
         ref={scrollRef}
         onScroll={onScroll}
+        onWheel={release}
+        onTouchMove={release}
+        onKeyDown={release}
         className={cn(
           "min-h-0",
           showWelcome ? "flex flex-1 flex-col items-center justify-end px-4 pb-4" : "flex-1 overflow-y-auto"
@@ -177,10 +234,12 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>
         ) : messages.length > 0 ? (
-          <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} />
+          <div ref={contentRef}>
+            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} />
+          </div>
         ) : (
           <>
-            {face && <ExpertAvatar expert={face} size="lg" className="mb-4 max-sm:hidden" />}
+            {face && !profile && <ExpertAvatar expert={face} size="lg" className="mb-4 max-sm:hidden" />}
           <h1 className="text-center font-display text-[26px] font-bold tracking-tight text-ink sm:text-[30px]">
             {profile ? `Que voulez-vous confier à ${agentName} ?` : "Que puis-je faire pour vous ?"}
           </h1>
@@ -213,7 +272,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
       {/* Bottom: balances the vertical centering and carries the welcome subtitle. */}
       {showWelcome && (
         <div className="flex flex-1 flex-col items-center px-4 pt-3">
-          <p className="text-sm text-ink-3">
+          <p className="text-center text-sm text-ink-3">
             Plus vous donnez de contexte, meilleure sera la réponse.
           </p>
         </div>

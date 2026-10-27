@@ -8,6 +8,7 @@ import { isChannelConnected, type MessagingPlatform, type WhatsappPairingState }
 import { Button } from "@/components/ui/button";
 import { ChannelPanelHeader } from "@/components/channels/ChannelCredentialsForm";
 import { useAsyncAction } from "@/components/useAsyncAction";
+import { DisconnectButton } from "@/components/channels/DisconnectButton";
 
 const POLL_MS = 2500;
 
@@ -119,14 +120,12 @@ export function WhatsAppConnect({
                 {session.phone ? `+${session.phone} est connecté.` : "WhatsApp est connecté."}
               </p>
               <p className="text-xs text-muted-foreground">
-                Dans WhatsApp, ouvrez la conversation avec vous-même et écrivez-y à vos experts. Personne d’autre ne
+                Dans WhatsApp, ouvrez la conversation avec vous-même et écrivez-y à vos Experts. Personne d’autre ne
                 peut les joindre.
               </p>
             </div>
           </div>
-          <Button variant="ghost" onClick={disconnect} disabled={busy}>
-            Déconnecter
-          </Button>
+          <DisconnectButton name="WhatsApp" onConfirm={disconnect} disabled={busy} />
         </div>
       ) : error ? (
         <div className="space-y-3">

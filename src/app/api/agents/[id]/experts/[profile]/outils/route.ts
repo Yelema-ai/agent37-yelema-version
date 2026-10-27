@@ -1,4 +1,4 @@
-import { instanceFetch } from "@/lib/agent37";
+import { agent37 } from "@/lib/agent37";
 import { requireAgentAccess } from "@/lib/auth";
 import { parseToolsFile, TOOLS_FILE_MAX_BYTES } from "@/lib/expert-tools";
 import { ApiError, handleError, json } from "@/lib/http";
@@ -18,8 +18,7 @@ export async function GET(_request: Request, { params }: Ctx) {
     const profile = await resolveProfile(row, raw);
     if (profile === DEFAULT_PROFILE) throw new ApiError(400, "invalid_request", "Expert inconnu");
 
-    const path = `~/.hermes/profiles/${profile}/outils-recommandes.json`;
-    const res = await instanceFetch(id, `/v1/files/content?path=${encodeURIComponent(path)}`);
+    const res = await agent37.expertFile(id, profile, "outils-recommandes.json");
     if (res.status === 404) {
       await res.body?.cancel().catch(() => undefined);
       return json({ outils: [] });

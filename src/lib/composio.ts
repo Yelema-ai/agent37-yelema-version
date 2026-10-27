@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { Composio } from "@composio/core";
 import { ApiError } from "@/lib/http";
 import { composioApiKey } from "@/lib/runtime-config";
@@ -48,6 +48,9 @@ export function hashAppsToken(token: string): string {
 
 // ---- Catalog ---------------------------------------------------------------------------------
 
+// Composio's Unipile only lists accounts: the member links Unipile on its own card (src/lib/unipile.ts).
+export const HIDDEN_TOOLKITS: ReadonlySet<string> = new Set(["unipile"]);
+
 export async function listToolkits(search?: string): Promise<IntegrationToolkitsResult> {
   const params = new URLSearchParams({ limit: "24" });
   if (search) params.set("search", search);
@@ -57,7 +60,7 @@ export async function listToolkits(search?: string): Promise<IntegrationToolkits
   });
   if (!res.ok) throw new ApiError(502, "composio_error", "Le catalogue des outils est indisponible. Réessayez dans un instant.");
   const data = (await res.json()) as { items?: unknown[] };
-  return { items: (data.items ?? []).map(normalizeToolkit) };
+  return { items: (data.items ?? []).map(normalizeToolkit).filter((t) => !HIDDEN_TOOLKITS.has(t.slug.toLowerCase())) };
 }
 
 interface RawToolkit {
@@ -84,26 +87,14 @@ function normalizeToolkit(raw: unknown): IntegrationToolkit {
 
 // ---- Connect ---------------------------------------------------------------------------------
 
-// A toolkit with no auth config in Yelema's Composio project fails with 4308 "NoManagedAuth".
+// A toolkit with no auth config in Yelema's Composio project fails with 4308 "NoManagedAuth". Several accounts
+// of one tool are allowed; the alias (unique per member and tool) is what an expert names to pick one.
 export async function connectToolkit(userId: string, toolkit: string, alias?: string): Promise<IntegrationConnectResult> {
+  if (HIDDEN_TOOLKITS.has(toolkit.toLowerCase())) throw new ApiError(422, "use_unipile_card", "Unipile se relie avec sa carte « WhatsApp et messageries », en haut de cette page.");
   try {
-    const session = await client().toolRouter.create(userId, {
-      manageConnections: { waitForConnections: true },
-      multiAccount: { enable: true },
-    });
-
-    let targetAlias = alias?.trim();
-    if (!targetAlias) {
-      const { connections } = await listConnections(userId);
-      const existing = connections.filter(
-        (c) => (c.toolkitSlug ?? "").toLowerCase() === toolkit.toLowerCase() && !c.isDisabled && c.status === "ACTIVE"
-      );
-      if (existing.length > 0) {
-        targetAlias = `${toolkit}-${existing.length + 1}`;
-      }
-    }
-
-    const request = await session.authorize(toolkit, targetAlias ? { alias: targetAlias } : undefined);
+    const session = await client().toolRouter.create(userId, { manageConnections: true, multiAccount: { enable: true } });
+    const targetAlias = alias?.trim() || `${toolkit.toLowerCase()}-${randomBytes(3).toString("hex")}`;
+    const request = await session.authorize(toolkit, { alias: targetAlias });
     return { toolkit, connectedAccountId: request.id, redirectUrl: request.redirectUrl ?? "" };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -301,13 +292,16 @@ export interface McpSession {
   headers: Record<string, string>;
 }
 
-export async function mintMcpSession(userId: string): Promise<McpSession> {
+// `pins`: the member's default account per tool (exact: Composio uses that one, and no other, for the tool).
+export async function mintMcpSession(userId: string, pins: Record<string, string[]> = {}): Promise<McpSession> {
   const session = await client().create(userId, {
+    ...(Object.keys(pins).length ? { connectedAccounts: pins } : {}),
     // Keep the manage-connections tool so an expert can hand out a sign-in link in chat, allow
     // several accounts per toolkit, and drop Composio's remote sandbox.
     manageConnections: { waitForConnections: true },
     multiAccount: { enable: true },
     sandbox: { enable: false },
+    toolkits: { disable: [...HIDDEN_TOOLKITS] },
     mcp: true,
   });
   const url = typeof session.mcp?.url === "string" ? session.mcp.url.trim() : "";

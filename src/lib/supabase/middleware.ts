@@ -65,7 +65,7 @@ export async function updateSession(request: NextRequest) {
     }
     // SITE_URL, not nextUrl: behind the reverse proxy nextUrl can carry the listen address.
     const url = new URL("/login", publicSiteOrigin(siteUrl(), request.nextUrl.origin));
-    url.searchParams.set("next", pathname);
+    url.searchParams.set("next", pathname + request.nextUrl.search); // a shared link keeps its ?c= / ?s=
     return NextResponse.redirect(url);
   }
 
@@ -149,7 +149,7 @@ async function updateBackofficeSession(request: NextRequest, workspace: string |
       response = NextResponse.json({ error: { code: "unauthorized", message: "Sign in required" } }, { status: 401 });
     } else {
       const url = new URL("/login", publicSiteOrigin(siteUrl(), request.nextUrl.origin));
-      url.searchParams.set("next", pathname);
+      url.searchParams.set("next", pathname + request.nextUrl.search); // a shared link keeps its ?c= / ?s=
       response = NextResponse.redirect(url);
     }
   } else {

@@ -10,28 +10,29 @@ import { COMPOSIO_LOGOS_ORIGIN } from "@/lib/integration-catalog";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { href: "/integrations/apercu", label: "Aperçu", exact: false, adminOnly: false, backoffice: true },
   { href: "/integrations/connecteurs", label: "Connecteurs", exact: false, adminOnly: false },
   { href: "/integrations/canaux", label: "Canaux", exact: false, adminOnly: false },
   { href: "/integrations/emails", label: "E-mails", exact: false, adminOnly: true, backoffice: true },
+  { href: "/integrations/voix", label: "Voix", exact: false, adminOnly: false, backoffice: true },
   { href: "/integrations/modeles", label: "Modèles", exact: false, adminOnly: false, backoffice: true },
   { href: "/integrations/mcp", label: "MCP", exact: false, adminOnly: false },
-  { href: "/integrations/voix", label: "Voix", exact: false, adminOnly: false, backoffice: true },
-  { href: "/integrations/identifiants", label: "Identifiants", exact: false, adminOnly: false, backoffice: true },
+  { href: "/integrations/identifiants", label: "Accès aux sites", exact: false, adminOnly: false, backoffice: true },
 ];
 
-// Le cadre des intégrations : ce qui se branche sur les experts. Aperçu dit ce qui est branché et ce qui manque. Connecteurs et Canaux, pour chacun,
+// Le cadre des intégrations : ce qui se branche sur les experts. Aperçu n'a plus d'onglet (ses chiffres iront dans
+// l'analytique), sa page reste à son adresse. Connecteurs et Canaux, pour chacun,
 // règlent sa propre instance. E-mails, pour les admins, dit qui peut faire écrire chaque expert.
 // Modèles dit sur quel compte de modèle tournent les experts : un admin le règle pour l'entreprise
 // ou pour un membre, un membre pour lui-même si son admin l'a permis. MCP, aux mêmes portées, branche
-// sur les experts les serveurs d'outils du client. Identifiants confie à un expert l'accès à un site. Voix porte la clé de transcription du client.
+// sur les experts les serveurs d'outils du client. Accès aux sites (adresse /identifiants) confie à un expert l'accès à un site. Voix porte la clé de transcription du client.
 export default function IntegrationsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { current } = useWorkspace();
   const { authVia } = usePublicConfig();
   // The catalog's logos are the app's own; a search result's comes from Composio: the connection is opened early.
   preconnect(COMPOSIO_LOGOS_ORIGIN);
-  const tabs = TABS.filter(
+  // The company chat only: nothing here is its member's to plug (its agent has no apps nor channels).
+  const tabs = current?.access === "entreprise" ? [] : TABS.filter(
     (t) => (!t.adminOnly || current?.role === "admin") && (!("backoffice" in t) || authVia === "backoffice")
   );
 
@@ -41,13 +42,27 @@ export default function IntegrationsLayout({ children }: { children: React.React
     nav.current?.querySelector<HTMLElement>("[aria-current=page]")?.scrollIntoView({ inline: "center", block: "nearest" });
   }, [pathname]);
 
+  // The company chat: only the member's own apps (their Gmail, Agenda…), used by their chat alone.
+  if (current?.access === "entreprise") {
+    if (!pathname.startsWith("/integrations/connecteurs")) {
+      return <p className="mx-auto w-full max-w-[1280px] px-4 pt-6 text-sm text-ink-2 sm:px-8">Les intégrations sont réglées pour les Experts de l’entreprise. Vos propres applications se branchent dans Mes connecteurs.</p>;
+    }
+    return (
+      <>
+        <h1 className="mx-auto w-full max-w-[1280px] px-4 pt-6 font-display text-[30px] font-bold tracking-tight text-ink sm:px-8">Mes connecteurs</h1>
+        <p className="mx-auto w-full max-w-[1280px] px-4 pt-1 text-sm text-ink-2 sm:px-8">Vos applications, utilisées par votre seul chat d’entreprise : personne d’autre n’y a accès.</p>
+        {children}
+      </>
+    );
+  }
   return (
     <>
+      <h1 className="mx-auto w-full max-w-[1280px] px-4 pt-6 font-display text-[30px] font-bold tracking-tight text-ink sm:px-8">Intégrations</h1>
       {tabs.length > 1 && (
         <nav
           ref={nav}
           aria-label="Intégrations"
-          className="mx-auto flex w-full max-w-[1280px] shrink-0 gap-1 overflow-x-auto border-b border-line px-4 pt-4 [scrollbar-width:none] sm:px-8 [&::-webkit-scrollbar]:hidden"
+          className="mx-auto flex w-full max-w-[1280px] shrink-0 gap-1 overflow-x-auto border-b border-line px-4 pt-2 [scrollbar-width:none] sm:px-8 [&::-webkit-scrollbar]:hidden"
         >
           {tabs.map((tab) => {
             const active = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);

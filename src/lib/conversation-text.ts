@@ -1,4 +1,4 @@
-import { cleanReply } from "./chat-errors.ts";
+import { cleanReply, cleanUserMessage } from "./chat-errors.ts";
 import type { ChatHistoryMessage } from "./types.ts";
 
 // A conversation as plain text, to paste to a colleague or a developer: the title, then each
@@ -10,7 +10,7 @@ const when = (at: number) =>
 export function conversationText(title: string, expert: string, history: ChatHistoryMessage[]): string {
   const blocks = history
     .filter((m) => m.role !== "system")
-    .map((m) => ({ ...m, content: m.role === "assistant" ? cleanReply(m.content ?? "") : (m.content ?? "").trim() }))
+    .map((m) => ({ ...m, content: m.role === "assistant" ? cleanReply(m.content ?? "") : cleanUserMessage(m.content ?? "") }))
     .filter((m) => m.content)
     .map((m) => `${m.role === "user" ? "Vous" : expert}${m.created_at ? `, ${when(m.created_at)}` : ""}\n${m.content}`);
   return [`${title} (conversation avec ${expert})`, ...blocks].join("\n\n");

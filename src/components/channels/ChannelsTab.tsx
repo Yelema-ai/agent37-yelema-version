@@ -13,6 +13,7 @@ import {
   type MessagingPlatform,
 } from "@/lib/channels";
 import type { MergedAgent } from "@/lib/types";
+import type { TelegramHubStatus } from "@/lib/agent37";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { channelBrand } from "@/components/channels/BrandIcons";
@@ -20,8 +21,11 @@ import { ChannelCredentialsForm } from "@/components/channels/ChannelCredentials
 import { SlackConnect } from "@/components/channels/SlackConnect";
 import { TeamsConnect } from "@/components/channels/TeamsConnect";
 import { TelegramConnect } from "@/components/channels/TelegramConnect";
+import { RelayChannel } from "@/components/channels/RelayChannel";
+import { TelegramChannel } from "@/components/channels/TelegramChannel";
 import { TelegramTopics } from "@/components/channels/TelegramTopics";
 import { WhatsAppConnect } from "@/components/channels/WhatsAppConnect";
+import { useRuntimeTools } from "@/components/experts/useRuntimeTools";
 
 // The Messaging tab: connect this agent to the apps its owner already uses, so they can talk to it
 // from their phone instead of only from this dashboard.
@@ -44,12 +48,24 @@ export function ChannelsTab({
   // stopped agent. Only a state that says the instance is down gives up without trying: an unknown
   // one means it could not be read, not that it is stopped.
   const reachable = !["stopped", "deleting", "deleted", "failed", "error"].includes(agent.live_status ?? "");
+  // The channels below are the Hermes harness's own; a Claude Code instance has Telegram through its hub.
+  const hermesTools = useRuntimeTools(agentId);
 
   const [channels, setChannels] = useState<MessagingPlatform[] | null>(null);
   const [teamsEndpoint, setTeamsEndpoint] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  // Un bot posé par la passerelle (et relevé par l'instance) a déjà ses sujets : l'ancien bouton « Créer les sujets » s'efface.
+  const [hubTelegram, setHubTelegram] = useState(false);
+  useEffect(() => {
+    if (hermesTools !== true) return;
+    let alive = true;
+    apiFetch<TelegramHubStatus>(`/api/agents/${agentId}/channels/telegram/hub`).then((r) => alive && setHubTelegram(r.state?.active === true), () => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [agentId, hermesTools]);
 
   const load = useCallback(
     async (quiet = false) => {
@@ -68,15 +84,30 @@ export function ChannelsTab({
   );
 
   useEffect(() => {
-    if (reachable) void load();
-  }, [reachable, load]);
+    // Only once the runtime is known: a Claude Code instance has no Hermes channel API to read.
+    if (reachable && hermesTools === true) void load();
+  }, [reachable, hermesTools, load]);
+
+  if (hermesTools === false) {
+    return (
+      <div className="space-y-6">
+        <Header />
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold">Telegram</h3>
+          <TelegramChannel agentId={agentId} canManage={canManage} />
+        </section>
+        <RelayChannel agentId={agentId} channel="slack" canManage={canManage} />
+        <RelayChannel agentId={agentId} channel="teams" canManage={canManage} />
+      </div>
+    );
+  }
 
   if (!reachable) {
     return (
       <div className="space-y-6">
         <Header />
         <p className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
-          Vos experts ne sont pas joignables pour le moment. Réessayez dans un instant.
+          Vos Experts ne sont pas joignables pour le moment. Réessayez dans un instant.
         </p>
       </div>
     );
@@ -124,7 +155,7 @@ export function ChannelsTab({
         </div>
       ) : (
         <>
-          <div className="divide-y rounded-lg border bg-card">
+          <div className="divide-y overflow-hidden rounded-[22px] border bg-card">
             {featured.map((channel) => (
               <ChannelRow
                 key={channel.id}
@@ -144,7 +175,7 @@ export function ChannelsTab({
           </div>
 
           {/* One Telegram topic per expert, once the bot is connected. */}
-          {canManage && (
+          {canManage && !hubTelegram && (
             <TelegramTopics
               agentId={agentId}
               telegramConnected={(channels ?? []).some((c) => c.id === "telegram" && isChannelConnected(c))}
@@ -162,7 +193,7 @@ export function ChannelsTab({
                 Autres canaux ({rest.length - connectedRest.length})
               </button>
               {showAll && (
-                <div className="divide-y rounded-lg border bg-card">
+                <div className="divide-y overflow-hidden rounded-[22px] border bg-card">
                   {rest
                     .filter((c) => !isChannelConnected(c))
                     .map((channel) => (
@@ -187,11 +218,12 @@ function Header() {
   return (
     <header className="space-y-1">
       <h2 className="text-lg font-semibold">Messageries</h2>
-      <p className="text-sm text-muted-foreground">Écrivez à vos experts depuis les messageries que vous utilisez déjà.</p>
+      <p className="text-sm text-muted-foreground">Écrivez à vos Experts depuis les messageries que vous utilisez déjà.</p>
     </header>
   );
 }
 
+// A connected channel is one row to open (state, then a chevron); one to set up keeps its button.
 function ChannelRow({
   channel,
   canManage,
@@ -204,23 +236,37 @@ function ChannelRow({
   const { Icon, color } = channelBrand(channel.id);
   const connected = isChannelConnected(channel);
   const error = channelError(channel);
-  return (
-    <div className="flex items-center gap-3 px-4 py-3">
-      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-muted/20">
-        <Icon className="h-4 w-4 shrink-0" {...(color ? { style: { color } } : {})} />
+  const body = (
+    <>
+      <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[12px] border bg-muted/20">
+        <Icon className="h-5 w-5 shrink-0" {...(color ? { style: { color } } : {})} />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-medium">{channel.name}</p>
-          {connected && <Badge variant="success">Connecté</Badge>}
-          {!connected && error && <Badge variant="warning">À vérifier</Badge>}
-        </div>
-        <p className="truncate text-xs text-muted-foreground">
-          {error || channel.description || channelStateLabel(channel)}
-        </p>
+        <p className="truncate text-[15px] font-semibold">{channel.name}</p>
+        <p className="truncate text-[13px] text-muted-foreground">{error || channel.description || channelStateLabel(channel)}</p>
       </div>
-      <Button variant="outline" size="sm" disabled={!canManage} onClick={onOpen} className="max-sm:h-10">
-        {connected ? "Gérer" : isFeaturedChannel(channel.id) ? `Connecter ${channel.name}` : "Connecter"}
+    </>
+  );
+  if (connected || error) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        disabled={!canManage}
+        aria-label={`Gérer ${channel.name}`}
+        className="flex min-h-[68px] w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-soft disabled:pointer-events-none"
+      >
+        {body}
+        {connected ? <Badge variant="success">Connecté</Badge> : <Badge variant="warning">À vérifier</Badge>}
+        <ChevronRight className="h-4 w-4 shrink-0 text-ink-3" />
+      </button>
+    );
+  }
+  return (
+    <div className="flex min-h-[68px] items-center gap-3 px-4 py-3">
+      {body}
+      <Button variant="outline" size="sm" disabled={!canManage} onClick={onOpen} className="rounded-full max-sm:h-10">
+        {isFeaturedChannel(channel.id) ? `Connecter ${channel.name}` : "Connecter"}
       </Button>
     </div>
   );

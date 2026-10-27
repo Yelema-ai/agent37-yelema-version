@@ -13,6 +13,10 @@ export interface WorkspaceWithRole extends Workspace {
   role: Role;
   /** The company's main logo (back office `me.workspace.logoUrl`), shown at the top of the menu. */
   logo_url?: string | null;
+  /** `entreprise`: the company chat only (an agent on the company's instance): no Experts, no integrations. */
+  access?: "instance" | "entreprise";
+  /** The company's main color (back office `me.workspace.brandColor`, #rrggbb), when it has one. */
+  brand_color?: string | null;
 }
 
 export interface WorkspaceMember {
@@ -25,6 +29,17 @@ export interface WorkspaceMember {
   name?: string | null;
   status?: string | null;
   instance_name?: string | null;
+  /** Back-office member id; `entreprise` members can be removed by an admin when `removable`. */
+  id?: string;
+  access?: "instance" | "entreprise";
+  removable?: boolean;
+}
+
+/** Seats when the back office lists the members: subscription users and enterprise chat. */
+export interface MemberRoom {
+  quota: { used: number; allowed: number | null };
+  seats: { used: number; cap: number } | null;
+  enterpriseOpen: boolean;
 }
 
 export interface Invitation {
@@ -60,6 +75,8 @@ export interface Expert {
   photoUrl?: string | null;
   /** Son dossier dans le drive (~/Livrables/<dossier>), quand le catalogue le connaît. */
   driveFolder?: string | null;
+  /** Le cycle souscrit qui l'a apporté (« Marketing événementiel »), quand le back-office le dit. */
+  cycle?: { key: string; label: string } | null;
 }
 
 /** Un expert tel que le back-office le présente : textes et médias, jamais de réglage d'agent. */
@@ -236,8 +253,14 @@ export interface IntegrationConnection {
   isDisabled?: boolean;
   createdAt?: number | null;
   updatedAt?: number | null;
-  alias?: string | null;
+  // Kept by the back office: e-mail and name read once at connection, the member's label, the tool's
+  // default for the experts, and who added it (null: added elsewhere, e.g. by an expert in chat).
+  email?: string | null;
+  accountName?: string | null;
   label?: string | null;
+  alias?: string | null;
+  isDefault?: boolean;
+  addedBy?: { email: string; name: string | null } | null;
 }
 
 export interface IntegrationConnectionsResult {
@@ -306,6 +329,8 @@ export interface ChatHistoryMessage {
   role: "user" | "assistant" | "system";
   content: string;
   thinking?: string;
+  /** Deliverables the turn of this reply wrote (home-relative, under Livrables/). */
+  files?: string[];
   created_at: number;
 }
 

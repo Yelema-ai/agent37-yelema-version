@@ -5,13 +5,15 @@ import type { CompanyProfile } from "@/lib/company";
 import type { ComposioCall } from "@/lib/composio-usage";
 import { voiceKeyPath, type VoiceKeysOverview } from "@/lib/voice-keys";
 import { isServerId, mcpScopePath, mcpServerPath, type McpOauthQuery, type McpOauthServer, type McpOverview, type McpToolsOverview, type McpToolsReport, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
+import type { UnipileAccount, UnipileDraft, UnipileStatus } from "@/lib/unipile";
 import { vaultPath, type VaultDraft, type VaultItem, type VaultList, type VaultOverview, type VaultScope } from "@/lib/vault";
 import { scopePath, type LlmModelChoice, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { mailPath, type MailDetail, type MailDraft, type MailInbox, type MailRights, type MailRightsPatch, type MailSummary } from "@/lib/mail";
 import { isPublicId, type MemoryList, type MemoryNote, type MemoryPatch, type OrgAssignmentDraft, type OrgChart, type OrgGrantDraft, type OrgMember, type OrgRole } from "@/lib/memory";
-import { backofficeUrl } from "@/lib/runtime-config";
+import { backofficeUrl, resolverToken } from "@/lib/runtime-config";
 import { SIGNALING_METHOD, type CallRecord, type SignalingStep, type VoiceOption } from "@/lib/voice";
 import { pinnedWorkspaceId } from "@/lib/tenant";
+import type { ClaudeAuth, ClaudeAuthStatus, ClaudeLogin, ClaudeUsage } from "@/lib/claude-code-auth";
 
 // The Yelema back office's API for this app (`/api/v1/app/*`, guide: yelema-platform
 // docs/specs/client-api-v1/app.md). It signs users in and says what they may see: their account,
@@ -28,6 +30,10 @@ const TIMEOUT_MS = process.env.NODE_ENV === "development" ? 60_000 : 15_000;
 const MAIL_SEND_TIMEOUT_MS = 90_000;
 // Saving a model key waits for the provider to say whether it accepts it.
 const SETTING_WRITE_TIMEOUT_MS = 30_000;
+// Le code de connexion attend la réponse de Claude sur l'instance (jusqu'à ~25 s).
+const CLAUDE_LOGIN_TIMEOUT_MS = 60_000;
+const memberQuery = (member: string | null): string => (member ? `?member=${encodeURIComponent(member)}` : "");
+const withQuery = (query: string, name: string, value: string | null): string => (value ? `${query}${query ? "&" : "?"}${name}=${encodeURIComponent(value)}` : query);
 // An OAuth start or return waits on Hermes inside the instance (up to 45 s, then 60 s and a gateway restart).
 const MCP_OAUTH_TIMEOUT_MS = 115_000;
 // A portrait is drawn by the image model, which takes up to a minute.
@@ -69,8 +75,10 @@ export interface BoMe {
   /** `name` is « Prénom Nom », computed by the back office from the two. */
   /** `avatarUrl`: the member's own photo, once the back office keeps one (`PUT /app/me/avatar`). */
   user: { id: string; email: string; firstName: string | null; lastName: string | null; name: string | null; jobTitle: string | null; role: "admin" | "member"; avatarUrl?: string | null; /** Call voice per expert (`*` = all) and language, shared with the mobile app. */ voices?: Record<string, Partial<Record<"fr" | "en", string>>> };
-  workspace: { id: string; name: string; logoUrl: string | null };
+  workspace: { id: string; name: string; logoUrl: string | null; brandColor?: string | null };
   instance: { id: string } | null;
+  /** `entreprise`: company chat only — no Experts, no instance of one's own. Absent on older back offices. */
+  access?: "instance" | "entreprise";
 }
 
 export interface BoInstanceView {
@@ -85,9 +93,17 @@ export interface BoInstanceView {
   tools: "yelema" | "agent37";
   /**
    * `profile` is the name to send to the instance; `key` joins the public catalogue. `displayName`
-   * and `avatarUrl` are what the member chose for it, null when they kept the catalogue's.
+   * and `avatarUrl` are what the member chose for it, null when they kept the catalogue's. `cycle`
+   * is the cycle the company subscribed that brought it, when it came with one (back office, to come).
    */
-  experts: { profile: string; key: string; version: string | null; displayName?: string | null; avatarUrl?: string | null }[];
+  experts: {
+    profile: string;
+    key: string;
+    version: string | null;
+    displayName?: string | null;
+    avatarUrl?: string | null;
+    cycle?: { key: string; label: string } | null;
+  }[];
   /** Where a channel that receives by webhook is reached: the address to give Microsoft for Teams. */
   channels?: { teams?: { endpoint: string | null } };
 }
@@ -113,6 +129,26 @@ export interface ExpertAvatarDraft {
   url: string;
 }
 
+export type DashboardShareMode = "team" | "people" | "link";
+
+/** A dashboard's share as the back office keeps it; `number` is sealed into the link and never sent to a browser. */
+/** `/app/integrations/connections` : what the back office keeps about one connected account. */
+export interface BoConnectorAccount {
+  id: string;
+  toolkit: string;
+  email: string | null;
+  name: string | null;
+  label: string | null;
+  isDefault: boolean;
+  addedBy: { email: string; name: string | null } | null;
+  createdAt: string | null;
+}
+
+export interface BoDashboardShareView {
+  share: { id: string; number: string; mode: DashboardShareMode; people: string[]; updatedAt: string | null } | null;
+  candidates: { email: string; name: string | null }[];
+}
+
 export type BoInstance = BoInstanceView & { id: string };
 
 /** Where the installation of a member's team stands. */
@@ -132,11 +168,23 @@ export interface BoInstanceReading {
 }
 
 export interface BoMember {
+  id: string;
   name: string | null;
   email: string;
   role: "admin" | "member";
   status: string;
   instance: { name: string; createdAt: string | null } | null;
+  /** `entreprise` : membre du chat d'entreprise, sans instance à lui. */
+  access: "instance" | "entreprise";
+  /** Un admin peut le retirer depuis l'app (membre `entreprise`, pas lui-même). */
+  removable: boolean;
+}
+
+/** Places : utilisateurs de l'abonnement (`allowed` nul = sans plafond), membres du chat d'entreprise. */
+export interface BoMemberRoom {
+  quota: { used: number; allowed: number | null };
+  seats: { used: number; cap: number } | null;
+  enterpriseOpen: boolean;
 }
 
 export type BoOpenedSession = { session: BoSession } & BoMe;
@@ -292,6 +340,17 @@ function mailRoute(expert: string, messageId?: string, attachmentId?: string): s
   return path;
 }
 
+function dashboardSharePath(profile: string): string {
+  const p = profile.toLowerCase();
+  if (!/^[a-z0-9_-]{1,64}$/.test(p)) throw new BackofficeError(404, "not_found", "Tableau de bord introuvable.");
+  return `/app/dashboards/shares/${p}`;
+}
+
+function connectorAccountPath(id: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(id)) throw new BackofficeError(404, "not_found", "Compte inconnu.");
+  return `/app/integrations/connections/${id}`;
+}
+
 function usageQuery(filter: BoUsageFilter, page?: number): string {
   const params = new URLSearchParams();
   if (filter.from) params.set("from", filter.from);
@@ -301,6 +360,9 @@ function usageQuery(filter: BoUsageFilter, page?: number): string {
   const query = params.toString();
   return query ? `?${query}` : "";
 }
+
+/** `/app/me/preferences` : épinglé, archivé et notifications du membre, gardés par le back-office. */
+export type MemberPrefs = { chatMarks: { pinned: string[]; archived: string[] }; notify: Record<string, boolean> };
 
 export const backoffice = {
   login: (email: string, password: string) =>
@@ -314,12 +376,17 @@ export const backoffice = {
   forgot: (email: string) => call<{ ok: true }>("/app/auth/forgot", { method: "POST", body: { email } }),
   logout: (token: string) => call<{ ok: true }>("/app/auth/logout", { method: "POST", token }),
 
+  // Whether Yelema's team is shipping an update right now (switched on before a push, off after).
+  // Public and per workspace; a short timeout: it is asked every minute by every open page.
+  platformStatus: () => call<{ maintenance?: boolean }>("/app/platform-status", { timeoutMs: 4_000 }),
   me: (token: string) => call<BoMe>("/app/me", { token }),
   updateMe: (token: string, patch: MePatch) => call<BoMe>("/app/me", { method: "PATCH", token, body: patch }),
   // The member's own photo (multipart, field `file`): the back office checks the type and the size,
   // keeps it and answers the profile with its `avatarUrl`. `DELETE` goes back to the initial.
   setMyAvatar: (token: string, form: FormData) => call<BoMe>("/app/me/avatar", { method: "PUT", token, form, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   removeMyAvatar: (token: string) => call<BoMe>("/app/me/avatar", { method: "DELETE", token }),
+  preferences: (token: string) => call<MemberPrefs>("/app/me/preferences", { token }),
+  setPreferences: (token: string, body: Partial<MemberPrefs>) => call<MemberPrefs>("/app/me/preferences", { method: "PUT", token, body }),
   instance: async (token: string): Promise<BoInstanceReading> => {
     const d = await call<{ instance: BoInstance | null; installation?: string; failedExperts?: unknown }>("/app/instance", { token });
     const known = d.installation === "running" || d.installation === "ready" || d.installation === "failed";
@@ -335,6 +402,25 @@ export const backoffice = {
   requestExpert: (token: string, key: string) => {
     if (!EXPERT_KEY.test(key)) throw new BackofficeError(404, "not_found", "Expert introuvable.");
     return call<{ ok: true }>(`/app/experts/${key}/request`, { method: "POST", token });
+  },
+  // The owner's share of an expert's dashboard. The back office checks the expert is on the caller's
+  // instance and keeps who may read it; the expert's own files never decide that.
+  dashboardShare: (token: string, profile: string) => call<BoDashboardShareView>(dashboardSharePath(profile), { token }),
+  saveDashboardShare: (token: string, profile: string, body: { mode: DashboardShareMode; people?: string[]; regenerate?: boolean }) =>
+    call<BoDashboardShareView>(dashboardSharePath(profile), { method: "PUT", token, body }),
+  stopDashboardShare: (token: string, profile: string) => call<BoDashboardShareView>(dashboardSharePath(profile), { method: "DELETE", token }),
+  // On every opening of a shared link, in the app's name (its resolver secret), with the reader's
+  // session when there is one: the instance and profile to read, or 401 login_required / 403 / 404.
+  dashboardAccess: (workspace: string, share: string, number: string, session: string | null) => {
+    const secret = resolverToken();
+    if (!secret) throw new BackofficeError(404, "not_found", "Tableau de bord introuvable.");
+    const qs = new URLSearchParams({ share, n: number });
+    return call<{ instance: string; profile: string; mode: DashboardShareMode }>(`/app/dashboards/access?${qs.toString()}`, {
+      token: secret,
+      workspace,
+      timeoutMs: 10_000,
+      headers: session ? { "X-App-Session": session } : {},
+    });
   },
   // A member's own name and picture for an expert installed on their instance. The back office checks
   // the expert is theirs, keeps the choice, and writes the name in the expert's SOUL.md itself.
@@ -357,7 +443,10 @@ export const backoffice = {
   // Admins only, and without instance ids: lists to read, not ways in.
   instances: async (token: string) =>
     (await call<{ items: { member: { name: string | null; email: string }; instance: BoInstanceView }[] }>("/app/instances", { token })).items,
-  members: async (token: string) => (await call<{ items: BoMember[] }>("/app/members", { token })).items,
+  members: (token: string) => call<{ items: BoMember[] } & BoMemberRoom>("/app/members", { token }),
+  inviteMember: (token: string, body: { email: string; firstName: string; lastName: string }) =>
+    call<{ ok: true; warning: string | null }>("/app/members/invite", { method: "POST", token, body }),
+  removeMember: (token: string, id: string) => call<{ ok: true }>(`/app/members/${encodeURIComponent(id)}`, { method: "DELETE", token }),
 
   // Billing, for the workspace's admins (a member is refused, 403). The app reads and hands out the
   // back office's own payment link; it never creates a payment.
@@ -425,6 +514,14 @@ export const backoffice = {
   // into `own`, `client` or a member id before it reaches a path.
   addLlmAccount: (token: string, scope: string, draft: AccountDraft) =>
     call<{ ok: true; state: "pending" | "applied"; account: LlmAccount }>(`/app/llm/accounts?scope=${encodeURIComponent(scope)}`, { method: "POST", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS * 2 }),
+  claudeAuth: (token: string, member: string | null) => call<ClaudeAuthStatus>(`/app/claude-code/auth${memberQuery(member)}`, { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  startClaudeAuth: (token: string, member: string | null) => call<ClaudeLogin>(`/app/claude-code/auth${memberQuery(member)}`, { method: "POST", token, body: { method: "subscription" }, timeoutMs: CLAUDE_LOGIN_TIMEOUT_MS }),
+  logoutClaudeAuth: (token: string, member: string | null) => call<{ ok: true; auth: ClaudeAuth }>(`/app/claude-code/auth${memberQuery(member)}`, { method: "DELETE", token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  submitClaudeCode: (token: string, member: string | null, code: string) => call<ClaudeLogin>(`/app/claude-code/auth/code${memberQuery(member)}`, { method: "POST", token, body: { code }, timeoutMs: CLAUDE_LOGIN_TIMEOUT_MS }),
+  putClaudeKey: (token: string, member: string | null, key: string, label: string | null) => call<{ ok: true } & ClaudeAuthStatus>(`/app/claude-code/auth/key${memberQuery(member)}`, { method: "PUT", token, body: { key, ...(label ? { label } : {}) }, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  deleteClaudeKey: (token: string, member: string | null, id: string | null) => call<{ ok: true } & ClaudeAuthStatus>(`/app/claude-code/auth/key${withQuery(memberQuery(member), "id", id)}`, { method: "DELETE", token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  orderClaudeKeys: (token: string, member: string | null, ids: string[]) => call<{ ok: true } & ClaudeAuthStatus>(`/app/claude-code/auth/order${memberQuery(member)}`, { method: "PUT", token, body: { ids }, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  claudeUsage: (token: string, member: string | null) => call<ClaudeUsage>(`/app/claude-code/auth/usage${memberQuery(member)}`, { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   llmAccount: (token: string, id: string) => call<LlmAccount>(`/app/llm/accounts/${id}`, { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   patchLlmAccount: (token: string, id: string, patch: { label?: string; secret?: string }) =>
     call<LlmWritten>(`/app/llm/accounts/${id}`, { method: "PATCH", token, body: patch, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
@@ -455,6 +552,11 @@ export const backoffice = {
     if (!path) throw new BackofficeError(404, "not_found", "Connexion introuvable.");
     return call<{ ok: true }>(path, { method: "DELETE", token, timeoutMs: SETTING_WRITE_TIMEOUT_MS });
   },
+  // The member's Unipile messaging: the key only passes through to the instance, never comes back.
+  unipile: (token: string) => call<UnipileStatus>("/app/unipile", { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  testUnipile: (token: string, draft: UnipileDraft) => call<{ accounts: UnipileAccount[] }>("/app/unipile/test", { method: "POST", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
+  setUnipile: (token: string, draft: UnipileDraft) => call<UnipileStatus>("/app/unipile", { method: "PUT", token, body: draft, timeoutMs: 60_000 }),
+  clearUnipile: (token: string) => call<{ ok: true }>("/app/unipile", { method: "DELETE", token, timeoutMs: 60_000 }),
   mcp: (token: string) => call<McpOverview>("/app/mcp", { token }),
   addMcpServer: (token: string, scope: SettingScope, draft: McpServerDraft) => {
     const path = mcpScopePath(scope);
@@ -496,6 +598,18 @@ export const backoffice = {
   // back office maps the token to its member and answers only from the compartments the org chart
   // opens to that member. A reasoned answer goes through a model on the provider's side.
   // `profile`: the expert asking, when its instance says which one (header X-Yelema-Profile).
+  // Chat d'entreprise : whose apps an agent (`u-…`) of the enterprise instance calls — its own member's account.
+  // The member's connected accounts: e-mail read once by the back office, label, default per tool, author.
+  connectorAccounts: (token: string) => call<{ accounts: BoConnectorAccount[] }>("/app/integrations/connections", { token }),
+  recordConnectorAccount: (token: string, body: { connectedAccountId: string; toolkit: string }) =>
+    call<BoConnectorAccount>("/app/integrations/connections", { method: "POST", token, body }),
+  updateConnectorAccount: (token: string, id: string, body: { label?: string | null; isDefault?: boolean }) =>
+    call<{ accounts: BoConnectorAccount[] }>(connectorAccountPath(id), { method: "PATCH", token, body }),
+  // In the instance's name: the default account of each tool, pinned in the experts' Composio session.
+  appsAccounts: (instanceToken: string, workspace: string, profile?: string) =>
+    call<{ user: string | null; defaults: Record<string, string> }>("/app/apps/accounts", { method: "POST", token: instanceToken, workspace, body: profile ? { profile } : {}, timeoutMs: 5_000 }),
+  seatAppsUser: (instanceToken: string, workspace: string, profile: string) =>
+    call<{ user: string }>("/app/apps/seat", { method: "POST", token: instanceToken, workspace, body: { profile } }),
   memoryAsk: (instanceToken: string, workspace: string, question: string, profile?: string) =>
     call<{ answer: string | null }>("/app/memory/ask", { method: "POST", token: instanceToken, workspace, body: { question, profile }, timeoutMs: MEMORY_ASK_TIMEOUT_MS }),
   memorySearch: (instanceToken: string, workspace: string, query: string, limit?: number, profile?: string) =>

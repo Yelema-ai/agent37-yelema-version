@@ -6,9 +6,9 @@ import { cn } from "@/lib/utils";
 import { stepDone } from "@/lib/tool-steps";
 import type { ToolEvent } from "./types";
 
-// While the expert answers: what it is doing right now, in one quiet line.
+// While the expert answers: its latest step, in one quiet line that stays until the reply comes.
 export function LiveStep({ tools }: { tools: ToolEvent[] }) {
-  const current = tools.findLast((t) => t.status === "running");
+  const current = tools.findLast((t) => t.status === "running") ?? tools.at(-1);
   if (!current) return null;
   return (
     <p className="mb-2 flex items-center gap-2 text-[13px] text-ink-3" aria-live="polite">

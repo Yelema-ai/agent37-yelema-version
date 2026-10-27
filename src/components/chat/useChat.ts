@@ -6,6 +6,10 @@ import { chatFailureMessage } from "@/lib/chat-errors";
 import { batchQueued, insertBefore, isSteer, steerText, unreadSteerCount } from "@/lib/chat-queue";
 import { profileQuery } from "@/lib/profile-id";
 import { toolPhrase } from "@/lib/tool-steps";
+import { isNetworkError, newMessageKey, withoutRunningTurn } from "@/lib/turn-idempotency";
+import { finalReply } from "@/lib/turn-reply";
+import { visibleHistory } from "@/lib/compaction";
+import { cleanUserMessage } from "@/lib/chat-errors";
 import { useTurnReporter } from "@/components/activity/hooks";
 import { type SessionDetail } from "@/lib/types";
 import { uid, type ChatMessage, type ChatSettings, type MessageAttachment, type ToolEvent, type ToolStatus } from "./types";
@@ -123,6 +127,10 @@ interface LiveRun {
   steers: Set<Promise<void>>;
   /** Messages the turn could not take, sent together as the next turn on the same session. */
   queue: Queued[];
+  /** What was sent, as the engine stores it (absent for a reattached run). */
+  sent?: { role: "user"; content: string; at: number };
+  /** The text written before each tool: a step, taken out of the reply. */
+  narration: string[];
 }
 
 interface Queued {
@@ -137,23 +145,33 @@ const BUSY_WAIT_MS = 3000;
 // --- Transcript merging ------------------------------------------------------------------------
 
 function mapHistory(history: SessionDetail["history"]): ChatMessage[] {
-  return (history ?? []).map((h) => ({
+  // A message the runtime sent again with its continuation order is the member's once: the copy goes.
+  const rows = visibleHistory(history ?? []).filter((h, i, all) => {
+    if (h.role !== "user" || i === 0) return true;
+    const own = cleanUserMessage(steerText(h.content ?? ""));
+    const prev = all[i - 1];
+    return !(own !== steerText(h.content ?? "").trim() && prev.role === "user" && cleanUserMessage(steerText(prev.content ?? "")) === own);
+  });
+  return rows.map((h) => ({
     id: h.id || uid("h"),
     role: h.role,
-    content: h.role === "user" ? steerText(h.content ?? "") : (h.content ?? ""),
+    content: h.role === "user" ? cleanUserMessage(steerText(h.content ?? "")) : (h.content ?? ""),
     thinking: h.thinking,
+    ...(h.files?.length ? { files: h.files } : {}),
     ...(h.created_at ? { at: h.created_at < 1e12 ? h.created_at * 1000 : h.created_at } : {}),
     ...(h.role === "user" && isSteer(h.content ?? "") ? { steered: true } : {}),
   }));
 }
 
-// Overlay a live run's bubbles onto the fetched transcript. The harness persists a turn's
-// messages in one write at turn end, so a running turn is never in `history` — append its
-// bubbles; once it's done, the transcript holds the whole turn and wins.
+// Overlay a live run's bubbles onto the fetched transcript, minus what Hermes already saved of the
+// running turn (it writes as it goes); once the run is done, the transcript holds the whole turn and wins.
 function mergeLiveRun(history: ChatMessage[], run: LiveRun): ChatMessage[] {
   if (run.done) return history;
-  return [...history, ...run.users, ...run.steered.map((q) => q.user), run.assistant, ...run.queue.map((q) => q.user)];
+  return [...withoutRunningTurn(history, run.sent), ...run.users, ...run.steered.map((q) => q.user), run.assistant, ...run.queue.map((q) => q.user)];
 }
+
+// A request cut before any answer is sent again with the same key: the gateway joins the turn it started.
+const RESEND_WAITS_MS = [1_500, 4_000];
 
 // The steers Hermes left unread: their own bubbles when they match, else one bubble with its text.
 function takeUnread(run: LiveRun, pending: string): Queued[] {
@@ -303,7 +321,9 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
                 const tool = str(data.tool) ?? "tool";
                 const args = data.arguments && typeof data.arguments === "object" ? (data.arguments as Record<string, unknown>) : undefined;
                 const generating = event === "response.tool_call.generating";
-                patchRun(run, (m) => ({ ...m, tools: openTool(m.tools, { tool, status: "running", phrase: toolPhrase(tool, args), generating }) }));
+                const said = run.assistant.content.trim();
+                if (said) run.narration.push(said);
+                patchRun(run, (m) => ({ ...m, content: "", tools: openTool(m.tools, { tool, status: "running", phrase: toolPhrase(tool, args), generating }) }));
                 break;
               }
               case "response.tool_call.completed":
@@ -318,7 +338,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
               case "response.completed": {
                 sawTerminal = true;
                 const final = str(data.output_text);
-                if (final) patchRun(run, (m) => ({ ...m, content: final }));
+                if (final) patchRun(run, (m) => ({ ...m, content: finalReply(final, run.narration) }));
                 pendingSteer = str(data.pending_steer) ?? "";
                 break;
               }
@@ -391,6 +411,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
         steered: [],
         steers: new Set(),
         queue: [],
+        narration: [],
       };
       turns.start(run);
       runsRef.current.set(sid, run);
@@ -535,7 +556,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
       const startedAt = Date.now();
       const users = batch.map((q): ChatMessage => ({ ...q.user, at: startedAt, queued: undefined, steered: undefined }));
       const assistant: ChatMessage = { id: uid("a"), role: "assistant", content: "", tools: [] };
-      const run: LiveRun = { sessionId, responseId: null, abort: new AbortController(), users, assistant, done: false, steered: [], steers: new Set(), queue: [] };
+      const run: LiveRun = { sessionId, responseId: null, abort: new AbortController(), users, assistant, done: false, steered: [], steers: new Set(), queue: [], sent: { role: "user", content: text, at: startedAt }, narration: [] };
       turns.start(run);
       if (sessionId) {
         runsRef.current.set(sessionId, run);
@@ -559,10 +580,18 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
           provider: settings.provider ?? undefined,
           reasoning_effort: settings.reasoningEffort ?? undefined,
           files: files.length ? files : undefined,
+          client_message_id: newMessageKey(),
         });
         let res: Response;
-        for (let attempt = 0; ; attempt++) {
-          res = await fetch(`/api/agents/${agentId}/chat/responses`, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: run.abort.signal });
+        for (let attempt = 0, resend = 0; ; attempt++) {
+          try {
+            res = await fetch(`/api/agents/${agentId}/chat/responses`, { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: run.abort.signal });
+          } catch (e) {
+            if (!isNetworkError(e) || resend >= RESEND_WAITS_MS.length) throw e;
+            await new Promise((r) => setTimeout(r, RESEND_WAITS_MS[resend++]));
+            if (run.abort.signal.aborted) throw new DOMException("Arrêté", "AbortError");
+            continue;
+          }
           if (res.status !== 409 || attempt >= BUSY_RETRIES) break;
           await new Promise((r) => setTimeout(r, BUSY_WAIT_MS));
           if (run.abort.signal.aborted) throw new DOMException("Arrêté", "AbortError");
@@ -610,10 +639,11 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
         // Not part of this reply after all: it waits after it, as the next turn.
         if (isViewed(run)) setMessages((prev) => [...prev.filter((m) => m.id !== queued.id), queued]);
       };
-      const p = apiFetch<{ accepted?: boolean }>(`/api/agents/${agentId}/chat/responses/${run.responseId}/steer`, {
-        method: "POST",
-        body: JSON.stringify({ text: item.user.content }),
-      })
+      const body = JSON.stringify({ text: item.user.content, client_message_id: newMessageKey() });
+      const post = () => apiFetch<{ accepted?: boolean }>(`/api/agents/${agentId}/chat/responses/${run.responseId}/steer`, { method: "POST", body });
+      // Sent again once if the answer was lost: the gateway answers a resent steer without adding it twice.
+      const p = post()
+        .catch((e: unknown) => (isNetworkError(e) ? new Promise((r) => setTimeout(r, RESEND_WAITS_MS[0])).then(post) : Promise.reject(e)))
         .then((r) => r.accepted === true, () => false)
         .then((accepted) => {
           if (!accepted) toQueue();

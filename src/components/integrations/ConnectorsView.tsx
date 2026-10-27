@@ -1,9 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Loader2, MoreHorizontal, Plug, Plus, Search, Trash2, Unplug } from "lucide-react";
+import { AlertCircle, Check, ChevronRight, Loader2, MoreHorizontal, Pencil, Plug, Plus, RotateCw, Search, Star, Trash2, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import {
+  ACCOUNT_STATE_LABELS,
+  accountState,
+  accountSummary,
+  accountTitle,
+  accountsBySlug,
+  needsReconnect,
+  splitAccounts,
+} from "@/lib/connection-accounts";
 import { isConnectionActive as isActive } from "@/lib/expert-tools";
 import { DEFAULT_INTEGRATION_TOOLKITS, catalogToolkit, composioLogoUrl } from "@/lib/integration-catalog";
 import type {
@@ -13,14 +22,15 @@ import type {
   IntegrationToolkit,
   IntegrationToolkitsResult,
 } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ToolLogo } from "./ToolLogo";
@@ -42,6 +52,22 @@ function normalize(text: string): string {
   return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
+// A tool connected from a search and gone from the catalog comes back with its slug for a name
+// (« googleslides », « google_search_console ») : the usual ones by their real name, the others
+// spaced and capitalised.
+const KNOWN_NAMES: Record<string, string> = {
+  googleslides: "Google Slides", googlemeet: "Google Meet", googletasks: "Google Tasks", googlephotos: "Google Photos",
+  googlemaps: "Google Maps", googleads: "Google Ads", googlebigquery: "Google BigQuery", google_analytics: "Google Analytics",
+  google_search_console: "Google Search Console", googlesuper: "Google Workspace", youtube: "YouTube", linkedin: "LinkedIn",
+  whatsapp: "WhatsApp", github: "GitHub", gitlab: "GitLab", hubspot: "HubSpot", clickup: "ClickUp", mailchimp: "Mailchimp",
+  sharepoint: "SharePoint", one_drive: "OneDrive", microsoft_teams: "Microsoft Teams", excel: "Excel", openai: "OpenAI",
+};
+
+function readableName(slug: string, name: string | null | undefined): string {
+  if (name && name !== name.toLowerCase()) return name;
+  return KNOWN_NAMES[slug] ?? slug.replace(/[_-]+/g, " ").replace(/\b\p{L}/gu, (c) => c.toUpperCase());
+}
+
 // Search results come with English descriptions: a tool from our catalog keeps its French copy, any
 // other one shows its name only.
 function localized(t: IntegrationToolkit): IntegrationToolkit {
@@ -59,6 +85,7 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
   const [connecting, setConnecting] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [open, setOpen] = useState<IntegrationToolkit | null>(null);
 
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollDeadline = useRef(0);
@@ -109,20 +136,22 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
     };
   }, [q, agentId]);
 
-  const connectedSlugs = useMemo(
-    () => new Set((connections ?? []).filter(isActive).map((c) => slugKey(c.toolkitSlug))),
-    [connections]
-  );
+  const accounts = useMemo(() => accountsBySlug(connections ?? []), [connections]);
+
+  // The panel closes once its last account is gone.
+  useEffect(() => {
+    if (open && connections && !accounts.has(slugKey(open.slug))) setOpen(null);
+  }, [open, connections, accounts]);
 
   // The catalog, plus any connected tool that is not in it (connected from a search).
   const base = useMemo(() => {
     const extra: IntegrationToolkit[] = [];
     for (const c of connections ?? []) {
       const slug = slugKey(c.toolkitSlug);
-      if (!slug || !isActive(c) || catalogToolkit(slug) || extra.some((t) => t.slug === slug)) continue;
+      if (!slug || catalogToolkit(slug) || extra.some((t) => t.slug === slug)) continue;
       extra.push({
         slug,
-        name: c.toolkitName || slug,
+        name: readableName(slug, c.toolkitName),
         description: null,
         logo: composioLogoUrl(slug),
         enabled: true,
@@ -141,11 +170,9 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
     const found = q.length >= MIN_SEARCH && remote?.q === q ? remote.items : [];
     const seen = new Set(local.map((t) => slugKey(t.slug)));
     const merged = [...local, ...found.filter((t) => !seen.has(slugKey(t.slug)))];
-    // Connected tools first; the catalog order otherwise (sort is stable).
-    return merged.sort(
-      (a, b) => Number(connectedSlugs.has(slugKey(b.slug))) - Number(connectedSlugs.has(slugKey(a.slug)))
-    );
-  }, [q, base, remote, connectedSlugs]);
+    // Tools with accounts first; the catalog order otherwise (sort is stable).
+    return merged.sort((a, b) => Number(accounts.has(slugKey(b.slug))) - Number(accounts.has(slugKey(a.slug))));
+  }, [q, base, remote, accounts]);
 
   // Watch the connections until this tool gains an account (the sign-in happens in another tab) or
   // the deadline passes.
@@ -184,47 +211,37 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
     }
   }
 
-  // Disconnect a specific account of this tool.
-  async function disconnectAccount(connectionId: string, toolkitName: string, accountLabel?: string | null) {
-    setDisconnecting(connectionId);
+  // One account at a time, or every unfinished sign-in at once: the other accounts stay. Throws so
+  // the confirmation stays open on a failure.
+  async function disconnect(toolkit: IntegrationToolkit, ids: string[]) {
     try {
-      await apiFetch(`/api/agents/${agentId}/integrations/connections/${encodeURIComponent(connectionId)}`, {
-        method: "DELETE",
-      });
-      toast.success(accountLabel ? `${toolkitName} (${accountLabel}) est déconnecté` : `${toolkitName} est déconnecté`);
-    } catch (e) {
-      toast.error((e as Error).message);
+      for (const id of ids) {
+        setDisconnecting(id);
+        await apiFetch(`/api/agents/${agentId}/integrations/connections/${encodeURIComponent(id)}`, { method: "DELETE" });
+      }
+      toast.success(ids.length > 1 ? `${ids.length} connexions ${toolkit.name} retirées` : `Compte ${toolkit.name} déconnecté`);
     } finally {
       await fetchConnections().catch(() => undefined);
       setDisconnecting(null);
     }
   }
 
-  // Disconnect every account of this tool.
-  async function disconnectAll(toolkit: IntegrationToolkit) {
-    const ids = (connections ?? [])
-      .filter((c) => isActive(c) && slugKey(c.toolkitSlug) === slugKey(toolkit.slug))
-      .map((c) => c.id);
-    setDisconnecting(slugKey(toolkit.slug));
+  // Label and default are kept by the back office, so they follow the member on every device.
+  async function updateAccount(id: string, body: { label?: string | null; isDefault?: boolean }) {
     try {
-      await Promise.all(
-        ids.map((id) =>
-          apiFetch(`/api/agents/${agentId}/integrations/connections/${encodeURIComponent(id)}`, { method: "DELETE" })
-        )
-      );
-      toast.success(`${toolkit.name} est déconnecté`);
+      await apiFetch(`/api/agents/${agentId}/integrations/connections/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) });
+      if (body.isDefault) toast.success("Vos Experts utiliseront ce compte par défaut");
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
       await fetchConnections().catch(() => undefined);
-      setDisconnecting(null);
     }
   }
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1.5">
-        <p className="text-[15px] text-ink-2">Connectez les outils de l’entreprise : tous vos experts peuvent s’en servir.</p>
+        <p className="text-[15px] text-ink-2">Connectez les outils de l’entreprise : tous vos Experts peuvent s’en servir.</p>
         <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-3">
           <Plug className="h-4 w-4" />
           Plus de 1 000 applications disponibles
@@ -249,20 +266,14 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {visible.map((t) => {
             const k = slugKey(t.slug);
-            const toolConns =
-              connections === null
-                ? null
-                : (connections ?? []).filter((c) => isActive(c) && slugKey(c.toolkitSlug) === k);
             return (
               <ToolTile
                 key={k}
                 toolkit={t}
-                toolConnections={toolConns}
+                accounts={connections === null ? null : (accounts.get(k) ?? [])}
                 waiting={connecting === k || pending === k}
-                disconnectingId={disconnecting}
                 onConnect={() => connect(t)}
-                onDisconnectAccount={(connId, label) => disconnectAccount(connId, t.name, label)}
-                onDisconnectAll={() => disconnectAll(t)}
+                onOpen={() => setOpen(t)}
               />
             );
           })}
@@ -281,7 +292,20 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
         </div>
       )}
 
-      {pending && (
+      {open && (
+        <AccountsPanel
+          toolkit={open}
+          accounts={accounts.get(slugKey(open.slug)) ?? []}
+          waiting={connecting === slugKey(open.slug) || pending === slugKey(open.slug)}
+          disconnecting={disconnecting}
+          onClose={() => setOpen(null)}
+          onConnect={() => connect(open)}
+          onDisconnect={(ids) => disconnect(open, ids)}
+          onUpdate={updateAccount}
+        />
+      )}
+
+      {pending && !open && (
         <p className="flex items-center gap-2 text-[13px] text-ink-3">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Terminez la connexion dans l’onglet qui vient de s’ouvrir.
@@ -291,128 +315,82 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
   );
 }
 
+const STATE_TONE = {
+  active: "bg-ok-pale text-ok",
+  pending: "bg-soft text-ink-2",
+  failed: "bg-coral-pale text-coral-ink",
+  disabled: "bg-soft text-ink-3",
+} as const;
+
+// « 12 oct. », the year only when it is not this one.
+const dateFr = (ms: number | null | undefined): string => {
+  if (!ms) return "";
+  const d = new Date(ms);
+  const year = d.getFullYear() !== new Date().getFullYear() ? { year: "numeric" as const } : {};
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", ...year });
+};
+
 function ToolTile({
   toolkit,
-  toolConnections,
+  accounts,
   waiting,
-  disconnectingId,
   onConnect,
-  onDisconnectAccount,
-  onDisconnectAll,
+  onOpen,
 }: {
   toolkit: IntegrationToolkit;
   // null while the connections are still loading
-  toolConnections: IntegrationConnection[] | null;
+  accounts: IntegrationConnection[] | null;
   waiting: boolean;
-  disconnectingId: string | null;
   onConnect: () => void;
-  onDisconnectAccount: (connectionId: string, label?: string | null) => void;
-  onDisconnectAll: () => void;
+  onOpen: () => void;
 }) {
-  const count = toolConnections?.length ?? 0;
-  const isDisconnectingThis =
-    disconnectingId !== null &&
-    ((toolConnections ?? []).some((c) => c.id === disconnectingId) || disconnectingId === slugKey(toolkit.slug));
-
-  const accountsSummary = useMemo(() => {
-    if (!toolConnections || toolConnections.length === 0) return null;
-    const labels = toolConnections.map((c, idx) => c.label || c.alias || (c.id ? `Compte (${c.id.slice(-4)})` : `Compte ${idx + 1}`));
-    return labels.join(", ");
-  }, [toolConnections]);
-
-  return (
-    <div className="flex min-h-[76px] items-center gap-3 rounded-[22px] border bg-card py-3 pl-4 pr-3">
+  const head = (
+    <>
       <ToolLogo logo={toolkit.logo} name={toolkit.name} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-semibold text-ink">{toolkit.name}</p>
-        {accountsSummary ? (
-          <p className="truncate text-[13px] font-medium text-ink-2" title={accountsSummary}>
-            {accountsSummary}
-          </p>
-        ) : toolkit.description ? (
-          <p className="truncate text-[13px] text-ink-3">{toolkit.description}</p>
-        ) : null}
+        <p className="line-clamp-2 text-[15px] font-semibold leading-snug text-ink">{toolkit.name}</p>
+        {accounts && accounts.length > 0 ? (
+          <p className="truncate text-[13px] text-ink-3">{accountSummary(accounts)}</p>
+        ) : (
+          toolkit.description && <p className="truncate text-[13px] text-ink-3">{toolkit.description}</p>
+        )}
       </div>
+    </>
+  );
 
-      {toolConnections === null ? (
-        <span className="h-8 w-24 shrink-0 animate-pulse rounded-[10px] bg-soft" />
-      ) : count > 0 ? (
-        <div className="flex shrink-0 items-center gap-0.5">
-          <span className="inline-flex items-center gap-1 rounded-full bg-ok-pale px-2.5 py-1 text-xs font-semibold text-ok">
-            <Check className="h-3.5 w-3.5" />
-            {count === 1 ? "Connecté" : `${count} comptes`}
+  // A tool with accounts is one button: the card sums them up, the panel lists them.
+  if (accounts && accounts.length > 0) {
+    const broken = accounts.some(needsReconnect) || !accounts.some(isActive);
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Comptes ${toolkit.name}`}
+        className="flex min-h-[78px] w-full items-center gap-3 rounded-[22px] border bg-card py-3 pl-4 pr-3 text-left transition-colors hover:border-ink-3/40"
+      >
+        {head}
+        {waiting ? (
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ink-3" />
+        ) : broken ? (
+          <span title="Un compte est à reconnecter" className="grid size-6 shrink-0 place-items-center rounded-full bg-coral-pale text-coral-ink">
+            <AlertCircle className="h-3.5 w-3.5" />
           </span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label={`Options pour ${toolkit.name}`}
-                disabled={isDisconnectingThis || waiting}
-                className="grid h-8 w-8 max-sm:size-10 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink disabled:opacity-60"
-              >
-                {isDisconnectingThis || waiting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <MoreHorizontal className="h-4 w-4" />
-                )}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72 p-1.5">
-              <DropdownMenuLabel className="px-2 py-1 text-xs font-semibold text-ink-3">
-                {count === 1 ? "Compte connecté" : `Comptes connectés (${count})`}
-              </DropdownMenuLabel>
+        ) : (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ok-pale px-2.5 py-1 text-xs font-semibold text-ok">
+            <Check className="h-3.5 w-3.5" />
+            Connecté
+          </span>
+        )}
+        <ChevronRight className="h-4 w-4 shrink-0 text-ink-3" />
+      </button>
+    );
+  }
 
-              <div className="space-y-0.5">
-                {toolConnections.map((conn, idx) => {
-                  const label = conn.label || conn.alias || (conn.id ? `Compte (${conn.id.slice(-4)})` : `Compte ${idx + 1}`);
-                  const isDeleting = disconnectingId === conn.id;
-                  return (
-                    <div
-                      key={conn.id}
-                      className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-soft"
-                    >
-                      <span className="truncate font-medium text-ink" title={label}>
-                        {label}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDisconnectAccount(conn.id, label);
-                        }}
-                        disabled={Boolean(disconnectingId)}
-                        title={`Déconnecter ${label}`}
-                        className="grid h-6 w-6 place-items-center rounded text-ink-3 transition-colors hover:bg-ko-pale hover:text-ko disabled:opacity-50"
-                      >
-                        {isDeleting ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <DropdownMenuSeparator className="my-1.5" />
-
-              <DropdownMenuItem onSelect={onConnect} className="cursor-pointer">
-                <Plus className="h-4 w-4" /> Connecter un autre compte
-              </DropdownMenuItem>
-
-              {count > 1 && (
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={onDisconnectAll}
-                  className="cursor-pointer text-ko"
-                >
-                  <Unplug className="h-4 w-4" /> Déconnecter tous les comptes
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+  return (
+    <div className="flex min-h-[78px] items-center gap-3 rounded-[22px] border bg-card py-3 pl-4 pr-3">
+      {head}
+      {accounts === null ? (
+        <span className="h-8 w-24 shrink-0 animate-pulse rounded-[10px] bg-soft" />
       ) : waiting ? (
         <Button size="sm" variant="outline" disabled className="shrink-0">
           <Loader2 className="animate-spin" />
@@ -424,5 +402,206 @@ function ToolTile({
         </Button>
       )}
     </div>
+  );
+}
+
+// Every account of one tool: a drawer on the right on a computer, a sheet from the bottom on a phone.
+function AccountsPanel({
+  toolkit,
+  accounts,
+  waiting,
+  disconnecting,
+  onClose,
+  onConnect,
+  onDisconnect,
+  onUpdate,
+}: {
+  toolkit: IntegrationToolkit;
+  accounts: IntegrationConnection[];
+  waiting: boolean;
+  disconnecting: string | null;
+  onClose: () => void;
+  onConnect: () => void;
+  onDisconnect: (ids: string[]) => Promise<void>;
+  onUpdate: (id: string, body: { label?: string | null; isDefault?: boolean }) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [confirm, setConfirm] = useState<{ ids: string[]; title: string; description: string } | null>(null);
+  const { accounts: listed, unfinished } = splitAccounts(accounts);
+  const titleOf = (c: IntegrationConnection) => accountTitle(c, listed.indexOf(c));
+
+  function saveName(c: IntegrationConnection) {
+    setEditing(null);
+    const label = draft.trim() || null;
+    if (label !== (c.label ?? null)) void onUpdate(c.id, { label });
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
+        className={cn(
+          "flex flex-col gap-0 overflow-y-auto p-0",
+          "sm:left-auto sm:right-0 sm:top-0 sm:h-full sm:w-[440px] sm:max-w-none sm:translate-x-0 sm:translate-y-0 sm:rounded-none sm:border-y-0 sm:border-r-0",
+          "max-sm:bottom-0 max-sm:left-0 max-sm:top-auto max-sm:max-h-[88vh] max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:rounded-t-[22px]"
+        )}
+      >
+        <div className="flex items-center gap-3 border-b px-5 py-4 pr-14">
+          <ToolLogo logo={toolkit.logo} name={toolkit.name} />
+          <div className="min-w-0">
+            <DialogTitle className="text-[19px] font-bold leading-tight text-ink">{toolkit.name}</DialogTitle>
+            <DialogDescription className="text-[13px] text-ink-3">{accountSummary(accounts)}</DialogDescription>
+          </div>
+        </div>
+
+        <div className="flex-1 px-5 py-2">
+          {listed.length > 1 && !listed.some((a) => a.isDefault) && (
+            <p className="pt-2 text-[13px] text-ink-3">Plusieurs comptes : choisissez celui que vos Experts utilisent (menu « … », Utiliser par défaut).</p>
+          )}
+          <ul className="divide-y">
+            {listed.map((a) => {
+              const state = accountState(a);
+              const title = titleOf(a);
+              return (
+                <li key={a.id} className="flex items-center gap-2 py-3">
+                  <div className="min-w-0 flex-1">
+                    {editing === a.id ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          saveName(a);
+                        }}
+                      >
+                        <Input
+                          autoFocus
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                          onBlur={() => saveName(a)}
+                          onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), setEditing(null))}
+                          placeholder={a.email || a.accountName || `Compte ${listed.indexOf(a) + 1}`}
+                          aria-label="Nom du compte"
+                          maxLength={80}
+                          className="h-10"
+                        />
+                      </form>
+                    ) : (
+                      <p className="truncate text-[15px] font-semibold text-ink" title={a.id}>
+                        {title}
+                      </p>
+                    )}
+                    {a.email && a.email !== title && <p className="truncate text-[13px] text-ink-2">{a.email}</p>}
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-3">
+                      {dateFr(a.createdAt) && (
+                        <span>
+                          Ajouté le {dateFr(a.createdAt)}
+                          {a.addedBy && ` par ${a.addedBy.name || a.addedBy.email}`}
+                        </span>
+                      )}
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATE_TONE[state]}`}>
+                        {ACCOUNT_STATE_LABELS[state]}
+                      </span>
+                      {a.isDefault && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-ok-pale px-2 py-0.5 text-[11px] font-semibold text-ok">
+                          <Star className="h-3 w-3" />
+                          Par défaut
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  {needsReconnect(a) && (
+                    <Button size="sm" onClick={onConnect} disabled={waiting} className="shrink-0">
+                      <RotateCw />
+                      Reconnecter
+                    </Button>
+                  )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Options pour ${title}`}
+                        className="grid size-10 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-soft hover:text-ink"
+                      >
+                        {disconnecting === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setDraft(a.label ?? "");
+                          setEditing(a.id);
+                        }}
+                      >
+                        <Pencil /> Renommer
+                      </DropdownMenuItem>
+                      {!a.isDefault && listed.length > 1 && state === "active" && (
+                        <DropdownMenuItem onSelect={() => void onUpdate(a.id, { isDefault: true })}>
+                          <Star /> Utiliser par défaut
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onSelect={() =>
+                          setConfirm({
+                            ids: [a.id],
+                            title: `Déconnecter ${title} ?`,
+                            description: `Vos Experts n’auront plus accès à ce compte ${toolkit.name}. Vous pourrez le reconnecter quand vous voulez.`,
+                          })
+                        }
+                      >
+                        <Unplug /> Déconnecter
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </li>
+              );
+            })}
+          </ul>
+
+          {unfinished.length > 0 && (
+            <div className="mt-2 flex items-center justify-between gap-3 rounded-[14px] bg-soft py-1 pl-4 pr-1 text-[13px]">
+              <span className="text-ink-2">
+                {unfinished.length > 1 ? `${unfinished.length} connexions inachevées` : "1 connexion inachevée"}
+              </span>
+              <button
+                type="button"
+                disabled={disconnecting !== null}
+                onClick={() =>
+                  setConfirm({
+                    ids: unfinished.map((c) => c.id),
+                    title: "Faire le ménage ?",
+                    description: "Les connexions jamais terminées sont retirées. Vos comptes connectés ne bougent pas.",
+                  })
+                }
+                className="inline-flex h-10 items-center gap-1.5 rounded-full px-3 font-semibold text-ink transition-colors hover:bg-card disabled:opacity-60"
+              >
+                <Trash2 className="h-4 w-4" />
+                Faire le ménage
+              </button>
+            </div>
+          )}
+
+          <Button variant="outline" className="mt-4 w-full" onClick={onConnect} disabled={waiting}>
+            {waiting ? <Loader2 className="animate-spin" /> : <Plus />}
+            {waiting ? "En attente de la connexion" : `Ajouter un compte ${toolkit.name}`}
+          </Button>
+          {waiting && (
+            <p className="mt-2 text-center text-[13px] text-ink-3">Terminez la connexion dans l’onglet qui vient de s’ouvrir.</p>
+          )}
+          <div className="h-4" />
+        </div>
+      </DialogContent>
+
+      {confirm && (
+        <ConfirmDialog
+          open
+          onOpenChange={(o) => !o && setConfirm(null)}
+          title={confirm.title}
+          description={confirm.description}
+          confirmText={confirm.ids.length > 1 ? "Retirer" : "Déconnecter"}
+          destructive
+          onConfirm={() => onDisconnect(confirm.ids)}
+        />
+      )}
+    </Dialog>
   );
 }

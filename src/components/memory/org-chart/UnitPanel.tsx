@@ -63,7 +63,7 @@ export function UnitPanel({ org, company, unitId, counts, onClose }: { org: Org;
       {unit ? (
         <>
           <div className={HEADING}>Membres ({members.length})</div>
-          {members.length ? <ul className="grid gap-2">{members.map((r) => row(r, memberName(r.member), "Tous ses experts"))}</ul> : <p className="text-xs text-ink-3">Aucun membre.</p>}
+          {members.length ? <ul className="grid gap-2">{members.map((r) => row(r, memberName(r.member), "Tous ses Experts"))}</ul> : <p className="text-xs text-ink-3">Aucun membre.</p>}
           <div className={HEADING}>Experts ajoutés seuls ({experts.length})</div>
           {experts.length ? (
             <ul className="grid gap-2">{experts.map((r) => row(r, expertLabel(r), `Expert de ${memberName(r.member)}`))}</ul>
@@ -80,8 +80,8 @@ export function UnitPanel({ org, company, unitId, counts, onClose }: { org: Org;
                 if (member) void org.assign(unit.id, member, profile || null);
               }}
             >
-              <option value="">+ Ajouter une personne ou un expert</option>
-              <optgroup label="Un membre et ses experts">
+              <option value="">+ Ajouter une personne ou un Expert</option>
+              <optgroup label="Un membre et ses Experts">
                 {chart.members
                   .filter((m) => !members.some((r) => r.member.id === m.id))
                   .map((m) => (
@@ -90,7 +90,7 @@ export function UnitPanel({ org, company, unitId, counts, onClose }: { org: Org;
                     </option>
                   ))}
               </optgroup>
-              <optgroup label="Un expert seul">
+              <optgroup label="Un Expert seul">
                 {chart.members.flatMap((m) =>
                   m.experts
                     .filter((x) => !experts.some((r) => r.member.id === m.id && r.place.profile === x.profile))
@@ -119,7 +119,7 @@ export function UnitPanel({ org, company, unitId, counts, onClose }: { org: Org;
       <div className={HEADING}>Documents</div>
       <p className="text-xs text-ink-3">
         {docs > 0
-          ? `${count(docs, "document")} ${unit ? `réservé${docs > 1 ? "s" : ""} à ce département` : "pour toute l’entreprise"}, à voir dans Entreprise.`
+          ? `${count(docs, "document")} ${unit ? `réservé${docs > 1 ? "s" : ""} à ce département` : "pour toute l’entreprise"}, à voir dans Contexte.`
           : unit
             ? "Aucun document réservé à ce département."
             : "Aucun document pour toute l’entreprise."}

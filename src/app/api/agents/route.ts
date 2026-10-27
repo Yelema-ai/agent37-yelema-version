@@ -74,7 +74,7 @@ export async function GET(request: Request) {
     let live = new Map<string, Agent>();
     let templates = new Map<string, Template>();
     const [liveRes, tmplRes] = await Promise.allSettled([
-      agent37.listAgents(),
+      agent37.listAgents(workspaceId),
       getTemplates(),
     ]);
     if (liveRes.status === "fulfilled") {

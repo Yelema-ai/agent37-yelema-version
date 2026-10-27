@@ -1,5 +1,5 @@
 import { requireAgentAccess } from "@/lib/auth";
-import { hermesCron } from "@/lib/hermes-cron";
+import { routinesOf } from "@/lib/routine-store";
 import { handleError, json, readJson } from "@/lib/http";
 import { routineExpert } from "../../_body";
 
@@ -14,7 +14,7 @@ export async function POST(request: Request, { params }: Ctx) {
     const { id, routineId } = await params;
     const { row } = await requireAgentAccess(id);
     const expert = await routineExpert(row, (await readJson<{ expert?: string }>(request)).expert);
-    await hermesCron.runNow(id, expert.profile, routineId);
+    await (await routinesOf(id)).runNow(id, expert.profile, routineId);
     return json({ id: routineId, queued: true });
   } catch (e) {
     return handleError(e);

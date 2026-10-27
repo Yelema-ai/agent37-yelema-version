@@ -1,10 +1,16 @@
 "use client";
 
+import { DeliverableWatcher } from "@/components/activity/DeliverableWatcher";
+import { syncPrefs } from "@/lib/prefs-sync";
+import { SearchDialog } from "@/components/conversations/SearchDialog";
+import { useWorkspace } from "@/components/WorkspaceProvider";
+import { CompanyColors } from "@/components/app/CompanyColors";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ActivityProvider } from "@/components/activity/ActivityProvider";
 import { Sidebar } from "@/components/app/Sidebar";
 import { TopBar } from "@/components/app/TopBar";
+import { DeployStatusProvider, UpdateStrip } from "@/components/app/DeployStatus";
 import { ComputerProvider } from "@/components/experts/ComputerProvider";
 import { ExpertsProvider } from "@/components/experts/ExpertsProvider";
 import type { InitialExperts } from "@/components/experts/useExperts";
@@ -28,6 +34,9 @@ const COLLAPSE_KEY = "sbmini";
  * son contenu dans <Page>.
  */
 export function AppShell({ children, initialExperts }: { children: React.ReactNode; initialExperts: InitialExperts | null }) {
+  // The member's notification and conversation choices, from the back office, before the first notice.
+  useEffect(() => void syncPrefs(), []);
+  const chatOnly = useWorkspace().current?.access === "entreprise";
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -51,6 +60,14 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
     setDrawerOpen(false);
   }, [pathname]);
 
+  // Échap referme le tiroir, comme toute fenêtre posée par-dessus la page.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawerOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerOpen]);
+
   function toggle() {
     // Dans le tiroir, le bouton du menu le referme au lieu de le replier.
     if (drawerOpen) {
@@ -70,9 +87,13 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
 
   return (
     <ExpertsProvider initial={initialExperts}>
+      <DeployStatusProvider>
       <ActivityProvider>
         {/* The call lives above the pages: it goes on, folded or not, while the member navigates. */}
         <CallProvider>
+        <CompanyColors />
+        <DeliverableWatcher />
+        <SearchDialog />
         <div
           className="min-h-screen md:grid"
           // --shell-nav: where the working area starts, for what covers it (an enlarged dashboard).
@@ -98,6 +119,7 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
               fichiers gardent leur barre de saisie en bas, les pages longues défilant à l'intérieur. */}
           <main className="flex h-screen min-w-0 flex-col overflow-y-auto">
             <TopBar onMenu={() => setDrawerOpen(true)} />
+            <UpdateStrip />
             <CallStrip />
             <ComputerProvider key={computerAgentId ?? "none"} agentId={computerAgentId}>
               {children}
@@ -107,6 +129,7 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
         </div>
         </CallProvider>
       </ActivityProvider>
+      </DeployStatusProvider>
     </ExpertsProvider>
   );
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { docKind, drivePathsIn, normDrivePath, turnDocs, turnWindow } from "./drive-links.ts";
+import { docKind, drivePathsIn, isHiddenInChat, normDrivePath, turnDocs } from "./drive-links.ts";
 
 test("the paths a reply names, in order, once each, in one spelling", () => {
   const text = [
@@ -17,30 +17,14 @@ test("formats", () => {
   assert.deepEqual(["a.PDF", "b.xlsx", "c.docx", "d.pptx", "e.png", "f.zip"].map(docKind), ["pdf", "excel", "word", "powerpoint", "image", "other"]);
 });
 
-test("a turn runs from its question to its reply", () => {
-  const m = [
-    { role: "user", at: 1_000_000 },
-    { role: "assistant", at: 1_100_000 },
-    { role: "user", at: 2_000_000 },
-    { role: "assistant", at: 2_300_000 },
-  ];
-  assert.deepEqual(turnWindow(m, 3, 9e9), { start: 1_995_000, end: 2_305_000 });
-  // A turn stamped at its end: it starts after the previous reply.
-  const same = [{ role: "assistant", at: 1_900_000 }, { role: "user", at: 2_300_000 }, { role: "assistant", at: 2_300_000 }];
-  assert.deepEqual(turnWindow(same, 2, 9e9), { start: 1_895_000, end: 2_305_000 });
-  // While it is written, it ends now.
-  assert.equal(turnWindow([{ role: "user", at: 10_000 }, { role: "assistant" }], 1, 50_000).end, 55_000);
-});
-
-test("cards: the named files, then the files written during the turn, never the memory", () => {
+test("cards: the named files, then the deliverables this turn wrote, never another turn's nor the memory", () => {
   const listing = [
     { name: "Devis Yao.pdf", path: "/home/node/Livrables/Kouassi/Devis Yao.pdf", type: "file", size: 2048, modified: 100 },
     { name: "pipeline.xlsx", path: "/home/node/Livrables/Kouassi/pipeline.xlsx", type: "file", size: 4096, modified: 2_100 },
-    { name: "ancien.docx", path: "/home/node/Livrables/Kouassi/ancien.docx", type: "file", size: 1, modified: 50 },
-    { name: "notes.md", path: "/home/node/Livrables/Kouassi/Mémoire/notes.md", type: "file", size: 1, modified: 2_050 },
-    { name: "Clients", path: "/home/node/Livrables/Kouassi/Clients", type: "directory", size: null, modified: 2_000 },
+    { name: "telegram.pdf", path: "/home/node/Livrables/Kouassi/telegram.pdf", type: "file", size: 1, modified: 2_200 },
   ];
-  const docs = turnDocs("Le devis : `~/Livrables/Kouassi/Devis Yao.pdf`", listing, { start: 2_000, end: 3_000 });
+  const written = ["Livrables/Kouassi/pipeline.xlsx", "Livrables/Kouassi/Mémoire/notes.md", "Livrables/Kouassi/brouillon.md"];
+  const docs = turnDocs("Le devis : `~/Livrables/Kouassi/Devis Yao.pdf`", listing, written);
   assert.deepEqual(
     docs.map((d) => [d.name, d.size, d.kind]),
     [
@@ -48,14 +32,16 @@ test("cards: the named files, then the files written during the turn, never the 
       ["pipeline.xlsx", 4096, "excel"],
     ]
   );
+  // A file written meanwhile by another conversation (Telegram) gets no card here.
+  assert.ok(!docs.some((d) => d.name === "telegram.pdf"));
   // Without a listing, the named files alone.
-  assert.deepEqual(turnDocs("`~/Livrables/X/a.pdf`", [], { start: 0, end: 1 }).map((d) => d.path), ["~/Livrables/X/a.pdf"]);
+  assert.deepEqual(turnDocs("`~/Livrables/X/a.pdf`", []).map((d) => d.path), ["~/Livrables/X/a.pdf"]);
 });
 
 test("cards: a named file missing from a listed folder is made up, elsewhere it is kept", () => {
   const listing = [{ name: "Devis.pdf", path: "/home/node/Livrables/Kouassi/Devis.pdf", type: "file", size: 10, modified: 1 }];
   const text = "`~/Livrables/Kouassi/Inventé.pdf` et `~/Livrables/Archives/2025/export.pdf`";
-  assert.deepEqual(turnDocs(text, listing, { start: 5, end: 6 }).map((d) => d.path), ["~/Livrables/Archives/2025/export.pdf"]);
+  assert.deepEqual(turnDocs(text, listing).map((d) => d.path), ["~/Livrables/Archives/2025/export.pdf"]);
 });
 
 test("turnDocs shows no card for a working file (JSON, script, log)", () => {
@@ -64,6 +50,13 @@ test("turnDocs shows no card for a working file (JSON, script, log)", () => {
     { path: "Livrables/Kouassi/calcul.py", type: "file" as const, hidden: false, modified: 50, size: 10, name: "calcul.py" },
     { path: "Livrables/Kouassi/Point.pdf", type: "file" as const, hidden: false, modified: 50, size: 10, name: "Point.pdf" },
   ];
-  const docs = turnDocs("Voir Livrables/Kouassi/etat.json", listing as never, { start: 0, end: 100 });
+  const docs = turnDocs("Voir Livrables/Kouassi/etat.json", listing as never, ["Livrables/Kouassi/calcul.py", "Livrables/Kouassi/Point.pdf"]);
   assert.deepEqual(docs.map((d) => d.name), ["Point.pdf"]);
+});
+
+test("a note (.md) or a memory file named in the reply or by a MEDIA tag gets no card", () => {
+  const text = "Voir `~/Livrables/Koffi/brief.md` et `~/Livrables/Koffi/_memoire/client.pdf`, puis `~/Livrables/Koffi/affiche.png`.";
+  const docs = turnDocs(text, [], ["~/Livrables/Koffi/notes.md", "~/Livrables/Koffi/Mémoire/suivi.docx", "~/Livrables/Koffi/deck.pdf"]);
+  assert.deepEqual(docs.map((d) => d.name), ["affiche.png", "deck.pdf"]);
+  assert.ok(isHiddenInChat("~/Livrables/Koffi/brief.MD") && !isHiddenInChat("~/Livrables/Koffi/deck.pdf"));
 });

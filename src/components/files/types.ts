@@ -1,6 +1,6 @@
 // Shared client-side helpers for the Files tab. The wire shapes (FileEntry / FileListResponse)
 // live in lib/types.ts so the server (lib/agent37.ts) and the browser agree on one definition.
-import { DRIVE_ABS, DRIVE_ROOT } from "@/lib/drive-paths";
+import { DRIVE_ABS, DRIVE_ROOT, seatFolderOf } from "@/lib/drive-paths";
 import type { FileEntry } from "@/lib/types";
 
 export type { FileEntry, FileListResponse } from "@/lib/types";
@@ -40,9 +40,12 @@ export function formatMtime(ms: number): string {
 export function breadcrumbs(path: string): { label: string; path: string }[] {
   const root = [DRIVE_ABS, DRIVE_ROOT].find((r) => path === r || path.startsWith(`${r}/`));
   if (!root) return [];
-  const crumbs: { label: string; path: string }[] = [{ label: "Livrables", path: root }];
-  let acc = root;
-  for (const part of path.slice(root.length).split("/").filter(Boolean)) {
+  const parts = path.slice(root.length).split("/").filter(Boolean);
+  const seat = seatFolderOf(parts);
+  if (seat) parts.shift();
+  let acc = seat ? `${root}/${seat}` : root;
+  const crumbs: { label: string; path: string }[] = [{ label: seat ? "Mes livrables" : "Livrables", path: acc }];
+  for (const part of parts) {
     acc += `/${part}`;
     crumbs.push({ label: part, path: acc });
   }
@@ -77,6 +80,12 @@ export function previewKind(name: string): PreviewKind {
 // which streams the bytes server-side with the key attached.
 export function contentUrl(agentId: string, path: string, disposition: "inline" | "attachment"): string {
   return `/api/agents/${agentId}/files/content?path=${encodeURIComponent(path)}&disposition=${disposition}`;
+}
+
+/** A reduced copy of a drive picture (thumb route); `modified` versions it so the browser keeps it. */
+export function thumbUrl(agentId: string, path: string, width: number, modified?: number | null): string {
+  const v = modified ? `&v=${Math.trunc(modified)}` : "";
+  return `/api/agents/${agentId}/files/thumb?path=${encodeURIComponent(path)}&w=${width}${v}`;
 }
 
 // Folder download → the BFF archive route streams a .tar.gz of the directory (key attached

@@ -12,8 +12,11 @@ function run(s: TurnState, t0: number, ms: number, levels: Partial<TurnReading>)
 test("halo: same order as the mobile app", () => {
   assert.equal(haloOf("connecting", true), "connexion");
   assert.equal(haloOf("reconnecting", false), "reco");
-  assert.equal(haloOf("thinking", true), "reflechit");
-  assert.equal(haloOf("speaking", true), "muet");
+  assert.equal(haloOf("thinking", true), "muet");
+  assert.equal(haloOf("thinking", false), "reflechit");
+  assert.equal(haloOf("thinking", false, true), "cherche");
+  assert.equal(haloOf("speaking", false, true), "parle");
+  assert.equal(haloOf("speaking", true), "parle");
   assert.equal(haloOf("speaking", false), "parle");
   assert.equal(haloOf("listening", false), "ecoute");
   assert.equal(haloOf("ended", false), null);
@@ -24,13 +27,21 @@ test("member speaks, falls silent: the expert thinks, then speaks", () => {
   let [s, t] = run(firstTurn(), 1000, 1000, { mic: 0.2 });
   assert.equal(s.phase, "listening");
   assert.equal(s.memberSpoke, true);
-  [s, t] = run(s, t, 1000, {});
+  [s, t] = run(s, t, 1300, {});
   assert.equal(s.phase, "thinking");
-  [s, t] = run(s, t, 300, { voice: 0.1 });
+  [s, t] = run(s, t, 400, { voice: 0.1 });
   assert.equal(s.phase, "speaking");
-  [s] = run(s, t, 1000, {});
+  [s] = run(s, t, 1500, {});
   assert.equal(s.phase, "listening");
   assert.equal(s.memberSpoke, false);
+});
+
+test("a breath between two sentences keeps the expert speaking", () => {
+  let [s, t] = run({ ...firstTurn(), phase: "speaking" }, 0, 500, { voice: 0.1 });
+  [s, t] = run(s, t, 900, {});
+  assert.equal(s.phase, "speaking");
+  [s] = run(s, t, 500, { voice: 0.1 });
+  assert.equal(s.phase, "speaking");
 });
 
 test("silence alone never makes the expert think", () => {
@@ -48,13 +59,13 @@ test("« Laisse-moi finir »: a pause does not end the member's turn", () => {
   let [s, t] = run(firstTurn(), 0, 800, { mic: 0.2 });
   [s, t] = run(s, t, 3000, { holding: true });
   assert.equal(s.phase, "listening");
-  [s] = run(s, t, 1000, { holding: false });
+  [s] = run(s, t, 1300, { holding: false });
   assert.equal(s.phase, "thinking");
 });
 
 test("thinking ends after 15 s, 45 s with « Réfléchis plus longtemps »", () => {
   let [s, t] = run(firstTurn(), 0, 800, { mic: 0.2 });
-  [s, t] = run(s, t, 1000, {});
+  [s, t] = run(s, t, 1300, {});
   assert.equal(s.phase, "thinking");
   const [short] = run(s, t, THINKING_MAX_MS, {});
   assert.equal(short.phase, "listening");
@@ -66,7 +77,7 @@ test("thinking ends after 15 s, 45 s with « Réfléchis plus longtemps »", () 
 
 test("the member speaks again while the expert thinks: back to listening", () => {
   let [s, t] = run(firstTurn(), 0, 800, { mic: 0.2 });
-  [s, t] = run(s, t, 1000, {});
+  [s, t] = run(s, t, 1300, {});
   assert.equal(s.phase, "thinking");
   [s] = run(s, t, 400, { mic: 0.2 });
   assert.equal(s.phase, "listening");

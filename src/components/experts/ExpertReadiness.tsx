@@ -5,6 +5,7 @@ import { Check, CircleDashed, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { readiness, type JourZero } from "@/lib/jour-zero";
 import { cn } from "@/lib/utils";
+import { UpdateSpinner, useDeployPhase } from "@/components/app/DeployStatus";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const TONE = {
@@ -29,6 +30,7 @@ export function ExpertReadiness({
 }) {
   const [jz, setJz] = useState<JourZero | null>(null);
   const [open, setOpen] = useState(false);
+  const updating = useDeployPhase() === "maintenance";
 
   useEffect(() => {
     let live = true;
@@ -41,6 +43,13 @@ export function ExpertReadiness({
     };
   }, [agentId, profileId]);
 
+  // During an update the chip says so: the expert answers slower, and it is not a fault of its own.
+  if (updating)
+    return (
+      <span role="status" className={cn("inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-[12px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300", className)}>
+        <UpdateSpinner className="size-3" /> Mise à jour
+      </span>
+    );
   if (!jz) return null;
   const r = readiness(jz);
   const Icon = r.state === "ready" ? Check : CircleDashed;
@@ -83,7 +92,7 @@ export function ExpertReadiness({
                         }}
                         className="mt-0.5 text-xs font-semibold text-brand-ink hover:underline"
                       >
-                        Ouvrir l’onglet Outils
+                        Ouvrir les connecteurs
                       </button>
                     )}
                   </div>

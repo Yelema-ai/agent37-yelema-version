@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAsyncAction } from "@/components/useAsyncAction";
 import { isAllowlistField, isWritableField } from "@/lib/channel-rules";
+import { DisconnectButton } from "@/components/channels/DisconnectButton";
 
 // The form for every channel that is a credential rather than a flow: Slack, Discord, and the two
 // dozen others the harness supports. Nothing about it is channel-specific: the fields, their labels,
@@ -96,9 +97,7 @@ export function ChannelCredentialsForm({
           {connected ? "Enregistrer" : `Connecter ${channel.name}`}
         </Button>
         {channel.configured && (
-          <Button variant="ghost" onClick={disconnect} disabled={busy}>
-            Déconnecter
-          </Button>
+          <DisconnectButton name={channel.name} onConfirm={disconnect} disabled={busy} />
         )}
       </div>
     </div>
@@ -108,7 +107,7 @@ export function ChannelCredentialsForm({
 // How to find the people to allow, for the channels on this form; unknown ones keep the harness's line.
 const ALLOWLIST_HINTS: Record<string, string> = {
   discord: "Identifiants Discord, séparés par des virgules. Pour les voir : Paramètres › Avancés › Mode développeur, puis clic droit sur une personne › Copier l’identifiant.",
-  google_chat: "Adresses e-mail Google des personnes qui pourront écrire à vos experts, séparées par des virgules.",
+  google_chat: "Adresses e-mail Google des personnes qui pourront écrire à vos Experts, séparées par des virgules.",
 };
 
 // Shared by every channel panel: the way back to the list, the channel's own description, its

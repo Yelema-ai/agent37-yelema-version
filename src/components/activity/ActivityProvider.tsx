@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
+import { readNotifyPrefs } from "@/lib/notify-prefs";
 import {
   EMPTY_ACTIVITY,
   bindTurn,
@@ -29,7 +30,7 @@ import {
   type Outcome,
   type Turn,
 } from "@/lib/activity";
-import { isAccountToTopUp } from "@/lib/chat-errors";
+import { cleanReply, isAccountToTopUp } from "@/lib/chat-errors";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { expertDisplayName } from "@/lib/experts";
 import type { ChatSession } from "@/components/chat/types";
@@ -149,7 +150,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
   const announce = useCallback(
     (n: Notice, text: string, routine?: string) => {
       const expert = expertsRef.current.find((e) => expertKey(e.agentId, e.profileId) === expertKey(n.agentId, n.profile));
-      const name = expert?.displayName ?? (n.profile ? expertDisplayName(n.profile) : "Votre expert");
+      const name = expert?.displayName ?? (n.profile ? expertDisplayName(n.profile) : "Votre Expert");
       const title =
         n.kind === "routine" ? `${routineDoneTitle(routine)} (${name})` : n.kind === "failed"
             ? isAccountToTopUp(text)
@@ -158,6 +159,8 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
             : `${name} a répondu`;
       const body = n.kind === "reply" || isAccountToTopUp(text) ? excerpt(text) || undefined : undefined;
       const open = () => openConversation(n.agentId, n.profile, n.sessionId);
+      // A kind the user switched off in Paramètres stays in the bell but no longer pops up.
+      if (!readNotifyPrefs()[n.kind]) return;
       if (n.toast) {
         const show = n.kind === "failed" ? toast.error : toast;
         // The expert's face stands in for the icon of a reply or a routine; a failure keeps the error mark.
@@ -177,7 +180,8 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
         commit(startTurn(stateRef.current, { ...t, startedAt: Date.now(), mode: "local" }));
       },
       bind: (id, sessionId, responseId) => commit(bindTurn(stateRef.current, id, sessionId, responseId)),
-      finish: (id, outcome, text, source = "local") => {
+      finish: (id, outcome, raw, source = "local") => {
+        const text = cleanReply(raw);
         const now = Date.now();
         const r = finishTurn(stateRef.current, id, outcome, source, visible(), now);
         commit(r.notice ? remember(r.state, r.notice, text, null, now) : r.state);

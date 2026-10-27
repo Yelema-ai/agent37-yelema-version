@@ -3,19 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
-  ChevronDown,
   Copy,
   ExternalLink,
   Globe,
+  Info,
   Lock,
   Mail,
   Plus,
-  Search,
   Share2,
   ShieldCheck,
   Users,
   X,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import {
   Dialog,
@@ -27,38 +27,34 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { useDashboard } from "./DashboardProvider";
+import { useDashboard, type ShareMode } from "./DashboardProvider";
 import { useWorkspace } from "@/components/WorkspaceProvider";
-import { apiFetch } from "@/lib/api";
-import type { WorkspaceMember } from "@/lib/types";
+import { personToAdd } from "@/lib/dashboard-people";
 import { toast } from "sonner";
 
 export function ShareDashboardModal() {
   const {
     shareModalOpen,
     setShareModalOpen,
-    agentId,
-    profile,
     agentName,
-    activeUrl,
     data,
     updateSharing,
+    stopSharing,
   } = useDashboard();
 
   const workspaceCtx = useWorkspace();
-  const currentWorkspace = workspaceCtx?.current;
+  const shared = Boolean(data?.share);
 
-  const [accesMode, setAccesMode] = useState<"public" | "workspace" | "emails">("public");
+  const [accesMode, setAccesMode] = useState<ShareMode>("team");
   const [emails, setEmails] = useState<string[]>([]);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [copied, setCopied] = useState(false);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Membres de l'espace de travail
-  const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
-  const [loadingMembers, setLoadingMembers] = useState(false);
+  // Les membres de l'espace que le propriétaire peut choisir, tels que le back-office les donne
+  const workspaceMembers = data?.candidates ?? [];
 
-  // Saisie directe d'e-mail & suggestions d'autocomplétion
+  // Saisie directe d'une adresse ; les membres ne sont suggérés que pendant la frappe.
   const [emailInput, setEmailInput] = useState("");
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const inputContainerRef = useRef<HTMLDivElement>(null);
@@ -66,33 +62,14 @@ export function ShareDashboardModal() {
   // Synchroniser avec les données actuelles quand la modale s'ouvre
   useEffect(() => {
     if (shareModalOpen && data) {
-      setAccesMode(data.acces || "public");
-      setEmails(data.allowedEmails || []);
+      setAccesMode(data.share?.mode ?? "team");
+      setEmails(data.share?.people ?? []);
       setEmailInput("");
       setSuggestionsOpen(false);
       setSaveStatus("idle");
     }
   }, [shareModalOpen, data]);
 
-  // Charger les membres du workspace
-  useEffect(() => {
-    if (!shareModalOpen || !currentWorkspace?.id) return;
-    setLoadingMembers(true);
-    apiFetch<{ members: WorkspaceMember[] }>(`/api/workspaces/${currentWorkspace.id}/members`)
-      .then((res) => {
-        if (res?.members) {
-          setWorkspaceMembers(res.members);
-        }
-      })
-      .catch((err) => {
-        console.warn("Erreur chargement membres du workspace:", err);
-      })
-      .finally(() => {
-        setLoadingMembers(false);
-      });
-  }, [shareModalOpen, currentWorkspace?.id]);
-
-  // Fermer les suggestions lors d'un clic en dehors
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (inputContainerRef.current && !inputContainerRef.current.contains(event.target as Node)) {
@@ -106,7 +83,7 @@ export function ShareDashboardModal() {
   }, [suggestionsOpen]);
 
   // Enregistrement automatique et transparent en arrière-plan
-  const persistSharing = async (mode: "public" | "workspace" | "emails", list: string[]) => {
+  const persistSharing = async (mode: ShareMode, list: string[]) => {
     setSaveStatus("saving");
     const ok = await updateSharing(mode, list);
     if (ok) {
@@ -121,26 +98,29 @@ export function ShareDashboardModal() {
   };
 
   // Changement de mode de visibilité (enregistré immédiatement)
-  const handleModeChange = (mode: "public" | "workspace" | "emails") => {
+  const handleModeChange = (mode: ShareMode) => {
     setAccesMode(mode);
-    let nextEmails = emails;
-    if (mode === "emails" && nextEmails.length === 0 && workspaceCtx?.userEmail) {
-      nextEmails = [workspaceCtx.userEmail.toLowerCase().trim()];
-      setEmails(nextEmails);
-    }
-    void persistSharing(mode, nextEmails);
+    void persistSharing(mode, emails);
   };
 
-  // Lien protégé via Mstudio : indispensable pour imposer la vérification d'authentification et de workspace
-  const platformProtectedLink =
-    typeof window !== "undefined" && agentId && profile
-      ? `${(process.env.NEXT_PUBLIC_SITE_URL || window.location.origin).replace(/\/$/, "")}/dashboards/view?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`
-      : "";
+  // Always the platform link, sealed by the server: it names neither the instance nor the expert, and
+  // every opening goes through the access check. Same origin as this page, so the client's sub-domain.
+  const effectiveShareLink =
+    typeof window !== "undefined" && data?.shareUrl ? `${window.location.origin}${data.shareUrl}` : "";
 
-  // En mode Workspace ou Emails spécifiques : obligatoirement le lien protégé Mstudio qui bloque les personnes non connectées
-  // En mode Public : le lien direct Render ou le lien plateforme
-  // Toujours utiliser le lien securise Mstudio sous notre domaine
-  const effectiveShareLink = platformProtectedLink || activeUrl || "";
+  const handleRegenerate = async () => {
+    setSaveStatus("saving");
+    const ok = await updateSharing(accesMode, emails, true);
+    setSaveStatus(ok ? "saved" : "idle");
+    if (ok) toast.success("Nouveau lien créé : l'ancien ne fonctionne plus.");
+  };
+
+  const handleStop = async () => {
+    setSaveStatus("saving");
+    const ok = await stopSharing();
+    setSaveStatus("idle");
+    if (ok) toast.success("Partage arrêté : le lien ne fonctionne plus.");
+  };
 
   const handleCopy = () => {
     if (!effectiveShareLink) {
@@ -153,34 +133,22 @@ export function ShareDashboardModal() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleAddEmail = (rawEmail?: string) => {
-    const email = (rawEmail ?? emailInput).trim().toLowerCase();
-    if (!email) return;
-
-    if (!email.includes("@") || !email.includes(".")) {
-      toast.error("Veuillez saisir une adresse e-mail valide.");
-      return;
+  const handleAddEmail = (raw: string) => {
+    if (!raw.trim()) return;
+    const verdict = personToAdd(raw, { chosen: emails, members: workspaceMembers, self: workspaceCtx?.userEmail });
+    if (verdict.ok) {
+      const updated = [...emails, verdict.email];
+      setEmails(updated);
+      void persistSharing(accesMode, updated);
+    } else if (verdict.reason === "invalid") {
+      return void toast.error("Saisissez une adresse e-mail valide.");
+    } else if (verdict.reason === "outsider") {
+      return void toast.info("Cette adresse n’est pas un membre de votre espace. Pour une personne hors entreprise, choisissez « Public ».");
+    } else {
+      toast.info(verdict.reason === "self" ? "Vous pouvez toujours ouvrir votre propre tableau de bord." : "Cette adresse est déjà dans la liste.");
     }
-
-    if (emails.includes(email)) {
-      toast.info("Cette adresse est déjà dans la liste.");
-      setEmailInput("");
-      setSuggestionsOpen(false);
-      return;
-    }
-
-    const updated = [...emails, email];
-    setEmails(updated);
     setEmailInput("");
     setSuggestionsOpen(false);
-    void persistSharing(accesMode, updated);
-  };
-
-  const handleKeyDownEmail = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handleAddEmail(emailInput);
-    }
   };
 
   const handleRemoveEmail = (emailToRemove: string) => {
@@ -189,26 +157,15 @@ export function ShareDashboardModal() {
     void persistSharing(accesMode, updated);
   };
 
-  // Suggestions d'autocomplétion des membres du workspace uniquement si une saisie est en cours
-  const memberSuggestions = emailInput.trim().length >= 1
-    ? workspaceMembers.filter((m) => {
-        const q = emailInput.toLowerCase().trim();
-        const notAlreadyAdded = !emails.includes(m.email.toLowerCase().trim());
-        const nameMatch = m.name ? m.name.toLowerCase().includes(q) : false;
-        const emailMatch = m.email.toLowerCase().includes(q);
-        return notAlreadyAdded && (nameMatch || emailMatch);
-      })
-    : [];
-
   // Calcul des destinataires pour l'envoi par email (mailto:)
   const emailRecipients = (() => {
-    if (accesMode === "workspace") {
+    if (accesMode === "team") {
       return workspaceMembers
         .map((m) => m.email.trim())
         .filter(Boolean)
         .join(",");
     }
-    if (accesMode === "emails") {
+    if (accesMode === "people") {
       return emails.filter(Boolean).join(",");
     }
     return "";
@@ -222,6 +179,13 @@ export function ShareDashboardModal() {
     `Bonjour,\n\nVoici le tableau de bord de ${agentName}, à jour au ${today}.\n\nPour l'ouvrir : ${effectiveShareLink}\n\nVous y trouverez les indicateurs du mois, l'avancement des projets et les points d'attention. Le lien s'ouvre avec votre compte ${company}.\n\nBonne lecture,\n${workspaceCtx?.userName || company}`
   );
   const mailtoHref = `mailto:${emailRecipients}?subject=${mailtoSubject}&body=${mailtoBody}`;
+
+  const query = emailInput.toLowerCase().trim();
+  const memberSuggestions = query
+    ? workspaceMembers.filter(
+        (m) => !emails.includes(m.email.toLowerCase().trim()) && (m.email.toLowerCase().includes(query) || Boolean(m.name?.toLowerCase().includes(query)))
+      )
+    : [];
 
   return (
     <Dialog open={shareModalOpen} onOpenChange={setShareModalOpen}>
@@ -269,10 +233,10 @@ export function ShareDashboardModal() {
               {/* Option Public */}
               <button
                 type="button"
-                onClick={() => handleModeChange("public")}
+                onClick={() => handleModeChange("link")}
                 className={cn(
                   "flex flex-col items-start gap-1.5 rounded-xl border p-3.5 text-left transition-all",
-                  accesMode === "public"
+                  accesMode === "link"
                     ? "border-brand bg-brand/5 shadow-xs ring-1 ring-brand/20"
                     : "border-line bg-card hover:border-line-2 hover:bg-soft"
                 )}
@@ -281,17 +245,17 @@ export function ShareDashboardModal() {
                   <div
                     className={cn(
                       "flex size-7 items-center justify-center rounded-lg",
-                      accesMode === "public" ? "bg-brand text-white" : "bg-soft text-ink-2"
+                      accesMode === "link" ? "bg-brand text-white" : "bg-soft text-ink-2"
                     )}
                   >
                     <Globe className="size-3.5" />
                   </div>
-                  {accesMode === "public" && <Check className="size-4 text-brand" />}
+                  {accesMode === "link" && <Check className="size-4 text-brand" />}
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-ink">Public</p>
                   <p className="text-[11px] leading-snug text-ink-3">
-                    Accessible directement à toute personne ayant le lien.
+                    Toute personne qui a le lien, sans connexion.
                   </p>
                 </div>
               </button>
@@ -299,10 +263,10 @@ export function ShareDashboardModal() {
               {/* Option Workspace */}
               <button
                 type="button"
-                onClick={() => handleModeChange("workspace")}
+                onClick={() => handleModeChange("team")}
                 className={cn(
                   "flex flex-col items-start gap-1.5 rounded-xl border p-3.5 text-left transition-all",
-                  accesMode === "workspace"
+                  accesMode === "team"
                     ? "border-brand bg-brand/5 shadow-xs ring-1 ring-brand/20"
                     : "border-line bg-card hover:border-line-2 hover:bg-soft"
                 )}
@@ -311,17 +275,17 @@ export function ShareDashboardModal() {
                   <div
                     className={cn(
                       "flex size-7 items-center justify-center rounded-lg",
-                      accesMode === "workspace" ? "bg-brand text-white" : "bg-soft text-ink-2"
+                      accesMode === "team" ? "bg-brand text-white" : "bg-soft text-ink-2"
                     )}
                   >
                     <Users className="size-3.5" />
                   </div>
-                  {accesMode === "workspace" && <Check className="size-4 text-brand" />}
+                  {accesMode === "team" && <Check className="size-4 text-brand" />}
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-ink">Espace Mstudio</p>
+                  <p className="text-xs font-semibold text-ink">Entreprise</p>
                   <p className="text-[11px] leading-snug text-ink-3">
-                    Protégé : seuls les membres connectés Mstudio peuvent ouvrir.
+                    Les membres connectés de votre espace.
                   </p>
                 </div>
               </button>
@@ -329,10 +293,10 @@ export function ShareDashboardModal() {
               {/* Option Emails spécifiques */}
               <button
                 type="button"
-                onClick={() => handleModeChange("emails")}
+                onClick={() => handleModeChange("people")}
                 className={cn(
                   "flex flex-col items-start gap-1.5 rounded-xl border p-3.5 text-left transition-all",
-                  accesMode === "emails"
+                  accesMode === "people"
                     ? "border-brand bg-brand/5 shadow-xs ring-1 ring-brand/20"
                     : "border-line bg-card hover:border-line-2 hover:bg-soft"
                 )}
@@ -341,123 +305,118 @@ export function ShareDashboardModal() {
                   <div
                     className={cn(
                       "flex size-7 items-center justify-center rounded-lg",
-                      accesMode === "emails" ? "bg-brand text-white" : "bg-soft text-ink-2"
+                      accesMode === "people" ? "bg-brand text-white" : "bg-soft text-ink-2"
                     )}
                   >
                     <Lock className="size-3.5" />
                   </div>
-                  {accesMode === "emails" && <Check className="size-4 text-brand" />}
+                  {accesMode === "people" && <Check className="size-4 text-brand" />}
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-ink">Personnes ciblées</p>
+                  <p className="text-xs font-semibold text-ink">E-mails</p>
                   <p className="text-[11px] leading-snug text-ink-3">
-                    Protégé : réservé aux adresses e-mails autorisées.
+                    Les adresses que vous ajoutez, connectées.
                   </p>
                 </div>
               </button>
             </div>
 
             {/* Note explicative pour le mode Workspace */}
-            {accesMode === "workspace" && (
+            {accesMode === "team" && (
               <div className="flex items-start gap-2.5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-xs text-blue-700 dark:text-blue-300">
                 <ShieldCheck className="size-4 shrink-0 mt-0.5 text-blue-500" />
                 <p className="leading-relaxed">
-                  <strong>Accès sécurisé réservé au workspace :</strong> Seuls les membres authentifiés de votre espace de travail Mstudio ({workspaceMembers.length} collaborateurs) pourront ouvrir ce lien. Les personnes non connectées ou externes verront un écran de connexion ou un refus d'accès.
+                  <strong>Réservé à votre entreprise :</strong> seuls les membres connectés de votre espace ({workspaceMembers.length + 1} personnes) peuvent ouvrir ce lien. Les autres voient un écran de connexion.
                 </p>
               </div>
             )}
 
             {/* Note explicative pour le mode Public */}
-            {accesMode === "public" && (
+            {accesMode === "link" && (
               <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-emerald-700 dark:text-emerald-300">
                 <Globe className="size-4 shrink-0 mt-0.5 text-emerald-500" />
                 <p className="leading-relaxed">
-                  <strong>Accès libre :</strong> Pratique pour partager avec des clients, partenaires ou investisseurs sans exiger de compte Mstudio.
+                  <strong>Sans connexion :</strong> toute personne qui reçoit le lien peut l’ouvrir, y compris hors de votre entreprise. Régénérez ou arrêtez le partage pour le couper.
                 </p>
               </div>
             )}
 
-            {/* Sélecteur intelligent pour "Personnes ciblées" */}
-            {accesMode === "emails" && (
+            {accesMode === "people" && (
               <div className="mt-3 space-y-3 rounded-xl border border-line bg-soft/40 p-4">
                 <div>
-                  <label className="text-xs font-semibold text-ink block mb-1">
-                    Adresses e-mails autorisées
+                  <label htmlFor="share-email" className="text-xs font-semibold text-ink block mb-1">
+                    Adresses e-mail autorisées
                   </label>
                   <p className="text-[11px] text-ink-3 mb-2">
-                    Saisissez les adresses e-mails (internes ou externes) autorisées à consulter le tableau.
+                    Saisissez l’adresse d’un membre de votre espace : les suggestions apparaissent pendant la frappe.
                   </p>
                 </div>
 
                 <div ref={inputContainerRef} className="relative">
                   <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-ink-4 pointer-events-none" />
+                    <div className="relative flex flex-1 items-center">
+                      <Mail className="absolute left-3 size-3.5 text-ink-4 pointer-events-none" />
                       <Input
+                        id="share-email"
                         type="email"
-                        placeholder="Saisir une adresse e-mail (ex: contact@client.com)..."
+                        autoComplete="off"
+                        placeholder="prenom.nom@entreprise.com"
                         value={emailInput}
                         onChange={(e) => {
                           setEmailInput(e.target.value);
                           setSuggestionsOpen(true);
                         }}
                         onFocus={() => {
-                          if (emailInput.trim().length >= 1) setSuggestionsOpen(true);
+                          if (emailInput.trim()) setSuggestionsOpen(true);
                         }}
-                        onKeyDown={handleKeyDownEmail}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddEmail(emailInput);
+                          }
+                        }}
                         className="h-9 pl-9 text-xs bg-surface border-line"
                       />
                     </div>
-
                     <Button
                       type="button"
                       size="sm"
                       onClick={() => handleAddEmail(emailInput)}
                       disabled={!emailInput.trim()}
-                      className="h-9 px-3.5 text-xs bg-brand hover:bg-brand/90 text-white shrink-0 gap-1.5 font-medium shadow-xs"
+                      className="h-9 shrink-0 gap-1.5 px-3.5 text-xs font-medium"
                     >
                       <Plus className="size-3.5" />
-                      <span>Ajouter</span>
+                      Ajouter
                     </Button>
                   </div>
 
-                  {/* Suggestions d'autocomplétion des membres du workspace lors de la saisie */}
                   {suggestionsOpen && memberSuggestions.length > 0 && (
                     <div className="absolute top-full left-0 right-0 z-50 mt-1.5 overflow-hidden rounded-xl border border-line bg-surface shadow-xl animate-in fade-in-0 zoom-in-95">
                       <div className="border-b border-line bg-soft/60 px-3 py-1.5 text-[10.5px] font-medium text-ink-3">
-                        Membres de votre espace suggérés :
+                        Membres de votre espace
                       </div>
                       <div className="max-h-48 overflow-y-auto divide-y divide-line/40">
                         {memberSuggestions.map((m) => (
-                          <div
-                            key={m.user_id || m.email}
+                          <button
+                            type="button"
+                            key={m.email}
                             onClick={() => handleAddEmail(m.email)}
-                            className="flex items-center justify-between px-3 py-2 cursor-pointer transition-colors text-xs hover:bg-soft"
+                            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors hover:bg-soft"
                           >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand text-[10px] font-bold uppercase">
-                                {m.name ? m.name.charAt(0) : m.email.charAt(0)}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-ink truncate font-medium leading-tight">
-                                  {m.name || m.email}
-                                </p>
-                                <p className="text-[10.5px] text-ink-3 truncate leading-tight">
-                                  {m.email}
-                                </p>
-                              </div>
-                            </div>
-                            <span className="rounded bg-soft px-1.5 py-0.5 text-[9.5px] font-medium text-ink-4 shrink-0">
-                              {m.role || "membre"}
+                            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand text-[10px] font-bold uppercase">
+                              {(m.name || m.email).charAt(0)}
                             </span>
-                          </div>
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium leading-tight text-ink">{m.name || m.email}</span>
+                              <span className="block truncate text-[10.5px] leading-tight text-ink-3">{m.email}</span>
+                            </span>
+                          </button>
                         ))}
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Badges des personnes ajoutées */}
                 {emails.length > 0 ? (
                   <div className="pt-1 space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] text-ink-3">
@@ -475,17 +434,13 @@ export function ShareDashboardModal() {
                     </div>
                     <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
                       {emails.map((e) => {
-                        const member = workspaceMembers.find(
-                          (m) => m.email.toLowerCase().trim() === e.toLowerCase().trim()
-                        );
+                        const member = workspaceMembers.find((m) => m.email.toLowerCase().trim() === e);
                         return (
                           <span
                             key={e}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1 text-xs text-ink shadow-xs"
                           >
-                            <span className="truncate max-w-[220px]">
-                              {member?.name ? `${member.name} (${e})` : e}
-                            </span>
+                            <span className="truncate max-w-[220px]">{member?.name ? `${member.name} (${e})` : e}</span>
                             <button
                               type="button"
                               onClick={() => handleRemoveEmail(e)}
@@ -501,9 +456,16 @@ export function ShareDashboardModal() {
                   </div>
                 ) : (
                   <p className="text-[11px] text-ink-4 italic">
-                    Aucune adresse e-mail ajoutée pour le moment.
+                    Aucune adresse ajoutée : en attendant, tous les membres de votre espace peuvent l’ouvrir.
                   </p>
                 )}
+
+                <div className="flex items-start gap-2.5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-[11.5px] text-blue-800 dark:text-blue-300">
+                  <Info className="size-4 shrink-0 mt-0.5 text-blue-500" />
+                  <p className="leading-relaxed">
+                    <strong>Une personne hors entreprise ?</strong> Clients, partenaires ou banquiers n’ont pas de compte dans votre espace : choisissez <strong>« Public »</strong> ou envoyez l’export <strong>PDF / HTML</strong>.
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -512,18 +474,34 @@ export function ShareDashboardModal() {
           <div className="space-y-3 pt-3 border-t border-line">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3">
-                2. Lien de partage {accesMode !== "public" ? "sécurisé" : "direct"}
+                2. Lien de partage
               </h3>
               <span className={cn(
                 "rounded-full px-2 py-0.5 text-[10px] font-medium tracking-wide",
-                accesMode === "public"
+                accesMode === "link"
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                   : "bg-blue-500/10 text-blue-600 dark:text-blue-400"
               )}>
-                {accesMode === "public" ? "Accès libre" : "Contrôle d'accès actif"}
+                {!shared ? "Pas encore partagé" : accesMode === "link" ? "Sans connexion" : "Connexion exigée"}
               </span>
             </div>
 
+            {data?.sharing === false && (
+              <p className="text-[11px] text-ink-3">Le partage n’est pas disponible sur cet espace.</p>
+            )}
+            {data?.sharing !== false && !shared && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void persistSharing(accesMode, emails)}
+                disabled={saveStatus === "saving"}
+                className="h-9 px-3 text-xs gap-1.5"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                <span>Créer le lien de partage</span>
+              </Button>
+            )}
+            {shared && (
             <div className="flex items-center gap-2">
               <Input
                 readOnly
@@ -562,11 +540,36 @@ export function ShareDashboardModal() {
                   <ExternalLink className="size-3.5" />
                 </a>
               )}
+              {effectiveShareLink && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRegenerate}
+                  disabled={saveStatus === "saving"}
+                  className="h-9 px-3 text-xs gap-1.5 shrink-0"
+                  title="Créer un nouveau lien ; l'ancien cessera de fonctionner"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Régénérer</span>
+                </Button>
+              )}
             </div>
+            )}
+            {shared && (
+              <button
+                type="button"
+                onClick={() => void handleStop()}
+                disabled={saveStatus === "saving"}
+                className="text-[11px] text-ink-3 hover:text-rose-500 hover:underline"
+              >
+                Arrêter le partage
+              </button>
+            )}
 
-            {accesMode !== "public" && (
+            {shared && accesMode !== "link" && (
               <p className="text-[11px] text-ink-3 leading-relaxed">
-                🛡️ <strong>Protection active :</strong> Ce lien passe par la plateforme Mstudio. Si une personne non connectée ou non autorisée tente d'ouvrir ce lien, l'accès lui sera bloqué avec un écran de connexion.
+                🛡️ <strong>Protection active :</strong> à chaque ouverture, la plateforme vérifie qui ouvre le lien. Une personne non connectée ou non autorisée est arrêtée.
               </p>
             )}
 
@@ -593,12 +596,12 @@ export function ShareDashboardModal() {
               </div>
 
               <div className="text-[11.5px] text-ink-3 leading-relaxed">
-                {accesMode === "workspace" && (
+                {accesMode === "team" && (
                   <p>
-                    Destinataires pré-remplis : <strong>Tous les membres du workspace</strong> ({workspaceMembers.length} adresses : {workspaceMembers.map((m) => m.email).slice(0, 3).join(", ")}{workspaceMembers.length > 3 ? "…" : ""}).
+                    Destinataires pré-remplis : <strong>Tous les membres de votre espace</strong> ({workspaceMembers.length} adresses : {workspaceMembers.map((m) => m.email).slice(0, 3).join(", ")}{workspaceMembers.length > 3 ? "…" : ""}).
                   </p>
                 )}
-                {accesMode === "emails" && (
+                {accesMode === "people" && (
                   <p>
                     Destinataires pré-remplis : {emails.length > 0 ? (
                       <strong>{emails.length} adresse{emails.length > 1 ? "s" : ""} sélectionnée{emails.length > 1 ? "s" : ""} ({emails.slice(0, 3).join(", ")}{emails.length > 3 ? "…" : ""})</strong>
@@ -607,7 +610,7 @@ export function ShareDashboardModal() {
                     )}
                   </p>
                 )}
-                {accesMode === "public" && (
+                {accesMode === "link" && (
                   <p>
                     Destinataires : libre (à saisir dans votre client email).
                   </p>

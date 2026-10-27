@@ -2,16 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
+import { BackButton } from "@/components/ui/back-button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { contentUrl, previewKind, type FileEntry } from "./types";
+import { Preview as DocPreview } from "@/components/chat/DocumentCards";
+import { docKind } from "@/lib/drive-links";
+import { contentUrl, previewKind, thumbUrl, type FileEntry } from "./types";
 
 // Preview one file in a dialog. Rendering is chosen by extension:
-//  - image  -> <img> (an <img> never executes script, even for same-origin sources)
+//  - image  -> <img> of a reduced copy, the original one click away (an <img> never runs script)
 //  - pdf    -> the browser's PDF viewer in an <iframe>
 //  - text   -> fetched and shown escaped in a <pre>
 //  - sandbox (html/svg) -> a SANDBOXED <iframe> with all permissions stripped, so embedded
 //    scripts can't run and can't reach this origin's session — the XSS guard for active documents
+//  - Word, Excel, PowerPoint -> read in the page (DocumentCards' renderers, in full)
 //  - none   -> no inline preview; offer the download instead
 export function FilePreview({
   agentId,
@@ -28,8 +32,9 @@ export function FilePreview({
       <DialogContent className="max-w-4xl">
         {entry && (
           <>
-            <DialogHeader>
-              <DialogTitle className="truncate pr-8">{entry.name}</DialogTitle>
+            <DialogHeader className="items-start gap-3 text-left">
+              <BackButton label="Livrables" onClick={onClose} />
+              <DialogTitle className="max-w-full truncate pr-8">{entry.name}</DialogTitle>
             </DialogHeader>
             <PreviewBody agentId={agentId} entry={entry} />
             <div className="flex justify-end">
@@ -54,10 +59,9 @@ function PreviewBody({ agentId, entry }: { agentId: string; entry: FileEntry }) 
 
   if (kind === "image") {
     return (
-      <div className="flex max-h-[70vh] justify-center overflow-auto rounded-md border bg-secondary/30 p-4">
-        {/* eslint-disable-next-line @next/next/no-img-element -- streamed via our BFF, not a remote asset */}
-        <img src={inline} alt={entry.name} className="max-h-[66vh] max-w-full object-contain" />
-      </div>
+      <a href={inline} target="_blank" rel="noopener" title="Ouvrir en taille réelle" className="flex max-h-[70vh] justify-center overflow-auto rounded-md border bg-secondary/30 p-4">
+        <ReducedImage thumb={thumbUrl(agentId, entry.path, 1600, entry.modified)} original={inline} alt={entry.name} className="max-h-[66vh] max-w-full object-contain" />
+      </a>
     );
   }
 
@@ -74,11 +78,32 @@ function PreviewBody({ agentId, entry }: { agentId: string; entry: FileEntry }) 
     return <TextPreview url={inline} />;
   }
 
+  // Word, Excel and PowerPoint: read here in full, as far as it goes (Leslie, 26/10: the preview opens
+  // from Livrables on the web as on the app).
+  const doc = docKind(entry.name);
+  if (doc === "word" || doc === "excel" || doc === "powerpoint") {
+    return (
+      <div className="h-[65vh] overflow-hidden rounded-md border bg-white">
+        <DocPreview full agentId={agentId} doc={{ name: entry.name, path: entry.path, size: entry.size ?? null, modified: entry.modified ?? null, kind: doc }} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-[12rem] flex-col items-center justify-center gap-2 rounded-md border bg-secondary/30 text-sm text-muted-foreground">
       <p>Pas d’aperçu pour ce type de fichier.</p>
       <p>Téléchargez-le pour l’ouvrir.</p>
     </div>
+  );
+}
+
+/** The reduced copy first; the original if the copy cannot be made. */
+export function ReducedImage({ thumb, original, alt, className, onFail }: { thumb: string; original: string; alt: string; className?: string; onFail?: () => void }) {
+  const [src, setSrc] = useState(thumb);
+  useEffect(() => setSrc(thumb), [thumb]);
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- streamed via our BFF, not a remote asset
+    <img src={src} alt={alt} loading="lazy" decoding="async" className={className} onError={() => (src === thumb ? setSrc(original) : onFail?.())} />
   );
 }
 

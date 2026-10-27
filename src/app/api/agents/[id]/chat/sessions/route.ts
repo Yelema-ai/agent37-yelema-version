@@ -3,6 +3,7 @@ import { requireAgentAccess } from "@/lib/auth";
 import { handleError, json } from "@/lib/http";
 import { profileQuery, resolveProfile } from "@/lib/profiles";
 import { routineOfSession } from "@/lib/routines";
+import { isVoiceSession } from "@/lib/voice-sessions";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -19,6 +20,7 @@ export async function GET(request: Request, { params }: Ctx) {
 
     const { data } = await agent37.listSessions(id, profileQuery(profile));
     const sessions = data
+      .filter((s) => !isVoiceSession(s.preview))
       .map((s) => ({
         session_id: s.id,
         title: s.title?.trim() || s.preview?.trim() || null,
