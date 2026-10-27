@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 import { cached, remember } from "@/lib/client-cache";
 import { profileQuery } from "@/lib/profile-id";
@@ -40,4 +41,41 @@ export function preloadExpert(agentId: string, profile: string | null): Promise<
 export function sparingData(): boolean {
   const c = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
   return Boolean(c?.saveData) || c?.effectiveType === "slow-2g" || c?.effectiveType === "2g";
+}
+
+// How many Experts, from the top of the menu, are read ahead once the page is idle: one at a time,
+// behind what the page itself loads. A dozen at once would take a slow line from the page itself;
+// the others are read when a pointer or a finger reaches their row (ExpertItem).
+export const READ_AHEAD = 4;
+const STAGGER_MS = 1_500;
+
+export function useReadAhead(experts: { agentId: string; profileId: string }[]): void {
+  const list = experts
+    .slice(0, READ_AHEAD)
+    .map((e) => `${e.agentId}\n${e.profileId}`)
+    .join("|");
+  useEffect(() => {
+    if (!list || sparingData()) return;
+    let stop = false;
+    const todo = list.split("|").map((s) => s.split("\n") as [string, string]);
+    const next = () => {
+      if (stop) return;
+      const item = todo.shift();
+      if (!item) return;
+      void preloadExpert(item[0], item[1]).then(() => {
+        if (!stop) setTimeout(() => idle(next), STAGGER_MS);
+      });
+    };
+    const t = setTimeout(() => idle(next), STAGGER_MS);
+    return () => {
+      stop = true;
+      clearTimeout(t);
+    };
+  }, [list]);
+}
+
+function idle(fn: () => void) {
+  const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  if (ric) ric(fn, { timeout: 5_000 });
+  else setTimeout(fn, 200);
 }

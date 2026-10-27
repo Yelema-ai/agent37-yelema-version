@@ -29,6 +29,7 @@ import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { AccountMenu } from "@/components/AccountMenu";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { ExpertItem } from "@/components/experts/ExpertItem";
+import { READ_AHEAD, useReadAhead } from "@/components/experts/expert-preload";
 import { useOwnAgentId } from "@/components/conversations/useAllConversations";
 import { useChatMarks } from "@/components/conversations/useChatMarks";
 import { arrange } from "@/lib/chat-marks";
@@ -64,6 +65,10 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
   // Djénéba heads « Mes Experts », the others follow in their order.
   const experts = [...installed].sort((a, b) => Number(isDjeneba(b)) - Number(isDjeneba(a)));
   const ownAgentId = useOwnAgentId();
+  // The first Experts as the menu shows them are read ahead: page, conversations and models.
+  const shown = groupByCycle(experts).flatMap((g) => g.experts);
+  const ahead = new Set(shown.slice(0, READ_AHEAD).map((e) => `${e.agentId}:${e.profileId}`));
+  useReadAhead(shown);
   // Cycles folded by the member, remembered per browser.
   const [foldedCycles, setFoldedCycles] = useState<string[]>([]);
   useEffect(() => {
@@ -193,6 +198,7 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
                   active={here === `/experts/${e.agentId}/${e.profileId}` || here.startsWith(`/experts/${e.agentId}/${e.profileId}/`)}
                   compact={collapsed}
                   onNavigate={onNavigate}
+                  readAhead={ahead.has(`${e.agentId}:${e.profileId}`)}
                   className={g.cycle && !collapsed ? "pl-4" : undefined}
                 />
               ))}

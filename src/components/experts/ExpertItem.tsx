@@ -5,7 +5,7 @@ import { useExpertActivity } from "@/components/activity/hooks";
 import { expertKey } from "@/lib/activity";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { agentTabPath } from "@/lib/expert-tabs";
-import { preloadExpert } from "@/components/experts/expert-preload";
+import { preloadExpert, sparingData } from "@/components/experts/expert-preload";
 import type { Expert } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -25,8 +25,11 @@ export function ExpertItem({
   compact = false,
   className,
   onNavigate,
+  readAhead = false,
 }: {
   expert: Expert;
+  /** One of the first rows of the menu: its whole page is fetched ahead, code included. */
+  readAhead?: boolean;
   active?: boolean;
   compact?: boolean;
   className?: string;
@@ -43,6 +46,7 @@ export function ExpertItem({
 
   return (
     <Link
+      prefetch={readAhead && !(typeof navigator !== "undefined" && sparingData()) ? true : undefined}
       href={
         waiting
           ? `${agentTabPath(expert.agentId, "chat", expert.profileId)}?session=${encodeURIComponent(waiting.sessionId)}`
