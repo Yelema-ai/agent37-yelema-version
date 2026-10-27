@@ -113,6 +113,7 @@ export function ChatMessages({
   face = null,
   driveFolder = null,
   onShowEarlier,
+  onUnqueue,
 }: {
   messages: ChatMessage[];
   isStreaming: boolean;
@@ -121,6 +122,8 @@ export function ChatMessages({
   driveFolder?: string | null;
   /** Called before earlier messages are added above, so the view keeps its place. */
   onShowEarlier?: () => void;
+  /** Takes back a message still waiting for the reply in progress: it has not been sent. */
+  onUnqueue?: (id: string) => void;
 }) {
   // The instance whose drive the paths in a reply point into (they become download links).
   const { agentId } = useChatContext();
@@ -221,7 +224,16 @@ export function ChatMessages({
                     {m.content}
                   </div>
                 )}
-                {m.queued && <span className="text-xs text-ink-3">En attente</span>}
+                {m.queued && (
+                  <span className="flex items-center gap-2 text-xs text-ink-3">
+                    En attente
+                    {onUnqueue && (
+                      <button type="button" onClick={() => onUnqueue(m.id)} className="-my-2 inline-flex min-h-8 items-center rounded-lg px-1.5 font-semibold text-ink-2 hover:bg-soft hover:text-ink">
+                        Retirer
+                      </button>
+                    )}
+                  </span>
+                )}
                 {m.steered && !m.queued && (
                   <span className="flex items-center gap-1 text-xs text-ink-3">
                     <CornerDownLeft className="h-3 w-3" /> Ajouté pendant la réponse, pris en compte dans celle-ci

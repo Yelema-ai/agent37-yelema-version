@@ -708,6 +708,16 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
     setIsStreaming(false);
   }, [cancelUpstream, forgetRun, turns]);
 
+  // A message waiting for the reply in progress has not left yet: the member may take it back.
+  const unqueue = useCallback((id: string) => {
+    for (const run of [newChatRunRef.current, ...runsRef.current.values()]) {
+      if (!run) continue;
+      const i = run.queue.findIndex((q) => q.user.id === id);
+      if (i >= 0) run.queue.splice(i, 1);
+    }
+    setMessages((prev) => prev.filter((m) => !(m.queued && m.id === id)));
+  }, []);
+
   // On unmount, close the local streams only — the turns keep running server-side, and the next
   // mount (reload, workspace re-entry) reattaches via the session's active_response_id.
   useEffect(() => {
@@ -725,5 +735,5 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
     };
   }, []);
 
-  return { messages, isStreaming, loadingHistory, error, send, stop, killRun };
+  return { messages, isStreaming, loadingHistory, error, send, stop, killRun, unqueue };
 }

@@ -43,7 +43,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
     bumpSession,
     threadVersion,
   } = useChatContext();
-  const { messages, isStreaming, loadingHistory, error, send, stop, killRun } = useChat({
+  const { messages, isStreaming, loadingHistory, error, send, stop, killRun, unqueue } = useChat({
     agentId,
     profile,
     sessionId: activeSessionId,
@@ -235,7 +235,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
           </div>
         ) : messages.length > 0 ? (
           <div ref={contentRef}>
-            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} />
+            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} onUnqueue={unqueue} />
           </div>
         ) : (
           <>
