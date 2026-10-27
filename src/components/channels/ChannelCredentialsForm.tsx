@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { channelBrand } from "@/components/channels/BrandIcons";
 import { channelError, isChannelConnected, type ChannelField, type MessagingPlatform } from "@/lib/channels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,15 +120,21 @@ export function ChannelPanelHeader({
   channel: MessagingPlatform;
   onBack: () => void;
 }) {
+  const { Icon, color } = channelBrand(channel.id);
   return (
     <div className="space-y-3">
       <Button type="button" variant="ghost" size="sm" className="gap-1.5 px-2" onClick={onBack}>
         <ArrowLeft className="h-4 w-4" />
         Messageries
       </Button>
-      <div className="space-y-1">
-        <h3 className="text-base font-semibold">{channel.name}</h3>
-        {channel.description && <p className="text-sm text-muted-foreground">{channel.description}</p>}
+      <div className="flex items-center gap-3">
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border bg-muted/20">
+          <Icon className="h-5 w-5 shrink-0" {...(color ? { style: { color } } : {})} />
+        </span>
+        <div className="space-y-0.5">
+          <h3 className="text-base font-semibold">{channel.name}</h3>
+          {channel.description && <p className="text-sm text-muted-foreground">{channel.description}</p>}
+        </div>
       </div>
       {channelError(channel) && (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">

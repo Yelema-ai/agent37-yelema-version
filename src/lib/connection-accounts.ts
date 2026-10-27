@@ -50,7 +50,7 @@ export function accountLabel(c: IntegrationConnection, index: number): string {
 
 /** What the screen calls an account: the member's label, else its e-mail, else its name, else its rank. */
 export function accountTitle(c: IntegrationConnection, index: number): string {
-  return c.label || c.email || c.accountName || `Compte ${index + 1}`;
+  return c.label || c.email || c.accountName || c.alias || `Compte ${index + 1}`;
 }
 
 /** What the back office keeps about each account, laid over Composio's list (unknown ids stay as they are). */

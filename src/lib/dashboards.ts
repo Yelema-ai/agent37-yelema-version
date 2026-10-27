@@ -160,6 +160,14 @@ export function getDashboardMeta(profileId: string | null | undefined): ExpertDa
 export const TRUSTED_FRAME_REGEX =
   /^https:\/\/(?:mstudio-frames\.onrender\.com|yelema-dashboards\.onrender\.com)\/share\/frame\/[0-9a-fA-F\-]{36}$/;
 
+/** "pdf" or "html" for a deliverable path an expert wrote under Livrables/; null for anything else. */
+export function deliverableKind(path: unknown): "pdf" | "html" | null {
+  if (typeof path !== "string" || path.length > 512 || !path.startsWith("Livrables/")) return null;
+  if (path.includes("..") || path.includes("\\") || path.includes("//")) return null;
+  const ext = /\.(pdf|html?)$/i.exec(path)?.[1]?.toLowerCase();
+  return ext === "pdf" ? "pdf" : ext ? "html" : null;
+}
+
 export function isTrustedDashboardUrl(url: unknown): url is string {
   return typeof url === "string" && TRUSTED_FRAME_REGEX.test(url.trim());
 }
@@ -178,143 +186,13 @@ export function getDashboardStateCandidatePaths(profile: string): string[] {
   ];
 }
 
-export type DashboardAccessRule = "public" | "workspace" | "emails";
-
+/** The expert's dashboard state file: only where the dashboard is, never who may read it (that is the back office's). */
 export interface StoredDashboardState {
   lien?: string | null;
   hebergeur?: string | null;
   maj?: string | null;
-  acces?: "public" | "workspace" | "emails" | string | null;
-  allowed_emails?: string[];
-  allowedEmails?: string[];
-  workspace_id?: string | null;
   pdfPath?: string | null;
   htmlPath?: string | null;
   fichiers?: string | null;
   [key: string]: unknown;
-}
-
-/**
- * Normalise la règle d'accès avec sécurité par défaut (workspace par défaut).
- */
-export function normalizeDashboardAccess(raw: unknown): DashboardAccessRule {
-  if (typeof raw !== "string") return "workspace";
-  const trimmed = raw.toLowerCase().trim();
-  if (trimmed === "public") return "public";
-  if (trimmed === "emails") return "emails";
-  return "workspace";
-}
-
-export interface DashboardAccessCheckParams {
-  acces: DashboardAccessRule;
-  allowedEmails: string[];
-  stateWorkspaceId?: string | null;
-  pinnedWorkspaceId?: string | null;
-  isBackoffice: boolean;
-  currentUserEmail?: string | null;
-  isWorkspaceMember: boolean;
-  isWorkspaceAdmin?: boolean;
-}
-
-export type DashboardAccessResult =
-  | { allowed: true }
-  | { allowed: false; status: 401; reason: "login_required"; message: string }
-  | { allowed: false; status: 403; reason: "forbidden"; message: string }
-  | { allowed: false; status: 404; reason: "not_found"; message: string };
-
-/**
- * Évalue les autorisations d'accès à un tableau de bord.
- * Implémente le cloisonnement multi-locataires strict et le repli sécurisé.
- */
-export function evaluateDashboardAccess(params: DashboardAccessCheckParams): DashboardAccessResult {
-  const {
-    acces,
-    allowedEmails,
-    stateWorkspaceId,
-    pinnedWorkspaceId,
-    isBackoffice,
-    currentUserEmail,
-    isWorkspaceMember,
-  } = params;
-
-  // Règle Critique 1 : Cloisonnement strict multi-locataires
-  // En mode back-office (ex: app.yelema.ai avec tenant pinned),
-  // exiger STRICTEMENT state.workspace_id === pinned, sans exception (même en mode public).
-  // Si le tableau n'a pas été partagé/enregistré pour ce workspace ou appartient à un autre client -> 404
-  if (isBackoffice) {
-    if (!pinnedWorkspaceId || !stateWorkspaceId || stateWorkspaceId !== pinnedWorkspaceId) {
-      return { allowed: false, status: 404, reason: "not_found", message: "Tableau de bord introuvable." };
-    }
-  } else if (pinnedWorkspaceId && stateWorkspaceId && stateWorkspaceId !== pinnedWorkspaceId) {
-    return { allowed: false, status: 404, reason: "not_found", message: "Tableau de bord introuvable." };
-  }
-
-  // Évaluation selon la règle d'accès
-  if (acces === "public") {
-    return { allowed: true };
-  }
-
-  if (acces === "workspace") {
-    if (!currentUserEmail) {
-      return {
-        allowed: false,
-        status: 401,
-        reason: "login_required",
-        message: "Ce tableau de bord est réservé aux collaborateurs de l'espace de travail. Veuillez vous connecter.",
-      };
-    }
-    if (!isWorkspaceMember) {
-      return {
-        allowed: false,
-        status: 403,
-        reason: "forbidden",
-        message: "Votre compte n'appartient pas à l'espace de travail propriétaire de ce tableau de bord.",
-      };
-    }
-    return { allowed: true };
-  }
-
-  if (acces === "emails") {
-    // Les administrateurs de l'espace de travail propriétaire ont toujours accès à leurs tableaux
-    if (params.isWorkspaceAdmin) {
-      return { allowed: true };
-    }
-
-    if (!currentUserEmail) {
-      return {
-        allowed: false,
-        status: 401,
-        reason: "login_required",
-        message: "Ce tableau de bord est réservé à des personnes spécifiques. Veuillez vous connecter avec votre adresse autorisée.",
-      };
-    }
-    const normalizedCurrentUser = currentUserEmail.toLowerCase().trim();
-    const hasEmail = allowedEmails.some((e) => e.toLowerCase().trim() === normalizedCurrentUser);
-    if (!hasEmail) {
-      // Si la liste blanche d'adresses est encore vide, ne pas bloquer les collaborateurs du workspace
-      if (allowedEmails.length === 0 && isWorkspaceMember) {
-        return { allowed: true };
-      }
-      return {
-        allowed: false,
-        status: 403,
-        reason: "forbidden",
-        message: `L'adresse ${currentUserEmail} n'est pas autorisée à consulter ce tableau de bord. Contactez l'administrateur pour demander l'accès.`,
-      };
-    }
-    return { allowed: true };
-  }
-
-  return { allowed: false, status: 403, reason: "forbidden", message: "Accès non autorisé." };
-}
-
-export interface DashboardState {
-  lien: string | null;
-  hebergeur: string;
-  maj: string | null;
-  acces: "public" | "protege";
-  modelFile: string;
-  title: string;
-  isDjeneba: boolean;
-  teamViewLien?: string | null;
 }
