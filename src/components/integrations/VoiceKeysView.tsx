@@ -76,7 +76,7 @@ export function VoiceKeysView() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-display text-[18px] font-bold tracking-tight text-ink">Clé de transcription</h3>
+        <h3 className="font-display text-[18px] font-bold tracking-tight text-ink">Transcription de la voix</h3>
         <p className="mt-1 max-w-xl text-sm text-ink-3">Pour la dictée et les notes vocales (Telegram, WhatsApp…). Les appels vocaux ne changent pas.</p>
       </div>
 
