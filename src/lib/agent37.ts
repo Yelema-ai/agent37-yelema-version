@@ -66,6 +66,8 @@ export type TelegramHubStatus = {
     active?: boolean;
   } | null;
   instanceBot?: { id: number; username: string | null } | null;
+  /** The manager bot's link while no bot exists yet; `started`: Telegram received its /start. */
+  link?: { url: string; expiresAt: string; started: boolean };
 };
 
 export type RelayChannel = "slack" | "teams";
