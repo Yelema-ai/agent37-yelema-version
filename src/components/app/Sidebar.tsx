@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { useShownPath } from "@/components/app/NavProgress";
 import { useEffect, useState } from "react";
 import {
   ArrowRight,
@@ -52,6 +53,8 @@ export function Sidebar(props: SidebarProps) {
 
 function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
   const pathname = usePathname();
+  // Lit at the click, before the next page is there.
+  const here = useShownPath();
   const { current } = useWorkspace();
   // The company's main logo first (« Entreprise »), then the deployment's, then the initial.
   // Never the Yelema Y here: it is only the tab icon (favicon), Yelema stays in « Powered by ».
@@ -144,7 +147,7 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
         onClick={onNavigate}
         className={cn(
           "flex min-h-10 items-center gap-2.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors",
-          pathname.startsWith("/integrations") ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft",
+          here.startsWith("/integrations") ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft",
           collapsed && RAIL_SQUARE
         )}
       >
@@ -187,7 +190,7 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
                   // Keyed on instance and profile: a profile name alone is not unique across instances.
                   key={`${e.agentId}:${e.profileId}`}
                   expert={e}
-                  active={pathname === `/experts/${e.agentId}/${e.profileId}` || pathname.startsWith(`/experts/${e.agentId}/${e.profileId}/`)}
+                  active={here === `/experts/${e.agentId}/${e.profileId}` || here.startsWith(`/experts/${e.agentId}/${e.profileId}/`)}
                   compact={collapsed}
                   onNavigate={onNavigate}
                   className={g.cycle && !collapsed ? "pl-4" : undefined}
@@ -212,7 +215,7 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
           onClick={onNavigate}
           className={cn(
             "mt-3 flex min-h-10 items-center gap-1.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors",
-            pathname.startsWith("/conversations") ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft"
+            here.startsWith("/conversations") ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft"
           )}
         >
           Toutes les conversations <ArrowRight className="size-4" />

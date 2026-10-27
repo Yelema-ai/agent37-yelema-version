@@ -1,5 +1,6 @@
 "use client";
 
+import { cached, remember } from "@/lib/client-cache";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { profileQuery } from "@/lib/profile-id";
@@ -73,7 +74,9 @@ export function useAllConversations(ownAgentId: string | null, experts: Expert[]
 // The drive's files, at its root and one level down (each Expert keeps its own folder there),
 // newest first. Null while reading.
 export function useDriveFiles(agentId: string | null, enabled = true) {
-  const [files, setFiles] = useState<FileEntry[] | null>(null);
+  // The drive as last read in this tab shows at once; the fresh listing replaces it behind.
+  const key = agentId ? `drive-files:${agentId}` : null;
+  const [files, setFiles] = useState<FileEntry[] | null>(() => (key && cached<FileEntry[]>(key)) || null);
   useEffect(() => {
     if (!enabled || !agentId) return;
     let live = true;
@@ -87,6 +90,7 @@ export function useDriveFiles(agentId: string | null, enabled = true) {
       const nested = await Promise.all(root.filter(isDir).map((d) => list(d.path)));
       const all = [...root, ...nested.flat()].filter((e) => e.type === "file");
       all.sort((a, b) => b.modified - a.modified);
+      remember(`drive-files:${agentId}`, all);
       if (live) setFiles(all);
     })();
     return () => {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, readApiError } from "@/lib/api";
+import { cached, remember } from "@/lib/client-cache";
 import { chatFailureMessage } from "@/lib/chat-errors";
 import { batchQueued, insertBefore, isSteer, steerText, unreadSteerCount } from "@/lib/chat-queue";
 import { profileQuery } from "@/lib/profile-id";
@@ -181,6 +182,10 @@ function takeUnread(run: LiveRun, pending: string): Queued[] {
   return [{ user: { id: uid("u"), role: "user", content: pending.trim() }, settings }];
 }
 
+// One thread's history as last read in this tab. The instance belongs to one member, so its id
+// carries the user.
+const historyKey = (agentId: string, q: string, sessionId: string) => `chat:${agentId}${q}:${sessionId}`;
+
 export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessionCreated, onActivity }: UseChatArgs) {
   const q = profileQuery(profile);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -259,8 +264,9 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
     async (sid: string) => {
       try {
         const res = await apiFetch<SessionDetail>(`/api/agents/${agentId}/chat/sessions/${sid}${q}`);
+        const history = remember(historyKey(agentId, q, sid), mapHistory(res.history));
         if (activeSessionRef.current !== sid || runsRef.current.get(sid)) return;
-        setMessages(mapHistory(res.history));
+        setMessages(history);
         setIsStreaming(false);
       } catch {
         // Leave whatever's on screen.
@@ -498,11 +504,14 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
     setIsStreaming(!!liveNow && !liveNow.done);
 
     let cancelled = false;
-    setLoadingHistory(true);
+    // A thread read before shows at once, as it was; the fresh read replaces it behind.
+    const kept = liveNow ? undefined : cached<ChatMessage[]>(historyKey(agentId, q, sessionId));
+    if (kept) setMessages(kept);
+    setLoadingHistory(!kept);
     apiFetch<SessionDetail>(`/api/agents/${agentId}/chat/sessions/${sessionId}${q}`)
       .then((res) => {
         if (cancelled) return;
-        const history = mapHistory(res.history);
+        const history = remember(historyKey(agentId, q, sessionId), mapHistory(res.history));
 
         let run = runsRef.current.get(sessionId) ?? null;
         if (!run && res.active_response_id) {
