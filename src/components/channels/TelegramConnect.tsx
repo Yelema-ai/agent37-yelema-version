@@ -230,23 +230,6 @@ export function TelegramConnect({
                 En attente de votre message
               </p>
             )}
-            <div className="flex items-center gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  connecting.current = false;
-                  setToken("");
-                  setBot(null);
-                  setOwner(null);
-                  setQrBot(null);
-                  setStep("token");
-                }}
-              >
-                Connecter un autre bot
-              </Button>
-              <DisconnectButton name="Telegram" onConfirm={disconnect} disabled={busy} />
-            </div>
           </div>
         )}
 
