@@ -2,12 +2,14 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2, PhoneCall, RefreshCw, Search, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Loader2, Mail, MessageCircle, PhoneCall, RefreshCw, Search, Share2, X } from "lucide-react";
+import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { callDuration, findInText, frenchSpacing, summarySections, transcriptOf, type CallRecord } from "@/lib/voice";
+import { callDuration, callShareText, findInText, frenchSpacing, summarySections, transcriptOf, type CallRecord } from "@/lib/voice";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { BackButton } from "@/components/ui/back-button";
 import { CallButton } from "./CallButton";
 
@@ -153,7 +155,10 @@ function CallPage({ call: c, expert, onBack }: { call: CallRecord; expert: Exper
           <h2 className="text-lg font-bold text-ink">{titleOf(c)}</h2>
           <p className="text-[12px] text-ink-3">{metaOf(c)}</p>
         </div>
-        <CallButton expert={expert} label="Rappeler" />
+        <div className="flex items-center gap-2">
+          <ShareCall call={c} expert={expert} memberName={me.userFirstName ?? me.userName ?? "Vous"} />
+          <CallButton expert={expert} label="Rappeler" />
+        </div>
       </header>
 
       <div className="grid items-start md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
@@ -288,6 +293,55 @@ function CallPage({ call: c, expert, onBack }: { call: CallRecord; expert: Exper
 }
 
 const clockOf = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+// « Partager » : the call's account as text. On a phone, the system's own sheet (WhatsApp, e-mail…);
+// elsewhere, a menu: copy, e-mail, WhatsApp, or a .txt file. Nothing goes through Yelema.
+function ShareCall({ call: c, expert, memberName }: { call: CallRecord; expert: Expert; memberName: string }) {
+  const title = titleOf(c);
+  const text = () => callShareText(c, { title, meta: metaOf(c), expertName: expert.name, memberName });
+  const touch = typeof window !== "undefined" && typeof navigator.share === "function" && window.matchMedia("(pointer: coarse)").matches;
+  const label = <><Share2 /> <span className="max-sm:sr-only">Partager</span></>;
+  if (touch)
+    return (
+      <Button variant="outline" onClick={() => void navigator.share({ title: `Appel avec ${expert.name}`, text: text() }).catch(() => {})}>
+        {label}
+      </Button>
+    );
+  const copy = () =>
+    navigator.clipboard.writeText(text()).then(
+      () => toast.success("Compte rendu copié"),
+      () => toast.error("La copie n’a pas marché.")
+    );
+  const download = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text()], { type: "text/plain;charset=utf-8" }));
+    a.download = `Appel ${expert.name} ${c.startedAt.slice(0, 10)}.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const item = "gap-2.5 rounded-[10px] px-2.5 py-2 text-sm";
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline">{label}</Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56 p-1.5">
+        <DropdownMenuItem className={item} onSelect={() => void copy()}>
+          <Copy className="size-4" /> Copier le compte rendu
+        </DropdownMenuItem>
+        <DropdownMenuItem className={item} onSelect={() => window.open(`mailto:?subject=${encodeURIComponent(`Appel avec ${expert.name} : ${title}`)}&body=${encodeURIComponent(text())}`, "_self")}>
+          <Mail className="size-4" /> Envoyer par e-mail
+        </DropdownMenuItem>
+        <DropdownMenuItem className={item} onSelect={() => window.open(`https://wa.me/?text=${encodeURIComponent(text())}`, "_blank", "noopener")}>
+          <MessageCircle className="size-4" /> Envoyer sur WhatsApp
+        </DropdownMenuItem>
+        <DropdownMenuItem className={item} onSelect={download}>
+          <Download className="size-4" /> Télécharger (.txt)
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 function SummaryBlock({ title, items, empty }: { title: string; items?: string[]; empty?: string }) {
   return (

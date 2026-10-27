@@ -265,3 +265,20 @@ export function findInText(text: string, query: string): [number, number][] {
 export function frenchSpacing(text: string): string {
   return text.replace(/ ([%:;?!»])/g, "\u00a0$1").replace(/« /g, "«\u00a0");
 }
+
+/**
+ * A call's account as plain text, to share it (e-mail, WhatsApp, copy, a .txt file): title and date,
+ * the summary (its sections, else its lines), then the transcript when the back office serves one.
+ */
+export function callShareText(
+  c: Pick<CallRecord, "summary" | "keyPoints" | "decisions" | "nextSteps" | "transcript">,
+  { title, meta, expertName, memberName }: { title: string; meta: string; expertName: string; memberName: string }
+): string {
+  const out = [`Appel avec ${expertName} : ${title}`, meta, ""];
+  const sections = summarySections(c);
+  if (sections) for (const s of sections) out.push(s.title, ...s.items.map((i) => `- ${i}`), "");
+  else if (lines(c.summary).length) out.push("Résumé", ...lines(c.summary).map((i) => `- ${i}`), "");
+  const said = transcriptOf(c);
+  if (said.length) out.push("Transcription", ...said.map((l) => `${l.who === "expert" ? expertName : memberName} : ${l.text}`), "");
+  return out.join("\n").trim() + "\n";
+}

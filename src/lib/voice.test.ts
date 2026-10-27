@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { callDuration, callHeaders, chosenVoice, expertDefaultVoice, countryFlag, countryName, filterVoices, isCallTranscript, parseVoicePrefs, signalingStep, transcriptOf, findInText, summarySections, frenchSpacing, voiceFacets, type VoiceOption } from "./voice.ts";
+import { callDuration, callShareText, callHeaders, chosenVoice, expertDefaultVoice, countryFlag, countryName, filterVoices, isCallTranscript, parseVoicePrefs, signalingStep, transcriptOf, findInText, summarySections, frenchSpacing, voiceFacets, type VoiceOption } from "./voice.ts";
 
 test("a relayed step is only one the SDK sends, with its own method", () => {
   assert.equal(signalingStep("conv_abc-1", "offer", "POST"), "offer");
@@ -153,4 +153,13 @@ test("the voices kept by the back office: the expert's own over those for all; a
   assert.deepEqual(voicesFor({ "*": { fr: "akissi" } }, "awa"), { fr: "akissi" });
   assert.deepEqual(voicesFor({}, "awa"), {});
   assert.deepEqual(voicePatch("koffi", { fr: "moussa" }), { koffi: { fr: "moussa", en: null } });
+});
+
+test("a shared call reads as a short account, transcript last", () => {
+  const text = callShareText(
+    { summary: ["Point des commandes"], keyPoints: ["3 commandes en retard"], decisions: [], nextSteps: ["Relancer Prosuma"], transcript: [{ who: "user", text: "Le point." }, { who: "expert", text: "Voici." }] },
+    { title: "Commandes Prosuma", meta: "27 oct. · 3 min", expertName: "Salif", memberName: "Leslie" }
+  );
+  assert.equal(text, "Appel avec Salif : Commandes Prosuma\n27 oct. · 3 min\n\nPoints clés\n- 3 commandes en retard\n\nProchaines étapes\n- Relancer Prosuma\n\nTranscription\nLeslie : Le point.\nSalif : Voici.\n");
+  assert.ok(!callShareText({ summary: ["Vu"] }, { title: "T", meta: "", expertName: "S", memberName: "L" }).includes("Transcription"));
 });
