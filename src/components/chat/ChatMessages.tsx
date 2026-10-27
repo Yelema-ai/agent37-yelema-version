@@ -18,6 +18,8 @@ import type { Expert } from "@/lib/types";
 import { useChatContext } from "./ChatProvider";
 import { DocumentCards, useDriveListing } from "./DocumentCards";
 import { Markdown } from "./Markdown";
+import { FilePreview, ReducedImage } from "@/components/files/FilePreview";
+import { contentUrl, thumbUrl, type FileEntry } from "@/components/files/types";
 import { cleanReply } from "@/lib/chat-errors";
 import { mediaTags } from "@/lib/media-tags";
 import { LiveWait, StepsList } from "./ChatSteps";
@@ -25,25 +27,58 @@ import type { ChatMessage, MessageAttachment } from "./types";
 
 const PAGE = 80;
 
-// Files that rode along with a user turn, shown as compact chips above the message bubble.
-export function MessageAttachments({ attachments }: { attachments: MessageAttachment[] }) {
+// Files that rode along with a user turn, above the message bubble: a picture as itself, a reduced copy
+// that opens full size (as in Livrables, Leslie 27/10); any other file as a compact chip. Without an
+// instance to read from (Yélé's bubble), every file stays a chip.
+export function MessageAttachments({ attachments, agentId }: { attachments: MessageAttachment[]; agentId?: string }) {
+  const [open, setOpen] = useState<FileEntry | null>(null);
+  const [broken, setBroken] = useState<Set<string>>(() => new Set());
+  const pictures = agentId ? attachments.filter((a) => a.isImage && !broken.has(a.path)) : [];
+  const chips = attachments.filter((a) => !pictures.includes(a));
   return (
-    <div className="flex flex-wrap justify-end gap-1.5">
-      {attachments.map((a, k) => (
-        <span
-          key={`${a.path}-${k}`}
-          title={a.name}
-          className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2 py-1 text-xs text-ink"
-        >
-          {a.isImage ? (
-            <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink-3" />
-          ) : (
-            <FileText className="h-3.5 w-3.5 shrink-0 text-ink-3" />
-          )}
-          <span className="max-w-[12rem] truncate">{a.name}</span>
-        </span>
-      ))}
-    </div>
+    <>
+      {pictures.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-1.5">
+          {pictures.map((a, k) => (
+            <button
+              key={`${a.path}-${k}`}
+              type="button"
+              title={a.name}
+              aria-label={`Ouvrir ${a.name}`}
+              onClick={() => setOpen({ name: a.name, path: a.path, type: "file", size: null, modified: 0, hidden: false })}
+              className="block h-40 max-w-[15rem] overflow-hidden rounded-2xl border border-line bg-soft transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+            >
+              <ReducedImage
+                thumb={thumbUrl(agentId!, a.path, 480)}
+                original={contentUrl(agentId!, a.path, "inline")}
+                alt={a.name}
+                onFail={() => setBroken((b) => new Set(b).add(a.path))}
+                className="h-full w-auto max-w-full object-cover"
+              />
+            </button>
+          ))}
+        </div>
+      )}
+      {chips.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-1.5">
+          {chips.map((a, k) => (
+            <span
+              key={`${a.path}-${k}`}
+              title={a.name}
+              className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2 py-1 text-xs text-ink"
+            >
+              {a.isImage ? (
+                <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink-3" />
+              ) : (
+                <FileText className="h-3.5 w-3.5 shrink-0 text-ink-3" />
+              )}
+              <span className="max-w-[12rem] truncate">{a.name}</span>
+            </span>
+          ))}
+        </div>
+      )}
+      {agentId && <FilePreview agentId={agentId} entry={open} onClose={() => setOpen(null)} />}
+    </>
   );
 }
 
@@ -112,7 +147,7 @@ export function ChatMessages({
   onUnqueue?: (id: string) => void;
 }) {
   // The instance whose drive the paths in a reply point into (they become download links).
-  const { agentId } = useChatContext();
+  const { agentId, profile } = useChatContext();
   const updating = useDeployPhase() === "maintenance";
   // The reply being written: the last assistant bubble, even with queued messages below it.
   // A routine's run: its [SILENT] answer reads as "nothing to report".
@@ -204,7 +239,7 @@ export function ChatMessages({
           return (
             <div key={m.id} className="flex justify-end">
               <div className="flex min-w-0 max-w-[85%] flex-col items-end gap-1.5">
-                {attachments.length > 0 && <MessageAttachments attachments={attachments} />}
+                {attachments.length > 0 && <MessageAttachments attachments={attachments} agentId={agentId} />}
                 {m.content && (
                   <div className={cn("max-w-full whitespace-pre-wrap rounded-[18px] rounded-br-md bg-brand [overflow-wrap:anywhere] px-4 py-2.5 text-[15px] text-on-brand", m.queued && "opacity-60", m.steered && !m.queued && "bg-brand/80")}>
                     {m.content}
@@ -246,7 +281,7 @@ export function ChatMessages({
               {routineThread && !live && isSilentRun(m.content) ? (
                 <p className="text-sm italic text-ink-3">{SILENT_RUN_LABEL}</p>
               ) : m.content && !working ? (
-                <Markdown content={cleanReply(m.content)} agentId={agentId} />
+                <Markdown content={cleanReply(m.content)} agentId={agentId} profileId={profile} />
               ) : showDots && updating ? (
                 // A reply held by the update: said to be received, so the wait does not read as a bug.
                 <p role="status" className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3.5 py-2 text-sm font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">

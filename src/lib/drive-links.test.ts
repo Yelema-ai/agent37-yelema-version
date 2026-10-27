@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { docKind, drivePathsIn, isHiddenInChat, normDrivePath, turnDocs } from "./drive-links.ts";
+import { citedFolder, docKind, drivePathsIn, FOLDER_BARE, FOLDER_CODE, isHiddenInChat, normDrivePath, turnDocs } from "./drive-links.ts";
 
 test("the paths a reply names, in order, once each, in one spelling", () => {
   const text = [
@@ -60,4 +60,18 @@ test("a note (.md) or a memory file named in the reply or by a MEDIA tag gets no
   assert.deepEqual(docs.map((d) => d.name), ["affiche.png", "deck.pdf"]);
   assert.ok(isHiddenInChat("~/Livrables/Koffi/brief.MD") && !isHiddenInChat("~/Livrables/Koffi/deck.pdf"));
   assert.ok(isHiddenInChat("~/Livrables/Koffi/compte-rendu.txt") && isHiddenInChat("Livrables/Koffi/notes.TXT"));
+});
+
+test("a folder the Expert cites, in backticks or bare with its slash", () => {
+  const text = "Dossier local : `Livrables/Fatima/tajplast/flyers-modernes/`\nAussi ~/Livrables/Koffi/stand/ et `~/Livrables/Pièces jointes` ici.";
+  const code = [...text.matchAll(FOLDER_CODE)].map((m) => citedFolder(m[1]));
+  assert.deepEqual(code, ["~/Livrables/Fatima/tajplast/flyers-modernes", "~/Livrables/Pièces jointes"]);
+  const bare = [...text.matchAll(FOLDER_BARE)].map((m) => citedFolder(m[2]));
+  assert.deepEqual(bare, ["~/Livrables/Koffi/stand"]);
+});
+
+test("a file, or a memory folder, is not a folder link", () => {
+  assert.equal(citedFolder("~/Livrables/Fatima/post.docx"), null);
+  assert.equal(citedFolder("/home/node/Livrables/Fatima/_memoire/"), null);
+  assert.equal(citedFolder("/home/node/Livrables/Fatima/"), "~/Livrables/Fatima");
 });

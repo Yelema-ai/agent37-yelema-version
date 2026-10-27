@@ -34,7 +34,7 @@ import { useOwnAgentId } from "@/components/conversations/useAllConversations";
 import { useChatMarks } from "@/components/conversations/useChatMarks";
 import { arrange } from "@/lib/chat-marks";
 import { convKey } from "@/lib/activity";
-import { openSearch } from "@/components/conversations/SearchDialog";
+import { openSearch, warmSearch } from "@/components/conversations/SearchDialog";
 import type { ChatSession } from "@/components/chat/types";
 import { apiFetch } from "@/lib/api";
 import type { Expert } from "@/lib/types";
@@ -136,6 +136,8 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
       <button
         type="button"
         onClick={openSearch}
+        onPointerEnter={warmSearch}
+        onFocus={warmSearch}
         title="Rechercher (Ctrl K)"
         className={cn("flex min-h-10 items-center gap-2.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors text-ink-2 hover:bg-soft", collapsed && RAIL_SQUARE)}
       >

@@ -35,9 +35,12 @@ const ms = (t: number) => (t < 1e12 ? t * 1000 : t);
 
 // Every conversation of the member: the chat d'entreprise's (the instance with no profile) and each
 // Expert's, newest first. One read per space, in parallel; a space that does not answer is left out.
+// The list as last read in this tab shows at once (Leslie, 27/10: the search was slow to show them);
+// the fresh reading replaces it behind.
 export function useAllConversations(ownAgentId: string | null, experts: Expert[], enabled = true) {
-  const [rows, setRows] = useState<ConversationRow[] | null>(null);
   const key = experts.map((e) => `${e.agentId}:${e.profileId}`).join(",");
+  const store = ownAgentId ? `conversations:${ownAgentId}:${key}` : null;
+  const [rows, setRows] = useState<ConversationRow[] | null>(() => (store && cached<ConversationRow[]>(store)) || null);
 
   useEffect(() => {
     if (!enabled || !ownAgentId) return;
@@ -60,7 +63,9 @@ export function useAllConversations(ownAgentId: string | null, experts: Expert[]
         )
       )
     ).then((all) => {
-      if (live) setRows(all.flat().sort((a, b) => b.at - a.at));
+      const sorted = all.flat().sort((a, b) => b.at - a.at);
+      if (store) remember(store, sorted);
+      if (live) setRows(sorted);
     });
     return () => {
       live = false;

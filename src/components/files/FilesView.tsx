@@ -41,8 +41,13 @@ type ViewMode = "list" | "grid";
 // mounted/hidden across tab switches, like ChatView, so the current directory survives). The whole
 // pane is a drop zone for uploads. Look + primitives mirror the Chat tab: same shadcn Dialog/Input,
 // lucide icons, sonner toasts (raised inside the hook), and the hover-action pattern.
-export function FilesView({ agentId, initialPath }: { agentId: string; initialPath?: string }) {
+export function FilesView({ agentId, initialPath, openPath }: { agentId: string; initialPath?: string; openPath?: string | null }) {
   const fb = useFileBrowser(agentId, initialPath);
+  // A folder named in the address (« ?dossier= », from a path cited in the chat) opens here.
+  const { navigate: fbNavigate } = fb;
+  useEffect(() => {
+    if (openPath) void fbNavigate(openPath);
+  }, [openPath, fbNavigate]);
   const [preview, setPreview] = useState<FileEntry | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FileEntry | null>(null);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
@@ -145,6 +150,9 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
         openEntry(entry);
       },
       onKeyDown: (e: KeyboardEvent<HTMLElement>) => onEntryKeyDown(e, entry),
+      // A folder is read as soon as the pointer is on it: the click then opens it at once.
+      onPointerEnter: isDir(entry) ? () => fb.prefetch(entry.path) : undefined,
+      onPointerDown: isDir(entry) ? () => fb.prefetch(entry.path) : undefined,
     };
   }
 
@@ -193,6 +201,14 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
                     </span>
                   );
                 })
+              )}
+              {/* The folder being opened, named at once, before its listing lands. */}
+              {fb.opening && fb.path && fb.opening.startsWith(`${fb.path}/`) && (
+                <span className="flex shrink-0 items-center text-[15px] text-muted-foreground">
+                  <ChevronRight className="h-4 w-4" />
+                  <span className="max-w-[14rem] truncate px-2 py-1">{fb.opening.split("/").filter(Boolean).pop()}</span>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-label="Ouverture du dossier" />
+                </span>
               )}
             </nav>
           </div>
@@ -294,7 +310,12 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
             <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{fb.error}</p>
           </div>
         ) : (
-          <div className="w-full p-4 md:p-6 lg:p-8" onClick={clearSelection}>
+          // While a folder opens, the list it replaces no longer takes clicks.
+          <div
+            className={cn("w-full p-4 transition-opacity md:p-6 lg:p-8", fb.opening && "pointer-events-none opacity-50")}
+            aria-busy={!!fb.opening}
+            onClick={clearSelection}
+          >
             {fb.visibleEntries.length === 0 && fb.query.trim() ? (
               <p className="px-3 py-10 text-center text-sm text-muted-foreground">Aucun fichier ne correspond à « {fb.query.trim()} ».</p>
             ) : fb.visibleEntries.length === 0 ? (
