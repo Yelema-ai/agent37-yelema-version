@@ -1,13 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Globe, Key, Loader2, Plus, ShieldCheck } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, Globe, Key, Loader2, Plus, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { McpAuth, McpServerDraft, McpToolsReport } from "@/lib/mcp-servers";
+import Link from "next/link";
+import { searchDirectory, sameTool, serverName, type McpDirectoryEntry } from "@/lib/mcp-directory";
+import type { IntegrationToolkitsResult } from "@/lib/types";
+import { apiFetch } from "@/lib/api";
+import { useOwnAgentId } from "@/components/conversations/useAllConversations";
+import { ToolLogo } from "./ToolLogo";
 import { cn } from "@/lib/utils";
 import { McpOauthSteps, type McpOauthFlow } from "./McpOauthSteps";
 
@@ -29,12 +35,22 @@ type OauthProps = {
 
 // Le dialogue d'ajout d'un serveur MCP, puis, pour OAuth, le suivi de l'autorisation. Il ne garde rien :
 // le brouillon part au back-office, qui contrôle le nom, l'adresse et le jeton ; son refus revient en une phrase.
+// Il s'ouvre sur une seule question, « Quel outil ? » (Leslie, 27/10) : un outil de l'annuaire vérifié
+// (lib/mcp-directory) arrive avec son nom de serveur et son adresse déjà remplis, modifiables, puis ce que
+// l'outil demande (clé, DSN) ; jamais de renvoi vers Connecteurs (Leslie, 27/10) ; tout autre serveur
+// se saisit à la main, comme avant.
 export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth }: { open: boolean; onOpenChange: (open: boolean) => void; scopeLabel: string; onSave: (draft: McpServerDraft) => Promise<void>; oauth: OauthProps }) {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [auth, setAuth] = useState<Exclude<McpAuth, "stdio">>("none");
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState<"pick" | "form">("pick");
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<McpDirectoryEntry | null>(null);
+  const [extra, setExtra] = useState<Record<string, string>>({});
+  const [alsoConnector, setAlsoConnector] = useState(false);
+  const ownAgentId = useOwnAgentId();
 
   // Un dialogue rouvert repart vide : un jeton saisi puis abandonné ne reste pas dans la page.
   useEffect(() => {
@@ -43,9 +59,47 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth 
     setUrl("");
     setAuth("none");
     setToken("");
+    setStep("pick");
+    setQuery("");
+    setPicked(null);
+    setExtra({});
   }, [open]);
 
-  const ready = Boolean(name.trim() && url.trim() && (auth !== "bearer" || token.trim()));
+  const found = useMemo(() => searchDirectory(query), [query]);
+
+  // The picked tool may also be among Connecteurs (Composio): one line under the form says so, nothing more.
+  useEffect(() => {
+    setAlsoConnector(false);
+    if (!picked || !ownAgentId) return;
+    let cancelled = false;
+    apiFetch<IntegrationToolkitsResult>(`/api/agents/${ownAgentId}/integrations/toolkits?search=${encodeURIComponent(picked.name)}`)
+      .then((r) => !cancelled && setAlsoConnector(r.items.some((k) => sameTool(picked.name, k.name) || sameTool(picked.key, k.slug))))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [picked, ownAgentId]);
+
+  function pick(entry: McpDirectoryEntry) {
+    setPicked(entry);
+    setName(serverName(entry));
+    setUrl(entry.url);
+    setAuth(entry.auth === "bearer" ? "bearer" : entry.auth === "oauth" ? "oauth" : "none");
+    setToken("");
+    setExtra({});
+  }
+
+  function back() {
+    setPicked(null);
+    setExtra({});
+    setStep("pick");
+    setName("");
+    setUrl("");
+    setAuth("none");
+    setToken("");
+  }
+
+  const ready = Boolean(name.trim() && url.trim() && (auth !== "bearer" || token.trim())) && picked?.auth !== "header";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -65,6 +119,104 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth 
       <DialogContent className="sm:max-w-[580px]">
         {oauth.flow ? (
           <McpOauthSteps flow={oauth.flow} tools={oauth.tools} onOpenAccess={oauth.onOpenAccess} onCancel={oauth.onCancel} onClose={oauth.onClose} />
+        ) : step === "pick" && !picked ? (
+          <div className="grid gap-4">
+            <DialogHeader>
+              <DialogTitle>Ajouter un outil</DialogTitle>
+              <DialogDescription>Pour {scopeLabel}.</DialogDescription>
+            </DialogHeader>
+            <label className="flex items-center gap-2.5 rounded-xl border border-line px-3.5 focus-within:border-ink">
+              <Search className="size-4 shrink-0 text-ink-3" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Quel outil ?"
+                aria-label="Quel outil ?"
+                autoFocus
+                autoComplete="off"
+                spellCheck={false}
+                className="min-h-11 w-full bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-3"
+              />
+            </label>
+            <ul className="-mx-1 flex flex-col">
+              {found.map((e) => (
+                  <li key={e.key}>
+                    <button type="button" onClick={() => pick(e)} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-2 text-left hover:bg-soft">
+                      <ToolLogo logo={`https://www.google.com/s2/favicons?domain=${e.domain}&sz=64`} name={e.name} className="size-8 rounded-lg" imgClassName="size-5" />
+                      <span className="font-medium text-ink">{e.name}</span>
+                      <span className="ml-auto text-xs text-ink-3">{e.category}</span>
+                    </button>
+                  </li>
+                ))}
+              {query.trim() && found.length === 0 && <li className="px-2 py-3 text-sm text-ink-3">Aucun outil de la liste ne porte ce nom.</li>}
+            </ul>
+            <p className="border-t border-line pt-3 text-sm text-ink-2">
+              Votre outil n’est pas là ?{" "}
+              <button type="button" onClick={() => setStep("form")} className="font-semibold text-ink underline-offset-2 hover:underline">
+                Saisir son adresse
+              </button>
+            </p>
+          </div>
+        ) : step === "pick" && picked ? (
+          <form onSubmit={submit} className="grid gap-4">
+            <DialogHeader>
+              <DialogTitle>Ajouter un outil</DialogTitle>
+              <DialogDescription className="sr-only">{picked.name}</DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center gap-3 rounded-xl border border-line p-3">
+              <ToolLogo logo={`https://www.google.com/s2/favicons?domain=${picked.domain}&sz=64`} name={picked.name} />
+              <span className="font-semibold text-ink">{picked.name}</span>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="mcp-name">Nom du serveur</Label>
+              <Input id="mcp-name" type="text" value={name} onChange={(e) => setName(e.target.value)} disabled={busy} required autoComplete="off" spellCheck={false} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="mcp-url">Adresse du serveur</Label>
+              <Input id="mcp-url" type="url" value={url} onChange={(e) => setUrl(e.target.value)} disabled={busy} required autoComplete="off" spellCheck={false} className="font-mono text-[13px]" />
+            </div>
+            {picked.fields?.map((f) => (
+              <div key={f.id} className="space-y-1.5">
+                <Label htmlFor={`mcp-${f.id}`}>{f.label}</Label>
+                <Input id={`mcp-${f.id}`} type="text" placeholder={f.placeholder} value={extra[f.id] ?? ""} onChange={(e) => setExtra((x) => ({ ...x, [f.id]: e.target.value }))} disabled={busy} autoComplete="off" spellCheck={false} className="font-mono text-[13px]" />
+              </div>
+            ))}
+            {(picked.auth === "bearer" || picked.auth === "header") && (
+              <div className="space-y-1.5">
+                <Label htmlFor="mcp-token">Clé {picked.name}</Label>
+                <Input id="mcp-token" type="password" placeholder="Collez votre clé" value={token} onChange={(e) => setToken(e.target.value)} disabled={busy} required autoFocus autoComplete="off" spellCheck={false} />
+                <p className="text-xs text-ink-3">À créer dans votre compte {picked.name}. Gardée par Yelema, elle ne sera plus affichée.</p>
+              </div>
+            )}
+            {picked.auth === "oauth" && (
+              <p className="rounded-xl bg-soft px-4 py-3 text-sm leading-relaxed text-ink-2">
+                {oauth.chains ? `En cliquant sur « Connecter », la page de ${picked.name} s’ouvre : vous vous connectez et validez l’accès.` : `Rien à saisir. Ce membre se connectera ensuite à son propre compte ${picked.name}.`}
+              </p>
+            )}
+            {picked.auth === "header" && (
+              <p className="rounded-xl bg-soft px-4 py-3 text-sm leading-relaxed text-ink-2">
+                La connexion à {picked.name} arrive bientôt : Yelema prépare l’envoi de cette clé.
+              </p>
+            )}
+            {alsoConnector && (
+              <p className="flex items-center justify-between gap-3 text-sm text-ink-2">
+                Un connecteur existe aussi pour {picked.name}.
+                <Link href="/integrations/connecteurs" onClick={() => onOpenChange(false)} className="shrink-0 font-semibold text-ink underline-offset-2 hover:underline">
+                  Voir le connecteur
+                </Link>
+              </p>
+            )}
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={back} disabled={busy}>
+                <ChevronLeft /> Retour
+              </Button>
+              <Button type="submit" disabled={busy || !ready}>
+                {busy ? <Loader2 className="animate-spin" /> : <Plus />}
+                {busy ? (auth === "oauth" && oauth.chains ? "Initialisation…" : "Connexion…") : "Connecter"}
+              </Button>
+            </DialogFooter>
+          </form>
         ) : (
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
@@ -146,8 +298,8 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth 
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-              Annuler
+            <Button type="button" variant="outline" onClick={back} disabled={busy}>
+              <ChevronLeft /> Retour
             </Button>
             <Button type="submit" disabled={busy || !ready}>
               {busy ? <Loader2 className="animate-spin" /> : <Plus />}
