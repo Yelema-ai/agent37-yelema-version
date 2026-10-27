@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BUDGET_EXCEEDED, CREDIT_EXHAUSTED, chatFailureMessage, cleanReply, cleanUserMessage, isAccountToTopUp } from "./chat-errors.ts";
+import { BUDGET_EXCEEDED, CREDIT_EXHAUSTED, attachedFiles, chatFailureMessage, cleanReply, cleanUserMessage, isAccountToTopUp } from "./chat-errors.ts";
 
 test("the gateway's budget refusal becomes the budget sentence", () => {
   assert.equal(chatFailureMessage('litellm.BudgetExceededError: {"error":{"type":"budget_exceeded"}}', "x"), BUDGET_EXCEEDED);
@@ -33,4 +33,20 @@ test("a member's message loses the runtime's continuation orders, and only them"
   const order = "[System: Your previous response was truncated by the output length limit. Continue exactly where you left off. Do not restart or repeat prior text. Finish the answer directly.]";
   assert.equal(cleanUserMessage(`Peux tu stp faire une analyse de mon compte linkedin?\n\n${order}\n\n${order}`), "Peux tu stp faire une analyse de mon compte linkedin?");
   assert.equal(cleanUserMessage("Le système : à revoir\n\nMerci"), "Le système : à revoir\n\nMerci");
+});
+
+test("the files the runtime appends to a saved member message become chips, never paths", () => {
+  const saved = "j'ai besoin que tu maîtrises le contexte\n\n[Attached files:\n- /home/node/Livrables/Pièces jointes/62b69t5b-pack-ministere_v1.zip\n- /home/node/Livrables/Pièces jointes/a1b2c3d4-photo.JPG]";
+  assert.deepEqual(attachedFiles(saved), {
+    text: "j'ai besoin que tu maîtrises le contexte",
+    files: [
+      { name: "pack-ministere_v1.zip", path: "/home/node/Livrables/Pièces jointes/62b69t5b-pack-ministere_v1.zip", isImage: false },
+      { name: "photo.JPG", path: "/home/node/Livrables/Pièces jointes/a1b2c3d4-photo.JPG", isImage: true },
+    ],
+  });
+  assert.deepEqual(attachedFiles("[Attached files:\n- /home/node/Livrables/Koffi/logo-v2.png]").files, [
+    { name: "logo-v2.png", path: "/home/node/Livrables/Koffi/logo-v2.png", isImage: true },
+  ]);
+  assert.deepEqual(attachedFiles("Rien de joint."), { text: "Rien de joint.", files: [] });
+  assert.deepEqual(attachedFiles("Cite [Attached files: au milieu] du texte").files, []);
 });

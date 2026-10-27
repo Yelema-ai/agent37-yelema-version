@@ -9,9 +9,9 @@ import { toolPhrase } from "@/lib/tool-steps";
 import { isNetworkError, newMessageKey, withoutRunningTurn } from "@/lib/turn-idempotency";
 import { finalReply } from "@/lib/turn-reply";
 import { visibleHistory } from "@/lib/compaction";
-import { cleanUserMessage } from "@/lib/chat-errors";
+import { attachedFiles, cleanUserMessage } from "@/lib/chat-errors";
 import { useTurnReporter } from "@/components/activity/hooks";
-import { type SessionDetail } from "@/lib/types";
+import { FILES_ONLY_PROMPT, type SessionDetail } from "@/lib/types";
 import { uid, type ChatMessage, type ChatSettings, type MessageAttachment, type ToolEvent, type ToolStatus } from "./types";
 
 export interface SendSettings extends Partial<ChatSettings> {
@@ -152,15 +152,20 @@ function mapHistory(history: SessionDetail["history"]): ChatMessage[] {
     const prev = all[i - 1];
     return !(own !== steerText(h.content ?? "").trim() && prev.role === "user" && cleanUserMessage(steerText(prev.content ?? "")) === own);
   });
-  return rows.map((h) => ({
-    id: h.id || uid("h"),
-    role: h.role,
-    content: h.role === "user" ? cleanUserMessage(steerText(h.content ?? "")) : (h.content ?? ""),
-    thinking: h.thinking,
-    ...(h.files?.length ? { files: h.files } : {}),
-    ...(h.created_at ? { at: h.created_at < 1e12 ? h.created_at * 1000 : h.created_at } : {}),
-    ...(h.role === "user" && isSteer(h.content ?? "") ? { steered: true } : {}),
-  }));
+  return rows.map((h) => {
+    // The files of a member's turn come back inside its text: shown as chips, as when it was sent.
+    const sent = h.role === "user" ? attachedFiles(cleanUserMessage(steerText(h.content ?? ""))) : null;
+    return {
+      id: h.id || uid("h"),
+      role: h.role,
+      content: sent ? (sent.files.length && sent.text === FILES_ONLY_PROMPT ? "" : sent.text) : (h.content ?? ""),
+      ...(sent?.files.length ? { attachments: sent.files } : {}),
+      thinking: h.thinking,
+      ...(h.files?.length ? { files: h.files } : {}),
+      ...(h.created_at ? { at: h.created_at < 1e12 ? h.created_at * 1000 : h.created_at } : {}),
+      ...(h.role === "user" && isSteer(h.content ?? "") ? { steered: true } : {}),
+    };
+  });
 }
 
 // Overlay a live run's bubbles onto the fetched transcript, minus what Hermes already saved of the
