@@ -1,3 +1,4 @@
+import { boostTelegramGroup } from "@/lib/telegram-boost";
 import { agent37, instanceFetch } from "@/lib/agent37";
 import { requireAgentAccess } from "@/lib/auth";
 import { repointRoutines } from "@/lib/hermes-cron";
@@ -32,6 +33,18 @@ export async function POST(_request: Request, { params }: Ctx) {
     const { row } = await requireAgentAccess(id);
 
     // Server-side write outside the drive on purpose: the script goes where the command runs it.
+    // Auto-boost du groupe Telegram si les identifiants Premium sont configurés
+    try {
+      const checkHome = await agent37.exec(id, "hermes -p default config get platforms.telegram.home_channel.chat_id --raw 2>/dev/null || true");
+      const chatId = checkHome.stdout?.trim();
+      if (chatId && /^-?\d+$/.test(chatId)) {
+        boostTelegramGroup(chatId).then((res) => {
+          if (res.ok) console.log(`[telegram/boost] Groupe ${chatId} boosté automatiquement:`, res);
+          else if (res.error !== "not_configured") console.warn(`[telegram/boost] Échec du boost automatique:`, res.message || res.error);
+        }).catch((e) => console.warn(`[telegram/boost] Erreur boost:`, e));
+      }
+    } catch {}
+
     const query = new URLSearchParams({ path: ROUTE_SCRIPT_FILE, overwrite: "true" });
     const upload = await instanceFetch(id, `/v1/files/content?${query.toString()}`, {
       method: "PUT",
