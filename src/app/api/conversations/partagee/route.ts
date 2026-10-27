@@ -1,6 +1,6 @@
 import { agent37 } from "@/lib/agent37";
 import { requireMember, requireUser } from "@/lib/auth";
-import { cleanReply } from "@/lib/chat-errors";
+import { cleanReply, cleanUserMessage } from "@/lib/chat-errors";
 import { visibleHistory } from "@/lib/compaction";
 import { openConversation } from "@/lib/conversation-token";
 import { expertDisplayName } from "@/lib/experts";
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     const detail = await agent37.getSession(claims.a, claims.s, profileQuery(claims.p), claims.u);
     const messages = visibleHistory(detail.history ?? [])
       .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({ id: m.id, role: m.role, at: m.created_at, content: m.role === "assistant" ? cleanReply(m.content ?? "") : (m.content ?? "").trim() }))
+      .map((m) => ({ id: m.id, role: m.role, at: m.created_at, content: m.role === "assistant" ? cleanReply(m.content ?? "") : cleanUserMessage(m.content ?? "") }))
       .filter((m) => m.content);
     return json({
       title: claims.t || "Conversation",

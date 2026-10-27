@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { agent37, instanceFetch } from "@/lib/agent37";
 import { backofficeAgentRow, requireMember, requireUser } from "@/lib/auth";
-import { cleanReply } from "@/lib/chat-errors";
+import { cleanReply, cleanUserMessage } from "@/lib/chat-errors";
 import { visibleHistory } from "@/lib/compaction";
 import { resumeSeed } from "@/lib/conversation-resume";
 import { openConversation } from "@/lib/conversation-token";
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const detail = await agent37.getSession(claims.a, claims.s, profileQuery(claims.p), claims.u);
     const lines = visibleHistory(detail.history ?? [])
       .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({ role: m.role as "user" | "assistant", content: m.role === "assistant" ? cleanReply(m.content ?? "") : (m.content ?? "").trim() }))
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.role === "assistant" ? cleanReply(m.content ?? "") : cleanUserMessage(m.content ?? "") }))
       .filter((m) => m.content);
     if (!lines.length) throw new ApiError(409, "empty", "Cette conversation est vide.");
 

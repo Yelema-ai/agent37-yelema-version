@@ -9,6 +9,7 @@ import { toolPhrase } from "@/lib/tool-steps";
 import { isNetworkError, newMessageKey, withoutRunningTurn } from "@/lib/turn-idempotency";
 import { finalReply } from "@/lib/turn-reply";
 import { visibleHistory } from "@/lib/compaction";
+import { cleanUserMessage } from "@/lib/chat-errors";
 import { useTurnReporter } from "@/components/activity/hooks";
 import { type SessionDetail } from "@/lib/types";
 import { uid, type ChatMessage, type ChatSettings, type MessageAttachment, type ToolEvent, type ToolStatus } from "./types";
@@ -144,10 +145,17 @@ const BUSY_WAIT_MS = 3000;
 // --- Transcript merging ------------------------------------------------------------------------
 
 function mapHistory(history: SessionDetail["history"]): ChatMessage[] {
-  return visibleHistory(history ?? []).map((h) => ({
+  // A message the runtime sent again with its continuation order is the member's once: the copy goes.
+  const rows = visibleHistory(history ?? []).filter((h, i, all) => {
+    if (h.role !== "user" || i === 0) return true;
+    const own = cleanUserMessage(steerText(h.content ?? ""));
+    const prev = all[i - 1];
+    return !(own !== steerText(h.content ?? "").trim() && prev.role === "user" && cleanUserMessage(steerText(prev.content ?? "")) === own);
+  });
+  return rows.map((h) => ({
     id: h.id || uid("h"),
     role: h.role,
-    content: h.role === "user" ? steerText(h.content ?? "") : (h.content ?? ""),
+    content: h.role === "user" ? cleanUserMessage(steerText(h.content ?? "")) : (h.content ?? ""),
     thinking: h.thinking,
     ...(h.files?.length ? { files: h.files } : {}),
     ...(h.created_at ? { at: h.created_at < 1e12 ? h.created_at * 1000 : h.created_at } : {}),

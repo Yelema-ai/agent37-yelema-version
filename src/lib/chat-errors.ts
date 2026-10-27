@@ -29,6 +29,15 @@ const RUNTIME_LINES = [
   /^\s*[^\w\s]{0,3}\s*command invoked\b.*$/i,
 ];
 
+/**
+ * A member's message as they wrote it: when an answer is cut, the runtime appends its own English
+ * order to it (« [System: Your previous response was truncated…] », Leslie 26/10), never theirs.
+ */
+export function cleanUserMessage(text: string): string {
+  const kept = text.split("\n").filter((line) => !RUNTIME_LINES.some((re) => re.test(line)));
+  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /** A reply as the member reads it: the runtime's English lines and MEDIA tags out, the same paragraph never twice in a row. */
 export function cleanReply(text: string): string {
   const kept = mediaTags(text).text.split("\n").filter((line) => !RUNTIME_LINES.some((re) => re.test(line)));
