@@ -372,6 +372,9 @@ export const backoffice = {
   // First access or a new password: consumes the link the back office sent.
   accept: (tokenHash: string, type: string, password: string) =>
     call<BoOpenedSession>("/app/auth/accept", { method: "POST", body: { tokenHash, type, password } }),
+  // A new invitation from an expired one: the back office finds the member from the old link and sends
+  // a fresh one (a route asked of the back office on 27/10/26). Always answers ok.
+  resendInvite: (tokenHash: string) => call<{ ok: true }>("/app/auth/invite/resend", { method: "POST", body: { tokenHash } }),
   // Always answers ok, whether or not the account exists.
   forgot: (email: string) => call<{ ok: true }>("/app/auth/forgot", { method: "POST", body: { email } }),
   logout: (token: string) => call<{ ok: true }>("/app/auth/logout", { method: "POST", token }),

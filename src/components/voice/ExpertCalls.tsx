@@ -80,10 +80,14 @@ export function ExpertCalls({ expert }: { expert: Expert }) {
       <div className="flex flex-wrap items-center gap-2">
         {/* « Appeler » heads the page already: one button, not two. */}
         <h2 className="sr-only">Appels avec {expert.name}</h2>
-        <p className="mr-auto text-sm text-ink-3">Le résumé et la transcription de chaque appel avec {expert.name}.</p>
-        <Button variant="ghost" size="sm" onClick={() => void load()} aria-label="Actualiser">
-          <RefreshCw />
-        </Button>
+        {calls?.length !== 0 && (
+          <>
+            <p className="mr-auto text-sm text-ink-3">Le résumé et la transcription de chaque appel avec {expert.name}.</p>
+            <Button variant="ghost" size="sm" onClick={() => void load()} aria-label="Actualiser">
+              <RefreshCw />
+            </Button>
+          </>
+        )}
       </div>
 
       {error && <p className="text-sm text-ko">{error}</p>}
@@ -92,10 +96,12 @@ export function ExpertCalls({ expert }: { expert: Expert }) {
           <Loader2 className="h-4 w-4 animate-spin" /> Chargement…
         </p>
       )}
+      {/* No call yet: the call itself, in the middle, not only at the top of the page (Leslie, 27/10). */}
       {calls?.length === 0 && (
-        <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-line px-6 py-10 text-center">
-          <PhoneCall className="h-6 w-6 text-ink-3" />
-          <p className="text-sm text-ink-2">Aucun appel avec {expert.name} pour l’instant.</p>
+        <div className="flex flex-col items-center gap-1 rounded-2xl border border-line bg-surface px-6 py-9 text-center">
+          <p className="text-[15px] font-semibold text-ink">Parlez à {expert.name} de vive voix</p>
+          <p className="mb-4 text-sm text-ink-3">Le résumé de l’appel arrive ici.</p>
+          <CallButton expert={expert} label={`Appeler ${expert.name}`} primary />
         </div>
       )}
       {calls && calls.length > 0 && (

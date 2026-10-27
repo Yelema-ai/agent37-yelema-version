@@ -263,6 +263,8 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
       </div>
 
       {visible.length > 0 ? (
+        <div>
+        {!q && <h3 className="mb-2.5 px-0.5 text-[12px] font-bold uppercase tracking-[0.06em] text-ink-3">Les plus utiles à vos Experts</h3>}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {visible.map((t) => {
             const k = slugKey(t.slug);
@@ -277,6 +279,7 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
               />
             );
           })}
+        </div>
         </div>
       ) : searching ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -397,7 +400,8 @@ function ToolTile({
           En attente
         </Button>
       ) : (
-        <Button size="sm" className="shrink-0" onClick={onConnect}>
+        // Quiet: a list of thirty brand buttons shouts and guides nowhere (Leslie, 27/10).
+        <Button size="sm" variant="outline" className="shrink-0" onClick={onConnect}>
           Connecter
         </Button>
       )}

@@ -251,7 +251,7 @@ export function AgentWorkspace({
                 {callee && <CallButton expert={callee} className="h-11 shrink-0 rounded-full bg-brand px-5 text-[15px] text-on-brand hover:bg-brand/90 max-lg:hidden" />}
               </div>
             )}
-            <nav ref={pillsRef} className="flex items-center gap-1 overflow-x-auto px-4 py-2 max-lg:[mask-image:linear-gradient(to_right,black_82%,transparent)] [scrollbar-width:none] lg:gap-2 lg:px-8 lg:py-0 [&::-webkit-scrollbar]:hidden">
+            <nav ref={pillsRef} className="flex items-center gap-0.5 overflow-x-auto px-2.5 py-2 max-[389px]:[mask-image:linear-gradient(to_right,black_82%,transparent)] sm:gap-1 sm:px-4 [scrollbar-width:none] lg:gap-2 lg:px-8 lg:py-0 [&::-webkit-scrollbar]:hidden">
               {tabs.map((t) => {
                 const Icon = t.icon;
                 const on = currentTab === t.id || (t.id === "chat" && isChat);
@@ -262,7 +262,7 @@ export function AgentWorkspace({
                     onClick={() => selectTab(t.id)}
                     aria-current={on ? "page" : undefined}
                     className={cn(
-                      "min-h-9 shrink-0 rounded-full px-3 py-1.5 text-[13px] font-semibold lg:-mb-px lg:inline-flex lg:min-h-12 lg:items-center lg:gap-2 lg:rounded-none lg:border-b-2 lg:px-2 lg:text-[15px]",
+                      "min-h-9 shrink-0 rounded-full px-2 py-1.5 text-[13px] font-semibold sm:px-3 lg:-mb-px lg:inline-flex lg:min-h-12 lg:items-center lg:gap-2 lg:rounded-none lg:border-b-2 lg:px-2 lg:text-[15px]",
                       on ? "bg-tint text-brand-ink lg:border-brand lg:bg-transparent" : "text-ink-2 hover:bg-soft lg:border-transparent lg:hover:bg-transparent lg:hover:text-ink"
                     )}
                   >
