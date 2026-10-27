@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { DisconnectButton } from "@/components/channels/DisconnectButton";
 import { TelegramHub } from "@/components/channels/TelegramHub";
 import { useTelegramHub, type TelegramHubApi } from "@/components/channels/useTelegramHub";
 
@@ -13,9 +14,10 @@ type Mode = "yelema" | "own";
 const TAB = "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all";
 
 // Telegram of an instance, two ways side by side and always reachable: the Yelema bot (default, created in one
-// tap) or the member's own BotFather bot. On Hermes the own-bot tab is the historic flow (`legacy`); on Claude
-// Code the gateway prepares it like the Yelema one. An instance listens to one bot: the line on top says which.
-export function TelegramChannel({ agentId, canManage, legacy, legacyConnected = false, legacyRevision = 0 }: { agentId: string; canManage: boolean; legacy?: (yelemaActive: boolean) => React.ReactNode; legacyConnected?: boolean; legacyRevision?: number }) {
+// tap) or the member's own BotFather bot, which the gateway prepares the same way (group, topics, home channel,
+// routes) on Hermes and Claude Code. The historic flow (`legacy`) only serves an instance without a gateway.
+// An instance listens to one bot: the line on top says which.
+export function TelegramChannel({ agentId, canManage, legacy, legacyConnected = false, legacyRevision = 0, onDisconnectLegacy }: { agentId: string; canManage: boolean; legacy?: (yelemaActive: boolean) => React.ReactNode; legacyConnected?: boolean; legacyRevision?: number; onDisconnectLegacy?: () => Promise<void> }) {
   const hub = useTelegramHub(agentId);
   const [mode, setMode] = useState<Mode | null>(null);
   const loaded = hub.status !== null || hub.unavailable;
@@ -41,6 +43,8 @@ export function TelegramChannel({ agentId, canManage, legacy, legacyConnected = 
 
   const listened = hub.instanceBot;
   const listenedIsYelema = listened && hub.state?.botId === listened.id && hub.state.source !== "own";
+  // A bot set outside the gateway (historic flow, by hand): only the instance's own channel can unplug it.
+  const legacyBot = listened ? hub.state?.botId !== listened.id : legacyConnected && !hub.state;
   const tab = (m: Mode, label: string, active: boolean) => (
     <button type="button" role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={cn(TAB, mode === m ? "bg-surface text-ink shadow-sm" : "text-ink-3 hover:text-ink")}>
       {label}
@@ -65,11 +69,17 @@ export function TelegramChannel({ agentId, canManage, legacy, legacyConnected = 
       </div>
       {mode === "yelema" ? (
         <TelegramHub hub={hub} source="yelema" canManage={canManage} />
-      ) : legacy ? (
-        legacy(Boolean(listenedIsYelema))
       ) : (
         <div className="space-y-4">
           <TelegramHub hub={hub} source="own" canManage={canManage} />
+          {canManage && legacyBot && onDisconnectLegacy && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+              <p className="text-sm">
+                {listened ? <>Votre bot <span className="font-semibold">@{listened.username ?? listened.id}</span> sert vos Experts.</> : "Votre bot sert vos Experts."}
+              </p>
+              <DisconnectButton name="Telegram" onConfirm={onDisconnectLegacy} disabled={hub.busy !== null} />
+            </div>
+          )}
           {canManage && (hub.state?.source !== "own" || hub.state.phase === "failed") && <OwnToken hub={hub} />}
         </div>
       )}
@@ -77,8 +87,8 @@ export function TelegramChannel({ agentId, canManage, legacy, legacyConnected = 
   );
 }
 
-// The member's BotFather bot, handed to the runtime gateway (Claude Code): it then prepares the group like the
-// Yelema bot's. The token never stays in the browser past this field.
+// The member's BotFather bot, handed to the runtime gateway: it then prepares the group like the Yelema bot's.
+// The token never stays in the browser past this field.
 function OwnToken({ hub }: { hub: TelegramHubApi }) {
   const [token, setToken] = useState("");
   const listened = hub.instanceBot;
@@ -90,7 +100,8 @@ function OwnToken({ hub }: { hub: TelegramHubApi }) {
           <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="font-medium text-foreground underline-offset-4 hover:underline">@BotFather</a>{" "}
           dans Telegram et envoyez <span className="font-medium text-foreground">/newbot</span> (ou reprenez un bot existant).
         </li>
-        <li>Collez le jeton que BotFather vous donne, puis ajoutez le bot à un groupe à Sujets.</li>
+        <li>Choisissez un nom et un nom d’utilisateur pour votre bot.</li>
+        <li>Collez le jeton que BotFather vous envoie : l’étape suivante ajoute le bot à votre groupe à Sujets, puis chaque Expert y reçoit son sujet.</li>
       </ol>
       <div className="space-y-1.5">
         <Label htmlFor="telegram-own-token" className="text-xs">Jeton du bot</Label>

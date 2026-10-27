@@ -286,6 +286,7 @@ export function TelegramConnect({
         legacyConnected={step === "connected"}
         legacyRevision={revision}
         legacy={legacy}
+        onDisconnectLegacy={disconnect}
       />
     </div>
   );
