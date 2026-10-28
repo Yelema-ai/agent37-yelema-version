@@ -29,6 +29,14 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
 
   // Guard against an older list response landing after a newer navigation.
   const loadSeq = useRef(0);
+  // The folder a click is opening, until its listing lands: the old list stays on screen but no
+  // longer takes clicks, so a second tap never lands on a row that is about to be replaced (Leslie,
+  // 27/10: « tu cliques, ça t'amène sur autre chose »).
+  const [opening, setOpening] = useState<string | null>(null);
+  // Listings already read in this pane, by the path asked and the path resolved: a folder opened
+  // again, or read ahead on hover, shows at once and is refreshed behind.
+  const cache = useRef(new Map<string, FileListResponse>());
+  const inFlight = useRef(new Map<string, Promise<FileListResponse>>());
 
   // Mirror `path` into a ref so a long-running upload can tell whether the user has since navigated
   // away — if so, the post-upload refresh must not pull them back to the directory it started in.
@@ -37,31 +45,77 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
     pathRef.current = path;
   }, [path]);
 
+  const fetchList = useCallback(
+    (target?: string) => {
+      const key = target ?? "";
+      const running = inFlight.current.get(key);
+      if (running) return running;
+      const qs = target ? `?path=${encodeURIComponent(target)}` : "";
+      const p = apiFetch<FileListResponse>(`/api/agents/${agentId}/files/list${qs}`)
+        .then((res) => {
+          cache.current.set(key, res);
+          cache.current.set(res.path, res);
+          return res;
+        })
+        .finally(() => inFlight.current.delete(key));
+      inFlight.current.set(key, p);
+      return p;
+    },
+    [agentId]
+  );
+
+  const show = useCallback((res: FileListResponse) => {
+    setPath(res.path);
+    setParentPath(res.parentPath);
+    setEntries(res.entries);
+    setTruncated(res.truncated);
+  }, []);
+
   // Load one directory level. `target` undefined loads the agent's default workspace dir (first
-  // mount); on success the resolved abs path replaces whatever we asked for.
+  // mount); on success the resolved abs path replaces whatever we asked for. A folder already read
+  // shows at once from the cache, then the fresh listing replaces it.
   // `orRoot`: a folder that cannot be opened falls back to the drive's root instead of an error.
   const load = useCallback(
     async (target?: string, orRoot = false): Promise<void> => {
       const seq = ++loadSeq.current;
+      const known = cache.current.get(target ?? "");
+      if (known) show(known);
+      setOpening(known ? null : (target ?? null));
       setLoading(true);
       setError(null);
       try {
-        const qs = target ? `?path=${encodeURIComponent(target)}` : "";
-        const res = await apiFetch<FileListResponse>(`/api/agents/${agentId}/files/list${qs}`);
+        const res = await fetchList(target);
         if (seq !== loadSeq.current) return; // a newer load superseded us
-        setPath(res.path);
-        setParentPath(res.parentPath);
-        setEntries(res.entries);
-        setTruncated(res.truncated);
+        show(res);
       } catch (e) {
         if (seq !== loadSeq.current) return;
         if (orRoot && target) return load();
         setError((e as Error).message || "Ce dossier n’a pas pu être ouvert.");
       } finally {
-        if (seq === loadSeq.current) setLoading(false);
+        if (seq === loadSeq.current) {
+          setLoading(false);
+          setOpening(null);
+        }
       }
     },
-    [agentId]
+    [fetchList, show]
+  );
+
+  // After a change in a folder: its cached listing is stale, read it again before showing it.
+  const reload = useCallback(
+    (target?: string) => {
+      cache.current.delete(target ?? "");
+      return load(target);
+    },
+    [load]
+  );
+
+  // Read a folder ahead (pointer over it, or pressed), so the click opens it at once.
+  const prefetch = useCallback(
+    (target: string) => {
+      if (!cache.current.has(target)) void fetchList(target).catch(() => {});
+    },
+    [fetchList]
   );
 
   // Initial load: the drive's root, or the folder the caller starts in (an expert's own). A
@@ -80,7 +134,10 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
     },
     [load]
   );
-  const refresh = useCallback(() => load(path ?? undefined), [load, path]);
+  const refresh = useCallback(() => {
+    if (path) cache.current.delete(path);
+    return load(path ?? undefined);
+  }, [load, path]);
   // The drive's root has nothing above it that a member may open.
   const atRoot = path === null || isDriveRoot(path);
   const goUp = useCallback(() => {
@@ -142,9 +199,9 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
       // Refresh only if the user is still in the directory we uploaded into. A folder upload can run
       // for many seconds; reloading the captured `path` would otherwise undo a navigation made while
       // it was in flight.
-      if (pathRef.current === path) await load(path);
+      if (pathRef.current === path) await reload(path);
     },
-    [path, putFile, load]
+    [path, putFile, reload]
   );
 
   // Flat upload (the multi-file picker + drag-drop): each file lands by its basename.
@@ -177,12 +234,12 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
           method: "POST",
         });
         toast.success("Dossier créé");
-        await load(path);
+        await reload(path);
       } catch (e) {
         toast.error((e as Error).message || "Le dossier n’a pas pu être créé.");
       }
     },
-    [agentId, path, load]
+    [agentId, path, reload]
   );
 
   // Rename in place: the entry lives in the current dir, so `to` is the new basename joined onto it.
@@ -195,12 +252,12 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
           method: "PATCH",
           body: JSON.stringify({ from: entry.path, to: joinPath(path, clean) }),
         });
-        await load(path);
+        await reload(path);
       } catch (e) {
         toast.error((e as Error).message || "Le renommage a échoué.");
       }
     },
-    [agentId, path, load]
+    [agentId, path, reload]
   );
 
   const remove = useCallback(
@@ -208,12 +265,12 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
       try {
         await apiFetch(`/api/agents/${agentId}/files?path=${encodeURIComponent(entry.path)}`, { method: "DELETE" });
         toast.success(`${entry.name} supprimé`);
-        await load(path ?? undefined);
+        await reload(path ?? undefined);
       } catch (e) {
         toast.error((e as Error).message || "La suppression a échoué.");
       }
     },
-    [agentId, path, load]
+    [agentId, path, reload]
   );
 
   // Whole-pane drag-drop overlay.
@@ -248,6 +305,8 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
     dragOver,
     dragHandlers,
     navigate,
+    prefetch,
+    opening,
     refresh,
     goUp,
     openEntry,

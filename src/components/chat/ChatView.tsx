@@ -43,7 +43,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
     bumpSession,
     threadVersion,
   } = useChatContext();
-  const { messages, isStreaming, loadingHistory, error, send, stop, killRun } = useChat({
+  const { messages, isStreaming, loadingHistory, error, send, stop, killRun, unqueue } = useChat({
     agentId,
     profile,
     sessionId: activeSessionId,
@@ -235,7 +235,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
           </div>
         ) : messages.length > 0 ? (
           <div ref={contentRef}>
-            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} />
+            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} onUnqueue={unqueue} />
           </div>
         ) : (
           <>
@@ -272,9 +272,26 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
       {/* Bottom: balances the vertical centering and carries the welcome subtitle. */}
       {showWelcome && (
         <div className="flex flex-1 flex-col items-center px-4 pt-3">
-          <p className="text-center text-sm text-ink-3">
-            Plus vous donnez de contexte, meilleure sera la réponse.
-          </p>
+          {/* An expert's first discussion: three requests from the catalogue, sent as is on a click. If
+              something is missing for one (a tool to connect), the expert says what (its own rules). */}
+          {profile && expert?.suggestions?.length ? (
+            <div role="group" aria-label={`Demander à ${agentName}`} className="flex max-w-2xl flex-wrap justify-center gap-2">
+              {expert.suggestions.slice(0, 3).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => void send(s)}
+                  className="min-h-9 rounded-full border border-line bg-surface px-3.5 py-1.5 text-[13.5px] font-semibold text-ink transition-colors hover:border-brand/40 hover:bg-tint"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-sm text-ink-3">
+              Plus vous donnez de contexte, meilleure sera la réponse.
+            </p>
+          )}
         </div>
       )}
     </div>

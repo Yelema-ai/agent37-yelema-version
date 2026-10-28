@@ -374,29 +374,6 @@ const renderDocx: Render = async (data, _doc, _width, full) => {
 
 // --- PowerPoint: each slide's text, title first, on a 16:9 card (the first one in the chat) --------
 
-const slideNo = (path: string) => Number(path.match(/slide(\d+)\.xml$/)?.[1] ?? 0);
-
-async function readPptx(data: ArrayBuffer): Promise<string[][]> {
-  const JSZip = (await import("jszip")).default;
-  const zip = await JSZip.loadAsync(data);
-  const parts = Object.keys(zip.files)
-    .filter((p) => /^ppt\/slides\/slide\d+\.xml$/.test(p))
-    .sort((a, b) => slideNo(a) - slideNo(b))
-    .slice(0, 60);
-  const slides: string[][] = [];
-  for (const p of parts) {
-    const part = zip.file(p);
-    if (((part as unknown as { _data?: { uncompressedSize?: number } } | null)?._data?.uncompressedSize ?? 0) > MAX_XML_PART_BYTES) continue;
-    const xml = new DOMParser().parseFromString((await part?.async("string")) ?? "", "application/xml");
-    // One line per paragraph (a:p), its runs (a:t) joined.
-    const lines = [...xml.getElementsByTagName("a:p")]
-      .map((para) => [...para.getElementsByTagName("a:t")].map((t) => t.textContent ?? "").join("").trim())
-      .filter(Boolean);
-    slides.push(lines);
-  }
-  if (!slides.length) throw new Error("no slide");
-  return slides;
-}
 
 function Slide({ lines, n, of }: { lines: string[]; n: number; of: number }) {
   const [title, ...rest] = lines;
@@ -415,21 +392,14 @@ function Slide({ lines, n, of }: { lines: string[]; n: number; of: number }) {
   );
 }
 
+// Each slide drawn as it looks (pictures, text boxes, background); one with nothing drawable shows its text.
 const renderPptx: Render = async (data, _doc, _width, full) => {
-  const slides = await readPptx(data);
-  if (!full)
-    return (
-      <span className="flex size-full items-center justify-center bg-[#FDEEDF] p-5">
-        <Slide lines={slides[0]} n={1} of={slides.length} />
-      </span>
-    );
-  return (
-    <span className="flex size-full flex-col gap-4 overflow-auto bg-[#f6f6f9] p-4">
-      {slides.map((lines, i) => (
-        <Slide key={i} lines={lines} n={i + 1} of={slides.length} />
-      ))}
-    </span>
-  );
+  const { readSlides, SlideDrawing, drawable } = await import("./pptx-slides");
+  const slides = await readSlides(data, MAX_XML_PART_BYTES, full ? undefined : 1);
+  const one = (i: number) =>
+    drawable(slides[i]) ? <SlideDrawing key={i} slide={slides[i]} n={i + 1} of={slides.length} /> : <Slide key={i} lines={slides[i].lines} n={i + 1} of={slides.length} />;
+  if (!full) return <span className="flex size-full items-center justify-center bg-[#FDEEDF] p-5">{one(0)}</span>;
+  return <span className="flex size-full flex-col gap-4 overflow-auto bg-[#f6f6f9] p-4">{slides.map((_, i) => one(i))}</span>;
 };
 
 // The expert's drive folder, and the subfolders changed since `since`, one level down: where the

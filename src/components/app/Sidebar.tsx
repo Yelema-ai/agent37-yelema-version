@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { useShownPath } from "@/components/app/NavProgress";
 import { useEffect, useState } from "react";
 import {
   ArrowRight,
@@ -28,11 +29,12 @@ import { usePublicConfig } from "@/components/PublicConfigProvider";
 import { AccountMenu } from "@/components/AccountMenu";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { ExpertItem } from "@/components/experts/ExpertItem";
+import { READ_AHEAD, useReadAhead } from "@/components/experts/expert-preload";
 import { useOwnAgentId } from "@/components/conversations/useAllConversations";
 import { useChatMarks } from "@/components/conversations/useChatMarks";
 import { arrange } from "@/lib/chat-marks";
 import { convKey } from "@/lib/activity";
-import { openSearch } from "@/components/conversations/SearchDialog";
+import { openSearch, warmSearch } from "@/components/conversations/SearchDialog";
 import { useCompanySessions } from "@/components/conversations/useCompanySessions";
 import type { Expert } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -51,6 +53,8 @@ export function Sidebar(props: SidebarProps) {
 
 function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
   const pathname = usePathname();
+  // Lit at the click, before the next page is there.
+  const here = useShownPath();
   const { current } = useWorkspace();
   // The company's main logo first (« Entreprise »), then the deployment's, then the initial.
   // Never the Yelema Y here: it is only the tab icon (favicon), Yelema stays in « Powered by ».
@@ -60,6 +64,10 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
   // Djénéba heads « Mes Experts », the others follow in their order.
   const experts = [...installed].sort((a, b) => Number(isDjeneba(b)) - Number(isDjeneba(a)));
   const ownAgentId = useOwnAgentId();
+  // The first Experts as the menu shows them are read ahead: page, conversations and models.
+  const shown = groupByCycle(experts).flatMap((g) => g.experts);
+  const ahead = new Set(shown.slice(0, READ_AHEAD).map((e) => `${e.agentId}:${e.profileId}`));
+  useReadAhead(shown);
   // Cycles folded by the member, remembered per browser.
   const [foldedCycles, setFoldedCycles] = useState<string[]>([]);
   useEffect(() => {
@@ -127,6 +135,8 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
       <button
         type="button"
         onClick={openSearch}
+        onPointerEnter={warmSearch}
+        onFocus={warmSearch}
         title="Rechercher (Ctrl K)"
         className={cn("flex min-h-10 items-center gap-2.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors text-ink-2 hover:bg-soft", collapsed && RAIL_SQUARE)}
       >
@@ -143,7 +153,7 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
         onClick={onNavigate}
         className={cn(
           "flex min-h-10 items-center gap-2.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors",
-          pathname.startsWith("/integrations") ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft",
+          here.startsWith("/integrations") ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft",
           collapsed && RAIL_SQUARE
         )}
       >
@@ -186,9 +196,10 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
                   // Keyed on instance and profile: a profile name alone is not unique across instances.
                   key={`${e.agentId}:${e.profileId}`}
                   expert={e}
-                  active={pathname === `/experts/${e.agentId}/${e.profileId}` || pathname.startsWith(`/experts/${e.agentId}/${e.profileId}/`)}
+                  active={here === `/experts/${e.agentId}/${e.profileId}` || here.startsWith(`/experts/${e.agentId}/${e.profileId}/`)}
                   compact={collapsed}
                   onNavigate={onNavigate}
+                  readAhead={ahead.has(`${e.agentId}:${e.profileId}`)}
                   className={g.cycle && !collapsed ? "pl-4" : undefined}
                 />
               ))}
@@ -211,7 +222,7 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
           onClick={onNavigate}
           className={cn(
             "mt-3 flex min-h-10 items-center gap-1.5 rounded-[11px] px-2.5 text-sm font-semibold transition-colors",
-            pathname.startsWith("/conversations") ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft"
+            here.startsWith("/conversations") ? "bg-soft-2 text-ink" : "text-ink-2 hover:bg-soft"
           )}
         >
           Toutes les conversations <ArrowRight className="size-4" />

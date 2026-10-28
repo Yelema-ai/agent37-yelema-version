@@ -1,5 +1,6 @@
 "use client";
 
+import { cached, remember } from "@/lib/client-cache";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { profileQuery } from "@/lib/profile-id";
@@ -34,9 +35,12 @@ export interface ConversationRow {
 
 // Every conversation of the member: the chat d'entreprise's (the instance with no profile) and each
 // Expert's, newest first. One read per space, in parallel; a space that does not answer is left out.
+// The list as last read in this tab shows at once (Leslie, 27/10: the search was slow to show them);
+// the fresh reading replaces it behind.
 export function useAllConversations(ownAgentId: string | null, experts: Expert[], enabled = true) {
-  const [rows, setRows] = useState<ConversationRow[] | null>(null);
   const key = experts.map((e) => `${e.agentId}:${e.profileId}`).join(",");
+  const store = ownAgentId ? `conversations:${ownAgentId}:${key}` : null;
+  const [rows, setRows] = useState<ConversationRow[] | null>(() => (store && cached<ConversationRow[]>(store)) || null);
 
   useEffect(() => {
     if (!enabled || !ownAgentId) return;
@@ -59,7 +63,9 @@ export function useAllConversations(ownAgentId: string | null, experts: Expert[]
         )
       )
     ).then((all) => {
-      if (live) setRows(all.flat().sort((a, b) => b.at - a.at));
+      const sorted = all.flat().sort((a, b) => b.at - a.at);
+      if (store) remember(store, sorted);
+      if (live) setRows(sorted);
     });
     return () => {
       live = false;
@@ -73,7 +79,9 @@ export function useAllConversations(ownAgentId: string | null, experts: Expert[]
 // The drive's files, at its root and one level down (each Expert keeps its own folder there),
 // newest first. Null while reading. The tree is the one the deliverable watcher reads.
 export function useDriveFiles(agentId: string | null, enabled = true) {
-  const [files, setFiles] = useState<FileEntry[] | null>(null);
+  // The drive as last read in this tab shows at once; the fresh listing replaces it behind.
+  const key = agentId ? `drive-files:${agentId}` : null;
+  const [files, setFiles] = useState<FileEntry[] | null>(() => (key && cached<FileEntry[]>(key)) || null);
   useEffect(() => {
     if (!enabled || !agentId) return;
     let live = true;
@@ -81,6 +89,7 @@ export function useDriveFiles(agentId: string | null, enabled = true) {
       (tree) => {
         const all = tree.entries.filter((e) => e.depth <= 1 && e.type === "file" && !e.hidden && !isDriveClutter(e));
         all.sort((a, b) => b.modified - a.modified);
+        remember(`drive-files:${agentId}`, all);
         if (live) setFiles(all);
       },
       () => live && setFiles([])

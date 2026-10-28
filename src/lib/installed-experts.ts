@@ -140,6 +140,7 @@ export async function userExperts(agents: AgentRow[]): Promise<UserExperts> {
       role: entry?.role ?? null,
       title: entry?.title ?? null,
       tagline: entry?.tagline ?? null,
+      suggestions: entry?.suggestions ?? [],
       photoUrl: look?.avatarUrl || entry?.avatarUrl || null,
       driveFolder: entry?.driveFolder ?? entry?.name ?? null,
       cycle: look?.cycle ?? null,

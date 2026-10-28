@@ -344,7 +344,9 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
         )}
 
         {sessions.length > 0 && (
-          <div role="group" aria-label="Filtrer les conversations" className="mx-1 mb-2 flex flex-wrap gap-1.5 border-b border-line pb-2.5">
+          // One bar across the column, set on the search field (Leslie, 27/10, choice C): three equal places.
+          <div className="mx-1 mb-2.5 flex items-center gap-1.5">
+          <div role="group" aria-label="Filtrer les conversations" className="grid flex-1 grid-cols-3 gap-0.5 rounded-xl bg-soft p-[3px]">
             {FILTERS.map(({ id, label }) => (
               <button
                 key={id}
@@ -352,21 +354,22 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                 onClick={() => setFilter(id)}
                 aria-pressed={filter === id}
                 className={cn(
-                  "h-8 whitespace-nowrap rounded-full border px-2.5 text-[12.5px] font-semibold transition-colors",
-                  filter === id ? "border-brand/40 bg-tint text-brand-ink" : "border-line text-ink-2 hover:bg-soft"
+                  "h-8 whitespace-nowrap rounded-[9px] px-2 text-[12.5px] font-semibold transition-colors",
+                  filter === id ? "bg-surface text-brand-ink shadow-[0_1px_3px_rgba(20,10,60,0.12)]" : "text-ink-2 hover:text-ink"
                 )}
               >
                 {label}
                 {id === "unread" && unreadCount > 0 && <span className="ml-1 tabular-nums">{unreadCount}</span>}
               </button>
             ))}
+          </div>
             {unreadCount > 0 && (
               <button
                 type="button"
                 onClick={() => markRead(unreadIds.map((id) => convKey(agentId, profile, id)))}
                 title="Tout marquer comme lu"
                 aria-label="Tout marquer comme lu"
-                className="ml-auto grid size-8 place-items-center rounded-full text-ink-3 hover:bg-soft hover:text-ink"
+                className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-soft hover:text-ink"
               >
                 <CheckCheck className="h-4 w-4" />
               </button>

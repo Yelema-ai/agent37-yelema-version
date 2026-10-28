@@ -6,6 +6,7 @@ import { useChatPresence } from "@/components/activity/hooks";
 import { apiFetch } from "@/lib/api";
 import { cached, remember } from "@/lib/client-cache";
 import { browserPollEnv, startPoll } from "@/lib/poll";
+import { sessionsKey } from "@/components/experts/expert-preload";
 import { mergeRail, movedUpstream } from "@/lib/chat-rail";
 import { profileQuery } from "@/lib/profile-id";
 import type { MergedAgent } from "@/lib/types";
@@ -87,8 +88,8 @@ export function ChatProvider({
 }) {
   // Every chat route takes the expert as ?profile=; threads of one expert are invisible to another.
   const q = profileQuery(profile);
-  // The rail last read for this expert, kept for the page's life: coming back to it paints at once.
-  const railKey = `sessions:${agentId}:${profile ?? ""}`;
+  // The rail last read for this expert (or read ahead by the menu, expert-preload): it paints at once.
+  const railKey = sessionsKey(agentId, profile);
   const [sessions, setSessions] = useState<ChatSession[]>(() => cached<ChatSession[]>(railKey) ?? []);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(urlSessionId);
   const [composerFocusToken, setComposerFocusToken] = useState(0);
@@ -133,6 +134,7 @@ export function ChatProvider({
       try {
         const res = await apiFetch<{ sessions: ChatSession[] }>(`/api/agents/${agentId}/chat/sessions${q}`);
         if (seq !== loadSeq.current) return;
+        remember(sessionsKey(agentId, profile), res.sessions);
         if (movedUpstream(serverRail.current, res.sessions, openRef.current)) setThreadVersion((v) => v + 1);
         serverRail.current = res.sessions;
         remember(railKey, res.sessions);

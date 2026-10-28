@@ -41,14 +41,22 @@ type ViewMode = "list" | "grid";
 // mounted/hidden across tab switches, like ChatView, so the current directory survives). The whole
 // pane is a drop zone for uploads. Look + primitives mirror the Chat tab: same shadcn Dialog/Input,
 // lucide icons, sonner toasts (raised inside the hook), and the hover-action pattern.
-export function FilesView({ agentId, initialPath }: { agentId: string; initialPath?: string }) {
+export function FilesView({ agentId, initialPath, openPath }: { agentId: string; initialPath?: string; openPath?: string | null }) {
   const fb = useFileBrowser(agentId, initialPath);
+  // A folder named in the address (« ?dossier= », from a path cited in the chat) opens here.
+  const { navigate: fbNavigate } = fb;
+  useEffect(() => {
+    if (openPath) void fbNavigate(openPath);
+  }, [openPath, fbNavigate]);
   const [preview, setPreview] = useState<FileEntry | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FileEntry | null>(null);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
+  // An empty folder (the first day): one sentence and two quiet buttons; the view, sort, search and
+  // import tools come back with the first file (Leslie, 27/10: seven tools for nothing).
+  const empty = !fb.loading && !fb.opening && fb.entries.length === 0 && !fb.query.trim();
   const folderUploadRef = useRef<HTMLInputElement>(null);
 
   // `webkitdirectory` isn't in React's input typings, so set it on the DOM node directly. It makes
@@ -145,6 +153,9 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
         openEntry(entry);
       },
       onKeyDown: (e: KeyboardEvent<HTMLElement>) => onEntryKeyDown(e, entry),
+      // A folder is read as soon as the pointer is on it: the click then opens it at once.
+      onPointerEnter: isDir(entry) ? () => fb.prefetch(entry.path) : undefined,
+      onPointerDown: isDir(entry) ? () => fb.prefetch(entry.path) : undefined,
     };
   }
 
@@ -194,6 +205,14 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
                   );
                 })
               )}
+              {/* The folder being opened, named at once, before its listing lands. */}
+              {fb.opening && fb.path && fb.opening.startsWith(`${fb.path}/`) && (
+                <span className="flex shrink-0 items-center text-[15px] text-muted-foreground">
+                  <ChevronRight className="h-4 w-4" />
+                  <span className="max-w-[14rem] truncate px-2 py-1">{fb.opening.split("/").filter(Boolean).pop()}</span>
+                  <Loader2 className="h-4 w-4 animate-spin" aria-label="Ouverture du dossier" />
+                </span>
+              )}
             </nav>
           </div>
 
@@ -206,6 +225,8 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
                 onDelete={selectForDelete}
               />
             )}
+            {!empty && (
+              <>
             <ViewToggle value={viewMode} onChange={setViewMode} />
             <ToolbarIconButton onClick={fb.refresh} label="Actualiser">
               <RefreshCw className={cn("h-4 w-4", fb.loading && "animate-spin")} />
@@ -241,11 +262,13 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+              </>
+            )}
             <HiddenFileInput inputRef={uploadRef} onFiles={fb.uploadFiles} />
             <HiddenFileInput inputRef={folderUploadRef} onFiles={fb.uploadFolder} />
           </div>
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className={cn("mt-2 flex flex-wrap items-center gap-2", empty && "hidden")}>
           <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md border bg-card px-3 shadow-sm sm:max-w-md">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
             <input
@@ -294,11 +317,17 @@ export function FilesView({ agentId, initialPath }: { agentId: string; initialPa
             <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{fb.error}</p>
           </div>
         ) : (
-          <div className="w-full p-4 md:p-6 lg:p-8" onClick={clearSelection}>
+          // While a folder opens, the list it replaces no longer takes clicks.
+          <div
+            className={cn("w-full p-4 transition-opacity md:p-6 lg:p-8", fb.opening && "pointer-events-none opacity-50")}
+            aria-busy={!!fb.opening}
+            onClick={clearSelection}
+          >
             {fb.visibleEntries.length === 0 && fb.query.trim() ? (
               <p className="px-3 py-10 text-center text-sm text-muted-foreground">Aucun fichier ne correspond à « {fb.query.trim()} ».</p>
             ) : fb.visibleEntries.length === 0 ? (
               <EmptyFolder
+                owner={ownerOf(fb.path)}
                 canCreate={!!fb.path}
                 uploading={fb.uploading}
                 onNewFolder={() => setNewFolderOpen(true)}
@@ -640,12 +669,21 @@ function RenameInput({
   );
 }
 
+// « ~/Livrables/Fatima » is Fatima's folder: the empty one says whose deliverables will land there.
+function ownerOf(path: string | null | undefined): string | null {
+  const parts = (path ?? "").split("/").filter(Boolean);
+  const i = parts.lastIndexOf("Livrables");
+  return i >= 0 && i === parts.length - 2 ? parts[i + 1] : null;
+}
+
 function EmptyFolder({
+  owner,
   canCreate,
   uploading,
   onNewFolder,
   onUpload,
 }: {
+  owner: string | null;
   canCreate: boolean;
   uploading: boolean;
   onNewFolder: () => void;
@@ -656,9 +694,9 @@ function EmptyFolder({
       <span className="mb-4 inline-flex size-12 items-center justify-center rounded-md bg-background text-primary shadow-sm">
         <Folder className="h-7 w-7" />
       </span>
-      <p className="text-sm font-medium text-foreground">Ce dossier est vide.</p>
+      <p className="text-sm font-medium text-foreground">{owner ? `Les livrables de ${owner} arriveront ici.` : "Ce dossier est vide."}</p>
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-        <Button size="sm" onClick={onUpload} disabled={!canCreate || uploading}>
+        <Button variant="outline" size="sm" onClick={onUpload} disabled={!canCreate || uploading}>
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           Importer des fichiers
         </Button>

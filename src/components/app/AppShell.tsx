@@ -5,10 +5,12 @@ import { syncPrefs } from "@/lib/prefs-sync";
 import { SearchDialog } from "@/components/conversations/SearchDialog";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { CompanyColors } from "@/components/app/CompanyColors";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ActivityProvider } from "@/components/activity/ActivityProvider";
 import { Sidebar } from "@/components/app/Sidebar";
+import { NavProgress } from "@/components/app/NavProgress";
+import { ReadAhead } from "@/components/app/ReadAhead";
 import { TopBar } from "@/components/app/TopBar";
 import { DeployStatusProvider, UpdateStrip } from "@/components/app/DeployStatus";
 import { ComputerProvider } from "@/components/experts/ComputerProvider";
@@ -110,6 +112,10 @@ export function AppShell({
         {/* The call lives above the pages: it goes on, folded or not, while the member navigates. */}
         <CallProvider>
         <CompanyColors />
+        <Suspense fallback={null}>
+          <NavProgress />
+        </Suspense>
+        <ReadAhead />
         <DeliverableWatcher />
         <SearchDialog />
         <div

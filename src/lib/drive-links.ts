@@ -13,6 +13,22 @@ export const ANGLED = new RegExp(String.raw`\]\(<(?:file://|sandbox:)?((?:/home/
 export const CODE = new RegExp("`(?:sandbox:)?((?:/home/node|~)/Livrables/[^`\\n]+\\.[A-Za-z0-9]{1,6})`", "g");
 export const BARE = new RegExp(String.raw`(^|[\s(«"])(?:sandbox:)?(${DRIVE_PATH})`, "gm");
 
+// A drive FOLDER the Expert cites (« Dossier local : `Livrables/Fatima/tajplast/flyers-modernes/` »),
+// with or without `~/` or `/home/node/`: in backticks when its last part has no extension, bare in
+// the text only with its closing slash (a bare name without one could be a file).
+const FOLDER = String.raw`(?:(?:/home/node|~)/)?Livrables(?:/[^\s/)\]\x60«»"]+)+`;
+// In backticks a folder name may hold spaces (« Pièces jointes »).
+export const FOLDER_CODE = new RegExp("`(?:sandbox:)?((?:(?:/home/node|~)/)?Livrables(?:/[^/`\\n]+)+)/?`", "g");
+export const FOLDER_BARE = new RegExp(String.raw`(^|[\s(«"])(${FOLDER})/(?=[\s).,;:!?»"]|$)`, "gm");
+
+/** `~/Livrables/…` for a cited folder, or null when it names a file (its last part has an extension). */
+export function citedFolder(path: string): string | null {
+  const clean = safeDecode(path).replace(/\/+$/, "");
+  if (/\.[A-Za-z0-9]{1,6}$/.test(clean.split("/").pop() ?? "")) return null;
+  if (clean.split("/").some(isMemoryFolder)) return null;
+  return clean.replace(/^(?:\/home\/node\/|~\/)?Livrables/, "~/Livrables");
+}
+
 export function safeDecode(s: string): string {
   try {
     return decodeURI(s);
@@ -84,9 +100,9 @@ const parentOf = (path: string) => path.slice(0, path.lastIndexOf("/"));
 const TECHNICAL = /\.(srt|vtt|json|jsonl|py|js|mjs|ts|sh|yaml|yml|toml|log|lock|env|ini|cfg|pyc|sqlite|db)$/i;
 export const isTechnicalFile = (name: string) => TECHNICAL.test(name);
 
-/** Never a card nor a link in the chat: working files, notes (.md) and anything in the memory folder. */
+/** Never a card nor a link in the chat: working files, notes (.md, .txt: Leslie, 27/10) and anything in the memory folder. */
 export const isHiddenInChat = (path: string) =>
-  isTechnicalFile(path) || /\.(md|markdown)$/i.test(path) || path.split("/").slice(0, -1).some(isMemoryFolder);
+  isTechnicalFile(path) || /\.(md|markdown|txt)$/i.test(path) || path.split("/").slice(0, -1).some(isMemoryFolder);
 
 export function turnDocs(text: string, listing: readonly DriveFile[], written: readonly string[] = []): TurnDoc[] {
   const byPath = new Map(listing.map((f) => [normDrivePath(f.path), f]));

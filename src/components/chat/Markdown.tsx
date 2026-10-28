@@ -1,15 +1,19 @@
 "use client";
 
-import { memo } from "react";
+import { memo, type MouseEvent } from "react";
+import { useRouter } from "next/navigation";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
-import { ANGLED, BARE, CODE, isHiddenInChat, LINKED, safeDecode } from "@/lib/drive-links";
+import { ANGLED, BARE, citedFolder, CODE, FOLDER_BARE, FOLDER_CODE, isHiddenInChat, LINKED, safeDecode } from "@/lib/drive-links";
+import { agentTabPath } from "@/lib/expert-tabs";
 
 const HIDDEN_LINK = /\[([^\]\n]*)\]\(<?(?:file:\/\/|sandbox:)?((?:\/home\/node|~)\/Livrables\/[^)>\n]+)>?\)/g;
 
 // Experts give the drive path of what they saved (see lib/drive-paths.ts for the drive itself); turn those paths into download links (the
 // browser can't open file:// links or instance paths, and Streamdown blocks them). A working note or memory file keeps its name, unlinked.
-function linkDriveFiles(content: string, agentId: string): string {
+// A folder the Expert cites opens in Livrables, at that folder (Leslie, 27/10: « tu peux pas les rendre
+// par défaut cliquables, sinon ça sert à rien »).
+function linkDriveFiles(content: string, agentId: string, profileId?: string | null): string {
   const url = (path: string) =>
     `/api/agents/${agentId}/files/content?path=${encodeURIComponent(safeDecode(path))}&disposition=attachment`;
   const name = (path: string) => safeDecode(path.split("/").pop() ?? path);
@@ -19,7 +23,19 @@ function linkDriveFiles(content: string, agentId: string): string {
     .replace(ANGLED, (_m, path: string) => `](${url(path)})`)
     .replace(LINKED, (_m, path: string) => `](${url(path)})`)
     .replace(CODE, (_m, path: string) => link(name(path), path))
-    .replace(BARE, (_m, lead: string, path: string) => `${lead}${link(name(path), path)}`);
+    .replace(BARE, (_m, lead: string, path: string) => `${lead}${link(name(path), path)}`)
+    .replace(FOLDER_CODE, (m, path: string) => folderLink(path, agentId, profileId) ?? m)
+    .replace(FOLDER_BARE, (m, lead: string, path: string) => {
+      const l = folderLink(path, agentId, profileId);
+      return l ? `${lead}${l}` : m;
+    });
+}
+
+function folderLink(path: string, agentId: string, profileId?: string | null): string | null {
+  const folder = citedFolder(path);
+  if (!folder) return null;
+  const label = folder.replace(/^~\//, "");
+  return `[${label}](${agentTabPath(agentId, "files", profileId)}?dossier=${encodeURIComponent(folder)})`;
 }
 
 // Our own links (drive downloads) open directly; external ones still ask first.
@@ -50,10 +66,24 @@ const FR = {
 
 // Streaming-aware markdown: Streamdown tolerates incomplete markdown (unclosed fences, partial
 // tables) so we can feed it the running output buffer on every delta without flicker.
-export const Markdown = memo(function Markdown({ content, agentId }: { content: string; agentId?: string }) {
+export const Markdown = memo(function Markdown({ content, agentId, profileId }: { content: string; agentId?: string; profileId?: string | null }) {
+  const router = useRouter();
+  // Streamdown opens every link in a new tab; a cited folder opens in this one, in Livrables. Its link
+  // reads as the folder itself (« Livrables/Fatima/… »), which is how it is told apart from a file.
+  const openFolder = (e: MouseEvent<HTMLDivElement>) => {
+    const el = (e.target as Element).closest?.("[data-streamdown=link]");
+    const label = el?.textContent?.trim() ?? "";
+    const folder = agentId && /^Livrables\//.test(label) ? citedFolder(label) : null;
+    if (!folder || !agentId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    router.push(`${agentTabPath(agentId, "files", profileId)}?dossier=${encodeURIComponent(folder)}`);
+  };
   return (
-    <Streamdown className="chat-markdown text-[15px] leading-relaxed" linkSafety={LINK_SAFETY} translations={FR}>
-      {agentId ? linkDriveFiles(content, agentId) : content}
-    </Streamdown>
+    <div onClickCapture={openFolder}>
+      <Streamdown className="chat-markdown text-[15px] leading-relaxed" linkSafety={LINK_SAFETY} translations={FR}>
+        {agentId ? linkDriveFiles(content, agentId, profileId) : content}
+      </Streamdown>
+    </div>
   );
 });

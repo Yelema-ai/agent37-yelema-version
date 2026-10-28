@@ -53,3 +53,34 @@ const MESSAGES: Record<string, string> = {
 };
 
 export const unipileRefusalMessage = (code: string): string | null => MESSAGES[code] ?? null;
+
+/** Where an account that lost its session is linked again: the person's own Unipile dashboard. */
+export const UNIPILE_DASHBOARD = "https://dashboard.unipile.com";
+
+// Unipile's own states for an account that no longer works: its owner must link it again.
+const BROKEN = new Set(["CREDENTIALS", "ERROR", "STOPPED", "DISCONNECTED"]);
+
+/** True when Unipile says the account must be linked again (« CREDENTIALS »…); unknown states pass. */
+export const accountBroken = (a: Pick<UnipileAccount, "status">): boolean => BROKEN.has((a.status ?? "").toUpperCase());
+
+const TYPES: Record<string, string> = { WHATSAPP: "WhatsApp", LINKEDIN: "LinkedIn", INSTAGRAM: "Instagram", MESSENGER: "Messenger", TELEGRAM: "Telegram", GOOGLE: "Gmail", GOOGLE_OAUTH: "Gmail", OUTLOOK: "Outlook", MAIL: "E-mail", IMAP: "E-mail", TWITTER: "X" };
+/** « WHATSAPP » → « WhatsApp »; an unknown type keeps its name, capitalised. */
+export function accountType(type: string): string {
+  const t = type.trim().toUpperCase();
+  return TYPES[t] ?? (t ? t.charAt(0) + t.slice(1).toLowerCase() : "Compte");
+}
+
+/** The domain whose logo stands for the account's service. */
+export function accountDomain(type: string): string {
+  const t = accountType(type);
+  return ({ WhatsApp: "whatsapp.com", LinkedIn: "linkedin.com", Instagram: "instagram.com", Messenger: "messenger.com", Telegram: "telegram.org", Gmail: "gmail.com", Outlook: "outlook.com", X: "x.com" } as Record<string, string>)[t] ?? "unipile.com";
+}
+
+/** A WhatsApp number as people write it: « 22597714432 » → « +225 97 71 44 32 »; anything else as is. */
+export function accountName(a: Pick<UnipileAccount, "type" | "name">): string {
+  const digits = a.name.replace(/\D/g, "");
+  if (accountType(a.type) !== "WhatsApp" || digits.length < 8 || digits.length !== a.name.replace(/[\s+]/g, "").length) return a.name;
+  const cc = digits.startsWith("225") ? "225" : null;
+  if (!cc) return `+${digits}`;
+  return `+225 ${digits.slice(3).replace(/(\d{2})(?=\d)/g, "$1 ")}`;
+}

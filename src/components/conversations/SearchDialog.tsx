@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { FileText, Lock, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
@@ -18,6 +18,23 @@ function setOpen(v: boolean) {
   listeners.forEach((l) => l());
 }
 export const openSearch = () => setOpen(true);
+// The pointer on « Rechercher »: the lists are read ahead, so they are there when it opens.
+let warmed = false;
+export function warmSearch() {
+  if (warmed) return;
+  warmed = true;
+  listeners.forEach((l) => l());
+}
+function useWarm() {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+    () => warmed,
+    () => false
+  );
+}
 function useOpen() {
   return useSyncExternalStore(
     (l) => {
@@ -37,12 +54,12 @@ const SHOWN = 8;
 export function SearchDialog() {
   const open = useOpen();
   const ownAgentId = useOwnAgentId();
-  const router = useRouter();
+  const warm = useWarm();
   const { experts } = useExpertsContext();
   const [q, setQ] = useState("");
   const [preview, setPreview] = useState<FileEntry | null>(null);
-  const convs = useAllConversations(ownAgentId, experts, open);
-  const files = useDriveFiles(ownAgentId, open);
+  const convs = useAllConversations(ownAgentId, experts, open || warm);
+  const files = useDriveFiles(ownAgentId, open || warm);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -92,13 +109,12 @@ export function SearchDialog() {
               <>
                 {foundConvs.length > 0 && <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-ink-3">Conversations</p>}
                 {foundConvs.map((c) => (
-                  <button
+                  // A link, not a button: the page is read ahead under the pointer, and the bar at the top
+                  // of the window starts with the click (Leslie, 27/10: the conversation was slow to show).
+                  <Link
                     key={c.href}
-                    type="button"
-                    onClick={() => {
-                      close();
-                      router.push(c.href);
-                    }}
+                    href={c.href}
+                    onClick={close}
                     className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-1.5 text-left hover:bg-soft"
                   >
                     {c.expert ? (
@@ -112,7 +128,7 @@ export function SearchDialog() {
                       <span className="block truncate text-sm font-semibold text-ink">{c.session.routine ?? (c.session.title || "Nouvelle conversation")}</span>
                       <span className="block truncate text-xs text-ink-3">{c.expert ? c.expert.displayName : "Chat d’entreprise"}</span>
                     </span>
-                  </button>
+                  </Link>
                 ))}
                 {foundFiles.length > 0 && <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-ink-3">Livrables</p>}
                 {foundFiles.map((f) => (

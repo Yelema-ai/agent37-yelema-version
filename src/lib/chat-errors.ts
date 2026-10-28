@@ -38,6 +38,29 @@ export function cleanUserMessage(text: string): string {
   return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+// The runtime appends the turn's files to the member's message as it saves it (« [Attached files:\n- /home/node/
+// Livrables/Pièces jointes/62b69t5b-pack.zip] »): reloaded, the bubble showed the paths (Leslie, 27/10).
+const ATTACHED = /\n*\[Attached files:\n((?:- [^\n]*\n?)+)\]\s*$/;
+// The upload route names a file `<8 random characters>-<original name>` in « Pièces jointes ».
+const UPLOAD_PREFIX = /^[a-z0-9]{8}-/;
+const IMAGE = /\.(png|jpe?g|gif|webp|heic|bmp|svg)$/i;
+
+/** A saved member message split into what they wrote and the files that rode along, as chips. */
+export function attachedFiles(text: string): { text: string; files: { name: string; path: string; isImage: boolean }[] } {
+  const m = ATTACHED.exec(text);
+  if (!m) return { text, files: [] };
+  const files = m[1]
+    .split("\n")
+    .map((line) => line.replace(/^- /, "").trim())
+    .filter(Boolean)
+    .map((path) => {
+      const base = path.split("/").pop() || path;
+      const name = path.includes("/Pièces jointes/") ? base.replace(UPLOAD_PREFIX, "") : base;
+      return { name, path, isImage: IMAGE.test(name) };
+    });
+  return { text: text.slice(0, m.index).trimEnd(), files };
+}
+
 /** A reply as the member reads it: the runtime's English lines and MEDIA tags out, the same paragraph never twice in a row. */
 export function cleanReply(text: string): string {
   const kept = mediaTags(text).text.split("\n").filter((line) => !RUNTIME_LINES.some((re) => re.test(line)));
