@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from "sonner";
 import { useChatPresence } from "@/components/activity/hooks";
 import { apiFetch } from "@/lib/api";
-import { ageOf, cached, remember } from "@/lib/client-cache";
+import { cached, cachedFetch, remember } from "@/lib/client-cache";
 import { browserPollEnv, startPoll } from "@/lib/poll";
 import { sessionsKey } from "@/components/experts/expert-preload";
 import { mergeRail, movedUpstream } from "@/lib/chat-rail";
@@ -130,11 +130,13 @@ export function ChatProvider({
   const loadSeq = useRef(0);
 
   const reloadSessions = useCallback(
-    async (retries = 0): Promise<void> => {
+    async (retries = 0, shared = false): Promise<void> => {
       const seq = ++loadSeq.current;
       setRefreshingSessions(true);
       try {
-        const res = await apiFetch<{ sessions: ChatSession[] }>(`/api/agents/${agentId}/chat/sessions${q}`);
+        const read = () => apiFetch<{ sessions: ChatSession[] }>(`/api/agents/${agentId}/chat/sessions${q}`);
+        // On opening, a read the menu has running or has just made is joined instead of repeated.
+        const res = shared ? { sessions: await cachedFetch(railKey, () => read().then((r) => r.sessions), FRESH_RAIL_MS) } : await read();
         if (seq !== loadSeq.current) return;
         if (movedUpstream(serverRail.current, res.sessions, openRef.current)) setThreadVersion((v) => v + 1);
         serverRail.current = res.sessions;
@@ -164,8 +166,7 @@ export function ChatProvider({
     serverRail.current = kept;
     setSessions(kept ?? []);
     setLoadingSessions(kept === null);
-    // A rail read ahead by the menu a moment ago is fresh enough: the poll reads it again.
-    if (ageOf(railKey) > FRESH_RAIL_MS) void reloadSessions(3);
+    void reloadSessions(3, true);
     // Every 30 s while visible; hidden, nothing, and one reading on the way back.
     const poll = startPoll(() => reloadSessions(), { everyMs: 30_000, immediate: false }, browserPollEnv());
     return () => {

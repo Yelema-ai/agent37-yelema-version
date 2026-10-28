@@ -47,13 +47,13 @@ const HOVER_INTENT_MS = 150;
 export function FilesView({ agentId, initialPath, openPath }: { agentId: string; initialPath?: string; openPath?: string | null }) {
   const fb = useFileBrowser(agentId, initialPath);
   // A folder named in the address (« ?dossier= », from a path cited in the chat) opens here.
-  // The first one is already the browser's starting folder (with its fall back to the root).
+  // The first one is already the browser's starting folder; a cited folder gone opens the root.
   const { navigate: fbNavigate } = fb;
   const opened = useRef(openPath);
   useEffect(() => {
     if (!openPath || openPath === opened.current) return;
     opened.current = openPath;
-    void fbNavigate(openPath);
+    void fbNavigate(openPath, true);
   }, [openPath, fbNavigate]);
   const [preview, setPreview] = useState<FileEntry | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FileEntry | null>(null);

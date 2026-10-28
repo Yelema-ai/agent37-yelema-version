@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { ageOf, cachedFetch, remember } from "./client-cache.ts";
+import { cached, cachedFetch, remember } from "./client-cache.ts";
 
 describe("lectures partagées du navigateur", () => {
   it("une lecture d'avance récente sert la page : aucun second appel dans le délai", async () => {
@@ -10,16 +10,16 @@ describe("lectures partagées du navigateur", () => {
     await cachedFetch("sessions:a", load, 60_000);
     await cachedFetch("sessions:a", load, 60_000);
     assert.equal(calls, 1);
-    assert.ok(ageOf("sessions:a") < 1_000);
+    assert.deepEqual(cached("sessions:a"), ["s1"]);
   });
 
-  it("deux demandes simultanées font un seul appel ; une clé jamais lue a un âge infini", async () => {
+  it("deux demandes simultanées font un seul appel ; une valeur posée sert la suivante", async () => {
     let calls = 0;
     const load = async () => (calls++, 1);
     await Promise.all([cachedFetch("models:b", load), cachedFetch("models:b", load)]);
     assert.equal(calls, 1);
-    assert.equal(ageOf("jamais"), Infinity);
-    remember("jamais", 0);
-    assert.ok(ageOf("jamais") < 1_000);
+    remember("sessions:c", ["lu par le menu"]);
+    assert.deepEqual(await cachedFetch("sessions:c", async () => (calls++, ["relu"]), 15_000), ["lu par le menu"]);
+    assert.equal(calls, 1);
   });
 });

@@ -124,6 +124,12 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
     },
     [fetchList]
   );
+  useEffect(
+    () => () => {
+      if (intent.current) clearTimeout(intent.current);
+    },
+    []
+  );
 
   // Initial load: the drive's root, or the folder the caller starts in (an expert's own). A
   // starting folder that does not exist yet falls back to the root instead of an error screen.
@@ -135,9 +141,9 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
 
   // The search is the folder's: opening another one starts it again.
   const navigate = useCallback(
-    (target: string) => {
+    (target: string, orRoot = false) => {
       setQuery("");
-      return load(target);
+      return load(target, orRoot);
     },
     [load]
   );
