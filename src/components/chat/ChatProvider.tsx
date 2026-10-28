@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from "sonner";
 import { useChatPresence } from "@/components/activity/hooks";
 import { apiFetch } from "@/lib/api";
-import { cached, remember } from "@/lib/client-cache";
+import { ageOf, cached, remember } from "@/lib/client-cache";
 import { browserPollEnv, startPoll } from "@/lib/poll";
 import { sessionsKey } from "@/components/experts/expert-preload";
 import { mergeRail, movedUpstream } from "@/lib/chat-rail";
@@ -63,6 +63,8 @@ export function useChatContext() {
 // by the sessions route, so the rail paints in one fetch with no per-session hydration.
 /** Where the rail of one space is published, as it is on screen (new and renamed threads included). */
 export const railViewKey = (agentId: string, profile: string | null) => `rail-view:${agentId}:${profile ?? ""}`;
+
+const FRESH_RAIL_MS = 15_000;
 
 export function ChatProvider({
   agentId,
@@ -134,7 +136,6 @@ export function ChatProvider({
       try {
         const res = await apiFetch<{ sessions: ChatSession[] }>(`/api/agents/${agentId}/chat/sessions${q}`);
         if (seq !== loadSeq.current) return;
-        remember(sessionsKey(agentId, profile), res.sessions);
         if (movedUpstream(serverRail.current, res.sessions, openRef.current)) setThreadVersion((v) => v + 1);
         serverRail.current = res.sessions;
         remember(railKey, res.sessions);
@@ -163,7 +164,8 @@ export function ChatProvider({
     serverRail.current = kept;
     setSessions(kept ?? []);
     setLoadingSessions(kept === null);
-    void reloadSessions(3);
+    // A rail read ahead by the menu a moment ago is fresh enough: the poll reads it again.
+    if (ageOf(railKey) > FRESH_RAIL_MS) void reloadSessions(3);
     // Every 30 s while visible; hidden, nothing, and one reading on the way back.
     const poll = startPoll(() => reloadSessions(), { everyMs: 30_000, immediate: false }, browserPollEnv());
     return () => {

@@ -13,13 +13,15 @@ import { fold, useAllConversations, useDriveFiles, useOwnAgentId } from "./useAl
 // Whether the search is open: one store, so the menu's « Rechercher » and Ctrl K open the same one.
 const listeners = new Set<() => void>();
 let opened = false;
+let warmed = false;
 function setOpen(v: boolean) {
   opened = v;
+  // Closed: the next hover or opening reads again (each space is kept 30 s).
+  if (!v) warmed = false;
   listeners.forEach((l) => l());
 }
 export const openSearch = () => setOpen(true);
 // The pointer on « Rechercher »: the lists are read ahead, so they are there when it opens.
-let warmed = false;
 export function warmSearch() {
   if (warmed) return;
   warmed = true;

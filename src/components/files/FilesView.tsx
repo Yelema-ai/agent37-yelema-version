@@ -41,12 +41,19 @@ type ViewMode = "list" | "grid";
 // mounted/hidden across tab switches, like ChatView, so the current directory survives). The whole
 // pane is a drop zone for uploads. Look + primitives mirror the Chat tab: same shadcn Dialog/Input,
 // lucide icons, sonner toasts (raised inside the hook), and the hover-action pattern.
+// A pointer only crossing a folder reads nothing; one resting on it this long reads it ahead.
+const HOVER_INTENT_MS = 150;
+
 export function FilesView({ agentId, initialPath, openPath }: { agentId: string; initialPath?: string; openPath?: string | null }) {
   const fb = useFileBrowser(agentId, initialPath);
   // A folder named in the address (« ?dossier= », from a path cited in the chat) opens here.
+  // The first one is already the browser's starting folder (with its fall back to the root).
   const { navigate: fbNavigate } = fb;
+  const opened = useRef(openPath);
   useEffect(() => {
-    if (openPath) void fbNavigate(openPath);
+    if (!openPath || openPath === opened.current) return;
+    opened.current = openPath;
+    void fbNavigate(openPath);
   }, [openPath, fbNavigate]);
   const [preview, setPreview] = useState<FileEntry | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FileEntry | null>(null);
@@ -154,7 +161,8 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
       },
       onKeyDown: (e: KeyboardEvent<HTMLElement>) => onEntryKeyDown(e, entry),
       // A folder is read as soon as the pointer is on it: the click then opens it at once.
-      onPointerEnter: isDir(entry) ? () => fb.prefetch(entry.path) : undefined,
+      onPointerEnter: isDir(entry) ? () => fb.prefetch(entry.path, HOVER_INTENT_MS) : undefined,
+      onPointerLeave: isDir(entry) ? () => fb.prefetch(null) : undefined,
       onPointerDown: isDir(entry) ? () => fb.prefetch(entry.path) : undefined,
     };
   }

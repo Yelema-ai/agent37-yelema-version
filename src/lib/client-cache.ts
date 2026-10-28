@@ -9,6 +9,12 @@ export function cached<T>(key: string): T | undefined {
   return store.get(key)?.value as T | undefined;
 }
 
+/** How long ago `key` was last remembered; Infinity when never. */
+export function ageOf(key: string): number {
+  const hit = store.get(key);
+  return hit ? Date.now() - hit.at : Infinity;
+}
+
 export function remember<T>(key: string, value: T): T {
   store.set(key, { at: Date.now(), value });
   for (const fn of listeners.get(key) ?? []) fn(value);

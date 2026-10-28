@@ -110,10 +110,17 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
     [load]
   );
 
-  // Read a folder ahead (pointer over it, or pressed), so the click opens it at once.
+  // Read a folder ahead (pointer resting on it, or pressed), so the click opens it at once. One pending
+  // at a time: a new target or `null` (pointer gone) cancels the one waiting.
+  const intent = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prefetch = useCallback(
-    (target: string) => {
-      if (!cache.current.has(target)) void fetchList(target).catch(() => {});
+    (target: string | null, afterMs = 0) => {
+      if (intent.current) clearTimeout(intent.current);
+      intent.current = null;
+      if (!target || cache.current.has(target)) return;
+      const read = () => void fetchList(target).catch(() => {});
+      if (afterMs > 0) intent.current = setTimeout(read, afterMs);
+      else read();
     },
     [fetchList]
   );

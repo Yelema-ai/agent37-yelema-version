@@ -1,6 +1,7 @@
 "use client";
 
-import { cached, remember } from "@/lib/client-cache";
+import { cached, cachedFetch, remember } from "@/lib/client-cache";
+import { sessionsKey } from "@/components/experts/expert-preload";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { profileQuery } from "@/lib/profile-id";
@@ -51,9 +52,10 @@ export function useAllConversations(ownAgentId: string | null, experts: Expert[]
     ];
     void Promise.all(
       spaces.map(({ agentId, expert }) =>
-        apiFetch<{ sessions: ChatSession[] }>(`/api/agents/${agentId}/chat/sessions${profileQuery(expert?.profileId)}`).then(
-          (r) =>
-            r.sessions.map((session) => ({
+        // Shared with each space's own rail and the menu's read-ahead: read at most every 30 s.
+        cachedFetch(sessionsKey(agentId, expert?.profileId ?? null), () => apiFetch<{ sessions: ChatSession[] }>(`/api/agents/${agentId}/chat/sessions${profileQuery(expert?.profileId)}`).then((r) => r.sessions), 30_000).then(
+          (sessions) =>
+            sessions.map((session) => ({
               session,
               expert,
               at: toMs(session.last_active),

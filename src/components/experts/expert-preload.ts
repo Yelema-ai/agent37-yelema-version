@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { apiFetch } from "@/lib/api";
-import { cached, remember } from "@/lib/client-cache";
+import { cachedFetch } from "@/lib/client-cache";
 import { profileQuery } from "@/lib/profile-id";
 import type { ModelsResponse } from "@/lib/types";
 import type { ChatSession } from "@/components/chat/types";
@@ -24,11 +24,10 @@ export function preloadExpert(agentId: string, profile: string | null): Promise<
   if (running) return running;
   if (Date.now() - (last.get(key) ?? 0) < FRESH_MS) return Promise.resolve();
   const q = profileQuery(profile);
+  // Shared with the page's own reads: what it read in the last minute is not asked again.
   const p = Promise.allSettled([
-    apiFetch<{ sessions: ChatSession[] }>(`/api/agents/${agentId}/chat/sessions${q}`).then((r) => remember(key, r.sessions)),
-    cached(modelsKey(agentId, profile))
-      ? null
-      : apiFetch<ModelsResponse>(`/api/agents/${agentId}/chat/models${q}`).then((r) => remember(modelsKey(agentId, profile), r)),
+    cachedFetch(key, () => apiFetch<{ sessions: ChatSession[] }>(`/api/agents/${agentId}/chat/sessions${q}`).then((r) => r.sessions), FRESH_MS),
+    cachedFetch(modelsKey(agentId, profile), () => apiFetch<ModelsResponse>(`/api/agents/${agentId}/chat/models${q}`), FRESH_MS),
   ]).then(() => {
     last.set(key, Date.now());
     inFlight.delete(key);
