@@ -236,25 +236,17 @@ function invoicePath(id: string, rest: string): string {
   return `/app/billing/invoices/${id}${rest}`;
 }
 
-// `workspace` is given by the proxy, which runs before a request has a scope to read it from.
-// `form` sends a multipart body instead of JSON (a document for the company memory).
-async function call<T>(path: string, init: { method?: string; token?: string | null; body?: unknown; form?: FormData; workspace?: string; timeoutMs?: number; headers?: Record<string, string> } = {}): Promise<T> {
+// The one way out to the back office: its address, the request's workspace, a deadline, and an
+// outage read as one (503, a sentence for the member).
+async function send(path: string, init: { method?: string; workspace?: string; timeoutMs?: number; headers: Record<string, string>; body?: BodyInit }): Promise<Response> {
   const base = backofficeUrl();
   const workspace = init.workspace ?? (await pinnedWorkspaceId());
   if (!base || !workspace) throw new BackofficeError(500, "config_error", "BACKOFFICE_URL and a workspace are required");
-
-  let res: Response;
   try {
-    res = await fetch(`${base}/api/v1${path}`, {
+    return await fetch(`${base}/api/v1${path}`, {
       method: init.method ?? "GET",
-      headers: {
-        Accept: "application/json",
-        "X-Workspace-Id": workspace,
-        ...(init.token ? { Authorization: `Bearer ${init.token}` } : {}),
-        ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),
-        ...init.headers,
-      },
-      body: init.form ?? (init.body === undefined ? undefined : JSON.stringify(init.body)),
+      headers: { "X-Workspace-Id": workspace, ...init.headers },
+      body: init.body,
       cache: "no-store",
       signal: AbortSignal.timeout(init.timeoutMs ?? TIMEOUT_MS),
     });
@@ -262,6 +254,23 @@ async function call<T>(path: string, init: { method?: string; token?: string | n
     console.error(`[backoffice] ${path} unreachable:`, e instanceof Error ? e.message : e);
     throw new BackofficeError(503, "unavailable", "Le service est momentanément indisponible. Réessayez dans un instant.");
   }
+}
+
+// `workspace` is given by the proxy, which runs before a request has a scope to read it from.
+// `form` sends a multipart body instead of JSON (a document for the company memory).
+async function call<T>(path: string, init: { method?: string; token?: string | null; body?: unknown; form?: FormData; workspace?: string; timeoutMs?: number; headers?: Record<string, string> } = {}): Promise<T> {
+  const res = await send(path, {
+    method: init.method ?? "GET",
+    workspace: init.workspace,
+    timeoutMs: init.timeoutMs,
+    headers: {
+      Accept: "application/json",
+      ...(init.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),
+      ...init.headers,
+    },
+    body: init.form ?? (init.body === undefined ? undefined : JSON.stringify(init.body)),
+  });
 
   const text = await res.text();
   let data: unknown = null;
@@ -665,22 +674,9 @@ function ownPath(base: string, id: string): string {
 
 // A file from the back office, handed back unread so the caller can pipe it.
 async function stream(path: string, token: string): Promise<Response> {
-  const base = backofficeUrl();
-  const workspace = await pinnedWorkspaceId();
-  if (!base || !workspace) throw new BackofficeError(500, "config_error", "BACKOFFICE_URL and a workspace are required");
   const unavailable = () =>
     new BackofficeError(503, "unavailable", "Le service est momentanément indisponible. Réessayez dans un instant.");
-  let res: Response;
-  try {
-    res = await fetch(`${base}/api/v1${path}`, {
-      headers: { "X-Workspace-Id": workspace, Authorization: `Bearer ${token}` },
-      cache: "no-store",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-  } catch (e) {
-    console.error(`[backoffice] ${path} unreachable:`, e instanceof Error ? e.message : e);
-    throw unavailable();
-  }
+  const res = await send(path, { headers: { Authorization: `Bearer ${token}` } });
   if (res.ok && res.body) return res;
   const text = await res.text().catch(() => "");
   if (res.status === 401 || res.status === 403) throw new BackofficeError(res.status, "forbidden", "Cette action n’est pas autorisée.");

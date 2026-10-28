@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ToolLogo } from "./ToolLogo";
+import { runPool } from "@/lib/bulk";
 
 const SEARCH_DEBOUNCE_MS = 250;
 const MIN_SEARCH = 3; // the toolkits route 400s a non-empty query shorter than this
@@ -181,6 +182,11 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
     pollDeadline.current = Date.now() + POLL_TIMEOUT_MS;
     if (pollTimer.current) clearInterval(pollTimer.current);
     pollTimer.current = setInterval(async () => {
+      // The sign-in tab is in front: asked again once this one shows.
+      if (document.hidden) {
+        if (Date.now() > pollDeadline.current) stopPolling();
+        return;
+      }
       try {
         const conns = await fetchConnections();
         if (activeCount(conns, toolkit.slug) > baseline) {
@@ -215,10 +221,11 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
   // the confirmation stays open on a failure.
   async function disconnect(toolkit: IntegrationToolkit, ids: string[]) {
     try {
-      for (const id of ids) {
-        setDisconnecting(id);
-        await apiFetch(`/api/agents/${agentId}/integrations/connections/${encodeURIComponent(id)}`, { method: "DELETE" });
-      }
+      setDisconnecting(ids[0] ?? null);
+      // Three at a time; the first refusal is the one shown.
+      const done = await runPool(ids, 3, (id) => apiFetch(`/api/agents/${agentId}/integrations/connections/${encodeURIComponent(id)}`, { method: "DELETE" }));
+      const failed = done.find((r) => r.status === "rejected");
+      if (failed) throw (failed as PromiseRejectedResult).reason;
       toast.success(ids.length > 1 ? `${ids.length} connexions ${toolkit.name} retirées` : `Compte ${toolkit.name} déconnecté`);
     } finally {
       await fetchConnections().catch(() => undefined);

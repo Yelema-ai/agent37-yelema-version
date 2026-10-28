@@ -31,6 +31,7 @@ import {
   type Turn,
 } from "@/lib/activity";
 import { cleanReply, isAccountToTopUp } from "@/lib/chat-errors";
+import { driveChanged } from "@/lib/drive-store";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { expertDisplayName } from "@/lib/experts";
 import type { ChatSession } from "@/components/chat/types";
@@ -181,6 +182,9 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       },
       bind: (id, sessionId, responseId) => commit(bindTurn(stateRef.current, id, sessionId, responseId)),
       finish: (id, outcome, raw, source = "local") => {
+        // A turn that ended may have written deliverables.
+        const agentId = stateRef.current.turns[id]?.agentId;
+        if (agentId) driveChanged(agentId);
         const text = cleanReply(raw);
         const now = Date.now();
         const r = finishTurn(stateRef.current, id, outcome, source, visible(), now);
@@ -204,6 +208,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       },
       routineDone: (key, routine, sessionId, at, loud) => {
         const ref = parseConvKey(key);
+        if (ref) driveChanged(ref.agentId);
         if (ref) presenceRef.current.get(expertKey(ref.agentId, ref.profile))?.addSession({ session_id: sessionId, title: routine, last_active: at, routine });
         const now = Date.now();
         const r = routineFinished(stateRef.current, key, visible(), now);

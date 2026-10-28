@@ -19,6 +19,8 @@ export function LoginCode({ account, onDone, compact }: { account: LlmAccount; o
     let stopped = false;
     const tick = async () => {
       if (stopped) return;
+      // Hidden: nothing is asked until the tab shows again.
+      if (document.hidden) return void (timer = setTimeout(tick, POLL_MS));
       try {
         const next = await apiFetch<LlmAccount>(`/api/llm/accounts/${account.id}`);
         if (next.state === "active") toast.success("Compte connecté", { description: "L’installation sur l’instance est en cours." });

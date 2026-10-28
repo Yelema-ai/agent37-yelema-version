@@ -1,7 +1,7 @@
 import { agent37 } from "@/lib/agent37";
-import { backofficeAgentRow, requireMember, requireUser } from "@/lib/auth";
+import { requireMember, requireUser } from "@/lib/auth";
+import { backofficeAgents } from "@/lib/my-agents";
 import { authViaBackoffice } from "@/lib/runtime-config";
-import { currentInstance } from "@/lib/session";
 import { templateAppPorts } from "@/config/agents";
 import { ApiError, handleError, json, dbError } from "@/lib/http";
 import type { Agent, AgentRow, MergedAgent, Template } from "@/lib/types";
@@ -37,23 +37,7 @@ export async function GET(request: Request) {
 
     if (authViaBackoffice()) {
       // The back office already read the instance's state and image: nothing to ask Agent37.
-      const [row, instance] = await Promise.all([backofficeAgentRow(), currentInstance()]);
-      const agents: MergedAgent[] =
-        row && instance
-          ? [
-              {
-                ...row,
-                owner_email: user.email,
-                live_status: instance.state === "unknown" ? null : instance.state,
-                status_reason: null,
-                past_due: false,
-                ports: [],
-                update_available: false,
-                image: instance.image.template ? { template: instance.image.template, revision: instance.image.revision } : null,
-              },
-            ]
-          : [];
-      return json({ agents, role, can_create: false });
+      return json({ agents: await backofficeAgents(user.email), role, can_create: false });
     }
 
     // Everyone, admins included, sees only the agent they own.

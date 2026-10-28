@@ -4,15 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { llmPending, type LlmMember, type LlmOverview, type LlmWritten } from "@/lib/llm";
+import { llmPending, readOverview, type LlmMember, type LlmOverview, type LlmWritten } from "@/lib/llm";
 import { scopeParam, type InstanceScope, type LlmSetup } from "@/lib/llm-accounts";
 import type { ClaudeAuthView } from "@/lib/claude-code-auth";
 import { AccountsBoard, describe } from "./AccountsBoard";
 import { ClaudeCodeModel } from "./ClaudeCodeModel";
 import { ExpertModels } from "./ExpertModels";
 import { MemberSources } from "./MemberSources";
+import { ModelsBoundary } from "./ModelsBoundary";
 import { useModelGroups } from "./useModelGroups";
 import { YelemaEngine } from "./YelemaEngine";
+import { usePoll } from "@/components/usePoll";
 
 const REFUSED = "Le fournisseur n’accepte plus cette clé. Vos Experts ne répondent plus tant qu’elle n’est pas remplacée ou retirée.";
 // Une pose prend d'ordinaire moins d'une minute par instance ; au-delà, on cesse de relire seul.
@@ -27,11 +29,11 @@ export function ModelsView() {
   const [data, setData] = useState<LlmOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scope, setScope] = useState<InstanceScope>({ kind: "own" });
-  const [tries, setTries] = useState(0);
+  const [round, setRound] = useState(0);
 
   const load = useCallback(async () => {
     try {
-      setData(await apiFetch<LlmOverview>("/api/llm"));
+      setData(readOverview(await apiFetch<unknown>("/api/llm")));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -43,14 +45,7 @@ export function ModelsView() {
   }, [load]);
 
   // Tant qu'une pose est en cours, l'état est relu : l'écran passe seul à « En service » ou à l'échec.
-  useEffect(() => {
-    if (!data || !llmPending(data) || tries >= POLL_TRIES) return;
-    const timer = setTimeout(() => {
-      setTries((n) => n + 1);
-      void load();
-    }, POLL_MS);
-    return () => clearTimeout(timer);
-  }, [data, tries, load]);
+  usePoll(load, { everyMs: POLL_MS, deadlineMs: POLL_MS * POLL_TRIES, immediate: false, round, enabled: Boolean(data && llmPending(data)) });
 
   const admin = data?.members !== undefined;
   const others = useMemo(() => othersOf(data), [data]);
@@ -80,7 +75,7 @@ export function ModelsView() {
 
   const changed = useCallback(
     async (out?: LlmWritten | null) => {
-      setTries(0);
+      setRound((r) => r + 1);
       await load();
       if (out) toast.success("Modèle enregistré", { description: out.state === "pending" ? "L’installation sur l’instance est en cours." : undefined });
     },
@@ -118,19 +113,23 @@ export function ModelsView() {
         </div>
       )}
 
-      <AccountsBoard
-        setup={setup}
-        scope={scope}
-        title={title}
-        picker={picker}
-        scopeLabel={scopeLabel}
-        {...catalogues}
-        customEndpoints={data.customEndpoints === true}
-        models={models}
-        onChanged={() => changed()}
-      />
+      <ModelsBoundary key={`accounts-${scopeParam(scope) ?? "own"}`}>
+        <AccountsBoard
+          setup={setup}
+          scope={scope}
+          title={title}
+          picker={picker}
+          scopeLabel={scopeLabel}
+          {...catalogues}
+          customEndpoints={data.customEndpoints === true}
+          models={models}
+          onChanged={() => changed()}
+        />
+      </ModelsBoundary>
 
-      <ExpertModels key={scopeParam(scope) ?? "own"} scope={scope} setup={setup} yelema={data.yelema} models={models} groupName={(g) => describe(g, catalogues).name} onChanged={changed} />
+      <ModelsBoundary key={`experts-${scopeParam(scope) ?? "own"}`}>
+        <ExpertModels scope={scope} setup={setup} yelema={data.yelema} models={models} groupName={(g) => describe(g, catalogues).name} onChanged={changed} />
+      </ModelsBoundary>
 
       {data.yelema && <YelemaEngine yelema={data.yelema} />}
 

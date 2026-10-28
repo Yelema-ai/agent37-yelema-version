@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { anyExpertOverride, choiceLabel, fallbackModelGroups, filterModelGroups, isProviderParam, profilesWith, withAllExperts, type ModelGroup } from "./model-options.ts";
+import { anyExpertOverride, choiceLabel, expertRows, fallbackModelGroups, filterModelGroups, isProviderParam, profilesWith, readModelGroups, withAllExperts, type ModelGroup } from "./model-options.ts";
 import type { LlmGroup } from "./llm-accounts.ts";
 
 const list: ModelGroup[] = [
@@ -55,5 +55,22 @@ describe("modèle des experts", () => {
     assert.deepEqual(withAllExperts(groups, { provider: "anthropic", model: "claude-sonnet-5-5" })!.map((g) => [g.provider, g.model, g.fallbacks]), [["anthropic", "claude-sonnet-5-5", []], ["openrouter", "x/y", []]]);
     assert.deepEqual(withAllExperts(groups, { provider: "openrouter", model: "openai/gpt-5.5" })!.map((g) => [g.provider, g.model]), [["openrouter", "openai/gpt-5.5"], ["anthropic", "claude-opus-5-5"]]);
     assert.equal(withAllExperts(groups, { provider: "gemini", model: "g" }), null);
+  });
+});
+
+describe("experts du bloc 2 et liste servie", () => {
+  const mine = [{ profileId: "acme__adjoua", displayName: "Adjoua" }];
+  it("sur l’instance d’un membre : ses experts installés, pas ceux de l’administrateur ; rien quand le back-office ne dit pas", () => {
+    assert.deepEqual(expertRows("own", mine, ["acme__fatima"]), mine);
+    assert.deepEqual(expertRows("member", mine, ["acme__fatima", "acme__adjoua"]), [{ profileId: "acme__fatima", displayName: "fatima" }, { profileId: "acme__adjoua", displayName: "Adjoua" }]);
+    assert.deepEqual(expertRows("member", mine, undefined), []);
+  });
+
+  it("une liste malformée ne fait pas planter le sélecteur : entrées invalides écartées", () => {
+    assert.equal(readModelGroups(null), null);
+    assert.equal(readModelGroups({ groups: "x" }), null);
+    const groups = readModelGroups({ groups: [null, { provider: "anthropic", label: "Anthropic", source: "?", models: [{ id: "opus" }, { label: "sans id" }, 3] }, { provider: 1 }] })!;
+    assert.deepEqual(groups, [{ provider: "anthropic", label: "Anthropic", source: "recommended", models: [{ id: "opus", label: "opus" }] }]);
+    assert.equal(filterModelGroups(groups, "op").length, 1);
   });
 });

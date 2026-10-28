@@ -17,6 +17,10 @@ import type { InitialExperts } from "@/components/experts/useExperts";
 import { CallProvider, CallStrip } from "@/components/voice/CallProvider";
 import { YeleBubble } from "@/components/yele/YeleBubble";
 import { cn } from "@/lib/utils";
+import { remember } from "@/lib/client-cache";
+import type { CatalogueResponse, MergedAgent } from "@/lib/types";
+import { AgentsProvider } from "@/components/useMyAgents";
+import { catalogueKey } from "@/components/experts/useCatalogue";
 
 const COLLAPSE_KEY = "sbmini";
 
@@ -33,10 +37,23 @@ const COLLAPSE_KEY = "sbmini";
  * Le <main> ne pose aucune marge : chaque page choisit son mode en enveloppant ou non
  * son contenu dans <Page>.
  */
-export function AppShell({ children, initialExperts }: { children: React.ReactNode; initialExperts: InitialExperts | null }) {
+export function AppShell({
+  children,
+  initialExperts,
+  initialAgents = null,
+  initialCatalogue = null,
+}: {
+  children: React.ReactNode;
+  initialExperts: InitialExperts | null;
+  initialAgents?: MergedAgent[] | null;
+  initialCatalogue?: CatalogueResponse | null;
+}) {
   // The member's notification and conversation choices, from the back office, before the first notice.
   useEffect(() => void syncPrefs(), []);
-  const chatOnly = useWorkspace().current?.access === "entreprise";
+  const { current, userEmail } = useWorkspace();
+  const chatOnly = current?.access === "entreprise";
+  // The catalogue the server read with the page: every screen that lists it starts from it.
+  useState(() => current && initialCatalogue && remember(catalogueKey(userEmail, current.id), initialCatalogue));
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -86,6 +103,7 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
   }
 
   return (
+    <AgentsProvider workspaceId={current?.id ?? null} initial={initialAgents}>
     <ExpertsProvider initial={initialExperts}>
       <DeployStatusProvider>
       <ActivityProvider>
@@ -131,5 +149,6 @@ export function AppShell({ children, initialExperts }: { children: React.ReactNo
       </ActivityProvider>
       </DeployStatusProvider>
     </ExpertsProvider>
+    </AgentsProvider>
   );
 }

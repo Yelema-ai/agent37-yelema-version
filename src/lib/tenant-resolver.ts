@@ -1,16 +1,13 @@
 import "server-only";
+import { memo } from "@/lib/memo";
 import { backofficeUrl, resolverToken } from "@/lib/runtime-config";
+import type { ResolvedTenant } from "@/lib/tenant-header";
 
 // Which client a host name belongs to, asked of the back office (`GET /api/v1/app/tenant`). One
 // deployment serves every client: the request's host is the only thing that says whose it is.
 // No request-scoped API here, so the proxy can use it too; route code goes through src/lib/tenant.ts.
 
-export interface ResolvedTenant {
-  workspaceId: string;
-  name: string | null;
-  logoUrl: string | null;
-  status: "active" | "suspended";
-}
+export type { ResolvedTenant };
 
 // A refusal to serve a host, with the status the caller should answer.
 export class TenantError extends Error {
@@ -25,11 +22,12 @@ export class TenantError extends Error {
 }
 
 const TIMEOUT_MS = 10_000;
-// A client's name, logo or suspension is felt within this delay.
-const TTL_MS = 60_000;
+// A client's name, logo or suspension is felt within this delay (a suspension also by the back office on /me).
+const TTL_MS = 5 * 60_000;
+// A host that is no client's yet is asked again sooner: it may be one being created.
+const MISS_TTL_MS = 60_000;
 // When the back office does not answer, the last known answer keeps a host served this long.
-const STALE_MS = 10 * 60_000;
-const MAX_ENTRIES = 1000;
+const STALE_ON_ERROR_MS = 6 * 60 * 60_000;
 const HOST_RE = /^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/;
 
 /** The host a request was made to, lowercased and without its port; null when it is not a host name. */
@@ -38,7 +36,8 @@ export function hostOf(headers: { get(name: string): string | null }): string | 
   return HOST_RE.test(raw) ? raw : null;
 }
 
-const store = new Map<string, { at: number; value: ResolvedTenant | null }>();
+// Unknown hosts are kept too (anyone can ask for any sub-domain): the oldest go first past the cap.
+const hosts = memo<ResolvedTenant | null>({ ttlMs: TTL_MS, ttlOf: (v) => (v ? TTL_MS : MISS_TTL_MS), staleOnErrorMs: STALE_ON_ERROR_MS, maxEntries: 1000, maxFlightMs: TIMEOUT_MS + 2_000 });
 
 async function ask(host: string): Promise<ResolvedTenant | null> {
   const base = backofficeUrl();
@@ -63,17 +62,10 @@ async function ask(host: string): Promise<ResolvedTenant | null> {
 
 /** The client served on this host; null when the back office knows no such host. Throws on an outage with nothing to fall back on. */
 export async function resolveHost(host: string): Promise<ResolvedTenant | null> {
-  const hit = store.get(host);
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
   try {
-    const value = await ask(host);
-    // Unknown hosts are remembered too, so the map is bounded: anyone can ask for any sub-domain.
-    if (store.size >= MAX_ENTRIES) store.clear();
-    store.set(host, { at: Date.now(), value });
-    return value;
+    return await hosts.get(host, () => ask(host));
   } catch (e) {
     if (e instanceof TenantError) throw e;
-    if (hit && Date.now() - hit.at < STALE_MS) return hit.value;
     console.error(`[tenant] ${host} could not be resolved:`, e instanceof Error ? e.message : e);
     throw new TenantError(503, "unavailable", "Le service est momentanément indisponible. Réessayez dans un instant.");
   }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { cached, remember } from "@/lib/client-cache";
+import { cached, cachedFetch, forget } from "@/lib/client-cache";
 import type { MailInbox } from "@/lib/mail";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 
@@ -16,18 +16,24 @@ export function useMailInboxes(): { inboxes: MailInbox[]; loaded: boolean; reloa
     return kept ? { key, inboxes: kept } : null;
   });
 
-  const reload = useCallback(async () => {
-    try {
-      const data = await apiFetch<{ items: MailInbox[] }>("/api/mail/inboxes");
-      setState({ key, inboxes: remember(key, data.items) });
-    } catch {
-      setState((prev) => (prev?.key === key ? prev : { key, inboxes: [] }));
-    }
-  }, [key]);
+  // Read once for the shell, kept two minutes (an expert's space opened again asks nothing); `reload` asks anew.
+  const read = useCallback(
+    async (fresh: boolean) => {
+      if (fresh) forget(key);
+      try {
+        const inboxes = await cachedFetch(key, () => apiFetch<{ items: MailInbox[] }>("/api/mail/inboxes").then((d) => d.items), 120_000);
+        setState({ key, inboxes });
+      } catch {
+        setState((prev) => (prev?.key === key ? prev : { key, inboxes: [] }));
+      }
+    },
+    [key]
+  );
+  const reload = useCallback(() => read(true), [read]);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    void read(false);
+  }, [read]);
 
   const mine = state?.key === key ? state : null;
   return { inboxes: mine?.inboxes ?? [], loaded: mine !== null, reload };

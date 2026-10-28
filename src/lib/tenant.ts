@@ -1,7 +1,8 @@
 import "server-only";
 import { headers } from "next/headers";
 import { cache } from "react";
-import { brandLogoUrl, deploymentWorkspaceId, multiTenant, publicConfig, type PublicConfig } from "@/lib/runtime-config";
+import { brandLogoUrl, deploymentWorkspaceId, multiTenant, publicConfig, resolverToken, type PublicConfig } from "@/lib/runtime-config";
+import { openTenant, TENANT_HEADER } from "@/lib/tenant-header";
 import { hostOf, resolveHost, TenantError, type ResolvedTenant } from "@/lib/tenant-resolver";
 
 // The client THIS request is for. Two ways, chosen by the deployment's variables (multiTenant in
@@ -12,8 +13,11 @@ import { hostOf, resolveHost, TenantError, type ResolvedTenant } from "@/lib/ten
 /** The client of the current request, read once per request; null when the host is no client's. */
 export const currentTenant = cache(async (): Promise<ResolvedTenant | null> => {
   if (!multiTenant()) return null;
-  const host = hostOf(await headers());
-  return host ? resolveHost(host) : null;
+  const h = await headers();
+  const host = hostOf(h);
+  if (!host) return null;
+  // Already resolved by the proxy for this very request: no second lookup.
+  return openTenant(h.get(TENANT_HEADER), host, resolverToken() ?? "") ?? resolveHost(host);
 });
 
 /**

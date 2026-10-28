@@ -1,11 +1,12 @@
 import { cleanReply, cleanUserMessage } from "./chat-errors.ts";
 import type { ChatHistoryMessage } from "./types.ts";
+import { toMs } from "./activity.ts";
 
 // A conversation as plain text, to paste to a colleague or a developer: the title, then each
 // message with who wrote it and when. Replies are cleaned like on screen (the runtime's English
 // lines out), system rows and empty messages are left out.
 const when = (at: number) =>
-  new Date(at < 1e12 ? at * 1000 : at).toLocaleString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+  new Date(toMs(at)).toLocaleString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
 
 export function conversationText(title: string, expert: string, history: ChatHistoryMessage[]): string {
   const blocks = history

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { llmPending, llmRefusalMessage, type LlmOverview } from "./llm.ts";
+import { llmPending, llmRefusalMessage, readOverview, type LlmOverview } from "./llm.ts";
 import { cleanModel, layoutOf, moveItem, parseAccountDraft, parseAccountPatch, parseLayout, parseScopeParam, scopeParam, type LlmGroup } from "./llm-accounts.ts";
 
 const group = (provider: string, ids: string[], model = "m-1"): LlmGroup => ({ provider, model, fallbacks: [], accounts: ids.map((id) => ({ id, provider: "anthropic-api", label: "", hint: "…abcd", verified: true, state: "active" })) });
@@ -66,5 +66,18 @@ describe("modèle par expert dans l’ordre envoyé", () => {
     for (const bad of [[], "x", { "Fatima!": null }, { fatima: { provider: "anthropic" } }, { fatima: { provider: "a b", model: "m-1" } }, { fatima: { provider: "anthropic", model: "x'; id" } }]) {
       assert.equal(parseLayout({ ...layoutOf(groups), profiles: bad }), null, JSON.stringify(bad));
     }
+  });
+});
+
+describe("lecture de GET /api/llm", () => {
+  it("une configuration incomplète ou piégée devient rendable au lieu de faire planter l’écran", () => {
+    const o = readOverview({ catalogue: [{ id: "anthropic-oauth", label: "Anthropic" }, null], yelema: { default: "y", models: [{ id: "y", label: "Y" }] } });
+    assert.deepEqual(o.yelema?.own, { model: null, profiles: {} }, "yelema.own absent : lu vide");
+    assert.equal(o.catalogue[0]!.family, "anthropic-oauth");
+    assert.deepEqual([o.logins, o.setup, o.members, o.mine], [[], undefined, undefined, null]);
+    const setup = readOverview({ setup: { groups: [{ provider: "anthropic", model: "opus", accounts: [{ id: "4", provider: "anthropic-oauth", login: { userCode: { x: 1 } } }] }, { provider: "gemini", model: "pro", accounts: [] }], profiles: { a: null, b: "opus", c: { provider: "anthropic", model: "opus" } }, experts: ["a", 2] } }).setup!;
+    assert.deepEqual(setup.groups.map((g) => [g.provider, g.fallbacks, g.accounts.map((a) => [a.id, a.state, a.label, a.login])]), [["anthropic", [], [["4", "failed", "", undefined]]]]);
+    assert.deepEqual([setup.profiles, setup.experts], [{ a: null, c: { provider: "anthropic", model: "opus" } }, ["a"]]);
+    assert.deepEqual(readOverview(null).catalogue, []);
   });
 });

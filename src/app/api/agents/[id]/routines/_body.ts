@@ -19,13 +19,14 @@ export interface RoutineExpert {
 }
 
 // The expert whose routines these are: a profile installed on THIS instance (never the default
-// home, which has no routines of its own here), dressed by the catalogue.
-export async function routineExpert(row: AgentRow, raw: unknown): Promise<RoutineExpert> {
-  const profile = await resolveProfile(row, raw);
+// home, which has no routines of its own here), dressed by the catalogue. `skills: false` for a
+// read, which does not need the expert's sheet.
+export async function routineExpert(row: AgentRow, raw: unknown, opts: { skills?: boolean } = {}): Promise<RoutineExpert> {
+  const [profile, catalogue] = await Promise.all([resolveProfile(row, raw), loadCatalogue()]);
   if (profile === DEFAULT_PROFILE) throw new ApiError(400, "invalid_request", "Expert inconnu");
 
-  const entry = matchCatalogue((await loadCatalogue()).experts, profile);
-  const detail = entry ? await loadCatalogueExpert(entry.key) : null;
+  const entry = matchCatalogue(catalogue.experts, profile);
+  const detail = entry && opts.skills !== false ? await loadCatalogueExpert(entry.key) : null;
   return {
     profile,
     name: entry?.name ?? expertDisplayName(profile),

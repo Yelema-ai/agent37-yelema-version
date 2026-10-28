@@ -1,0 +1,22 @@
+// Every outbound call that is not a stream gets a deadline, so a hung peer frees the function
+// instead of holding it until the host's own limit. The caller's own signal still applies.
+export function withTimeout(init: RequestInit | undefined, ms: number): RequestInit {
+  const deadline = AbortSignal.timeout(ms);
+  return { ...init, signal: init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline };
+}
+
+/** For reads and writes of JSON; streams (SSE, file bodies) get none. */
+export const JSON_TIMEOUT_MS = 30_000;
+/** A command inside an instance may run longer than a read. */
+export const EXEC_TIMEOUT_MS = 120_000;
+
+/** A deadline on the answer's headers only: the body may then stream as long as it needs. */
+export async function fetchUntilHeaders(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(new Error("headers timeout")), ms);
+  try {
+    return await fetch(url, { ...init, signal: init.signal ? AbortSignal.any([init.signal, ctl.signal]) : ctl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}

@@ -1,6 +1,7 @@
 import "server-only";
 import { agent37 } from "@/lib/agent37";
 import { ApiError } from "@/lib/http";
+import { memo } from "@/lib/memo";
 import type { MessagingPlatform, TelegramPairing, WhatsappPairing } from "@/lib/channels";
 
 // Hermes serves its own messaging API on a LOOPBACK port inside the instance (9119), so it is
@@ -51,13 +52,32 @@ interface PlatformsResponse {
   platforms: MessagingPlatform[];
 }
 
+// One exec answers both: the channels the harness offers (fixed for an image version) and their
+// live state. The whole answer is kept 30 s per instance and dropped on every write; the catalogue
+// alone is kept per image, so the screen lists the channels before the state is in.
+const platforms = memo<MessagingPlatform[]>({ ttlMs: 30_000, maxEntries: 2000, maxFlightMs: 130_000 });
+const catalogues = memo<MessagingPlatform[]>({ ttlMs: 24 * 60 * 60_000, maxEntries: 200 });
+
 // Every channel the agent's harness supports, with its live state and the credentials it wants.
 // The harness is the catalog: this app never hardcodes the field list, so a channel the harness
-// adds shows up here on its own.
-export async function listPlatforms(agentId: string): Promise<MessagingPlatform[]> {
-  const { platforms } = await dashboard<PlatformsResponse>(agentId, "GET", "/api/messaging/platforms");
-  return platforms ?? [];
+// adds shows up here on its own. `imageKey` (template:revision) files the catalogue under its image.
+export async function listPlatforms(agentId: string, imageKey = ""): Promise<MessagingPlatform[]> {
+  const list = await platforms.get(agentId, async () => (await dashboard<PlatformsResponse>(agentId, "GET", "/api/messaging/platforms")).platforms ?? []);
+  if (imageKey) catalogues.put(imageKey, list.map(withoutState));
+  return list;
 }
+
+/** The channels an image offers, without any state; undefined until one instance of it was read. */
+export function knownCatalogue(imageKey: string): MessagingPlatform[] | undefined {
+  return imageKey ? catalogues.peek(imageKey) : undefined;
+}
+
+/** After a write: the next reading asks the instance again. */
+export function forgetPlatforms(agentId: string): void {
+  platforms.drop(agentId);
+}
+
+const withoutState = (p: MessagingPlatform): MessagingPlatform => ({ ...p, enabled: false, configured: false, gateway_running: false, state: null, error_code: null, error_message: null, home_channel: null });
 
 export async function getPlatform(agentId: string, platformId: string): Promise<MessagingPlatform> {
   const platform = (await listPlatforms(agentId)).find((p) => p.id === platformId);
@@ -79,6 +99,7 @@ export async function writePlatform(
   platformId: string,
   update: { enabled?: boolean; env?: Record<string, string>; clear_env?: string[] }
 ): Promise<void> {
+  forgetPlatforms(agentId);
   const result = await dashboard<PlatformUpdateResponse>(
     agentId,
     "PUT",
@@ -90,6 +111,7 @@ export async function writePlatform(
     throw new ApiError(502, "channel_write_failed", "Ce canal n’a pas pu être enregistré. Vérifiez les informations saisies, puis réessayez.");
   }
   if (result.hot_served !== true) await dashboard(agentId, "POST", "/api/gateway/restart");
+  forgetPlatforms(agentId);
 }
 
 // ---- WhatsApp: a QR pairing, not a credential ----
@@ -108,6 +130,7 @@ export function readWhatsappPairing(agentId: string, pairingId: string): Promise
 }
 
 export function applyWhatsappPairing(agentId: string, pairingId: string): Promise<{ ok?: boolean; detail?: string }> {
+  forgetPlatforms(agentId);
   return dashboard(agentId, "POST", `${WHATSAPP_ONBOARDING}/${encodeURIComponent(pairingId)}/apply`, {});
 }
 
@@ -131,6 +154,7 @@ export function applyTelegramPairing(
   pairingId: string,
   allowedUserIds: string[]
 ): Promise<{ ok?: boolean; detail?: string; bot_username?: string | null }> {
+  forgetPlatforms(agentId);
   return dashboard(agentId, "POST", `${TELEGRAM_ONBOARDING}/${encodeURIComponent(pairingId)}/apply`, {
     allowed_user_ids: allowedUserIds,
   });

@@ -1,6 +1,4 @@
-import { ApiError } from "@/lib/http";
-import { authViaBackoffice } from "@/lib/runtime-config";
-import { readSession } from "@/lib/session";
+import { requireBackofficeToken } from "@/lib/auth";
 
 // What `/api/account` and `/api/account/avatar` answer: the user's own profile, as the page edits it.
 export const profile = (u: { firstName: string | null; lastName: string | null; jobTitle: string | null; email: string; avatarUrl?: string | null; voices?: Record<string, Partial<Record<"fr" | "en", string>>> }) => ({
@@ -13,9 +11,4 @@ export const profile = (u: { firstName: string | null; lastName: string | null; 
 });
 
 /** The session's token: the profile is the back office's, and only there. */
-export async function token(): Promise<string> {
-  if (!authViaBackoffice()) throw new ApiError(404, "not_found", "Ce réglage n’est pas disponible.");
-  const session = await readSession();
-  if (!session) throw new ApiError(401, "unauthorized", "Connectez-vous pour continuer.");
-  return session.accessToken;
-}
+export const token = (): Promise<string> => requireBackofficeToken("Ce réglage n’est pas disponible.");

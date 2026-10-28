@@ -195,6 +195,9 @@ export function AgentWorkspace({
   if (isChat && !chatOpened) setChatOpened(true);
   const [filesOpened, setFilesOpened] = useState(isFiles);
   if (isFiles && !filesOpened) setFilesOpened(true);
+  // Routines, Appels and E-mails too: opened once, they stay mounted, so coming back asks nothing.
+  const [opened, setOpened] = useState<ReadonlySet<AgentTab>>(() => new Set([currentTab]));
+  if (!opened.has(currentTab)) setOpened(new Set([...opened, currentTab]));
 
   return (
     <ChatProvider
@@ -305,8 +308,8 @@ export function AgentWorkspace({
             </div>
           )}
           {/* Routines mount lazily in the padded scroll area. */}
-          {currentTab === "routines" && profileId && (
-            <div className="min-h-0 flex-1 overflow-y-auto">
+          {opened.has("routines") && profileId && (
+            <div className={cn("min-h-0 flex-1 overflow-y-auto", currentTab !== "routines" && "hidden")}>
               <div className="mx-auto w-full max-w-4xl p-6 md:px-10 md:py-8">
                 <ExpertRoutines
                   agentId={agentId}
@@ -320,17 +323,17 @@ export function AgentWorkspace({
               </div>
             </div>
           )}
-          {currentTab === "calls" && callee && (
-            <div className="min-h-0 flex-1 overflow-y-auto">
+          {opened.has("calls") && callee && (
+            <div className={cn("min-h-0 flex-1 overflow-y-auto", currentTab !== "calls" && "hidden")}>
               <div className="mx-auto w-full max-w-4xl p-6 md:px-10 md:py-8">
                 <ExpertCalls expert={callee} />
               </div>
             </div>
           )}
-          {currentTab === "emails" && profileId && (
-            <div className="min-h-0 flex-1 overflow-y-auto">
+          {opened.has("emails") && profileId && (
+            <div className={cn("min-h-0 flex-1 overflow-y-auto", currentTab !== "emails" && "hidden")}>
               <div className="mx-auto w-full max-w-4xl p-6 md:px-10 md:py-8">
-                <ExpertEmails inbox={inbox} expertName={expertName} loaded={mail.loaded} />
+                <ExpertEmails inbox={inbox} expertKey={expert?.catalogueKey ?? null} expertName={expertName} loaded={mail.loaded} />
               </div>
             </div>
           )}

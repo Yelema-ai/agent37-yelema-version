@@ -2,8 +2,8 @@
 // app reads one small status: `maintenance` (switched on by the back office before a push, off
 // after) and the deployment's `version`. From them, what the member sees.
 
-/** How often an open page asks, and once more when it comes back to the foreground. */
-export const DEPLOY_POLL_MS = 60_000;
+/** How often a visible page asks; hidden, never, and once when it shows again if a tick was due. */
+export const DEPLOY_POLL_MS = 150_000;
 
 export interface DeployStatus {
   version: string;

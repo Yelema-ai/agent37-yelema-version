@@ -11,7 +11,7 @@ import { ExpertImage } from "@/components/experts/ExpertImage";
 import { AvatarConfigModal } from "@/components/experts/AvatarConfigModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
-import { apiFetch, readApiError } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import type { ExpertAvatarDraft, ExpertLook } from "@/lib/backoffice";
 import { EXPERT_NAME_MAX, EXPERT_NAME_RULE, expertName } from "@/lib/expert-looks";
 import { MAX_UPLOAD_BYTES, TOO_LARGE } from "@/lib/upload-limit";
@@ -123,9 +123,7 @@ export function ExpertEditModal({
     const form = new FormData();
     if ("file" in p) form.set("file", p.file);
     else form.set("draftId", p.draft.draftId);
-    const res = await fetch(`${url}/avatar`, { method: "PUT", body: form });
-    if (!res.ok) throw new Error(await readApiError(res, "L’image n’a pas pu être enregistrée."));
-    return (await res.json()) as ExpertLook;
+    return apiFetch<ExpertLook>(`${url}/avatar`, { method: "PUT", body: form }, "L’image n’a pas pu être enregistrée");
   };
 
   const cleaned = expertName(name);

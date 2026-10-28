@@ -7,7 +7,7 @@ import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { apiFetch } from "@/lib/api";
 import type { LlmModelChoice, LlmWritten, LlmYelema, SettingScope } from "@/lib/llm";
 import { layoutOf, scopeParam, type InstanceScope, type LlmGroup, type LlmSetup, type ModelChoice, type ProfileModels } from "@/lib/llm-accounts";
-import { anyExpertOverride, fallbackModelGroups, profilesWith, withAllExperts, type ModelGroup } from "@/lib/model-options";
+import { anyExpertOverride, expertRows, fallbackModelGroups, profilesWith, withAllExperts, type ModelGroup } from "@/lib/model-options";
 import { ModelPicker } from "./ModelPicker";
 
 /** The Yelema engine's provider id when the server list is out of reach. */
@@ -25,7 +25,9 @@ export function ExpertModels({ scope, setup, yelema, models, groupName, onChange
   groupName: (g: LlmGroup) => string;
   onChanged: (out: LlmWritten | null) => Promise<void>;
 }) {
-  const { experts } = useExpertsContext();
+  const { experts: mine } = useExpertsContext();
+  // Sur l'instance d'un membre, ses experts à lui : ceux de l'administrateur y sont introuvables.
+  const experts = expertRows(scope.kind, mine, setup.experts);
   const [busy, setBusy] = useState(false);
   const [toggled, setToggled] = useState<boolean | null>(null);
   const groups = setup.groups;
@@ -37,7 +39,7 @@ export function ExpertModels({ scope, setup, yelema, models, groupName, onChange
 
   // Sans compte, seul le membre règle les modèles Yelema de sa propre instance.
   const yelemaOnly = !withAccounts && scope.kind === "own" && !!yelema && yelema.models.length > 1;
-  const profiles: ProfileModels | undefined = withAccounts ? setup.profiles : yelema ? Object.fromEntries(Object.entries(yelema.own.profiles).map(([p, m]) => [p, { provider: yelemaProvider, model: m }])) : undefined;
+  const profiles: ProfileModels | undefined = withAccounts ? setup.profiles : yelema ? Object.fromEntries(Object.entries(yelema.own?.profiles ?? {}).map(([p, m]) => [p, { provider: yelemaProvider, model: m }])) : undefined;
   // Fermé par défaut, sauf si un expert a déjà son propre modèle.
   const open = toggled ?? anyExpertOverride(profiles, experts.map((x) => x.profileId));
 
@@ -75,7 +77,7 @@ export function ExpertModels({ scope, setup, yelema, models, groupName, onChange
     void run(() => putLayout(groups, profilesWith(setup.profiles, profile, choice)));
   }
 
-  const allValue: ModelChoice | null = withAccounts ? { provider: groups[0]!.provider, model: groups[0]!.model } : yelema?.own.model ? { provider: yelemaProvider, model: yelema.own.model } : null;
+  const allValue: ModelChoice | null = withAccounts ? { provider: groups[0]!.provider, model: groups[0]!.model } : yelema?.own?.model ? { provider: yelemaProvider, model: yelema.own.model } : null;
   const defaultLabel = yelema ? `Par défaut (${yelema.models.find((m) => m.id === yelema.default)?.label ?? yelema.default})` : undefined;
 
   return (

@@ -23,6 +23,8 @@ const nextConfig: NextConfig = {
   // those of the tabs that moved to Intégrations before, still lead somewhere.
   async redirects() {
     return [
+      // Before any render: a redirect from the page would render the whole shell first.
+      { source: "/integrations", destination: "/integrations/connecteurs", permanent: false },
       { source: "/administration", destination: "/parametres/membres", permanent: false },
       { source: "/administration/membres", destination: "/parametres/membres", permanent: false },
       { source: "/administration/memoire", destination: "/parametres/entreprise", permanent: false },

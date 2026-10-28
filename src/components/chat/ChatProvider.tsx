@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from "sonner";
 import { useChatPresence } from "@/components/activity/hooks";
 import { apiFetch } from "@/lib/api";
+import { cached, remember } from "@/lib/client-cache";
+import { browserPollEnv, startPoll } from "@/lib/poll";
 import { mergeRail, movedUpstream } from "@/lib/chat-rail";
 import { profileQuery } from "@/lib/profile-id";
 import type { MergedAgent } from "@/lib/types";
@@ -58,6 +60,9 @@ export function useChatContext() {
 // pane, for ONE expert. The rail comes straight from the Agent37 Agents API (GET /v1/sessions?profile=) — there is no local
 // sessions table. Each row's label (server-side title, else the first-message preview) is resolved
 // by the sessions route, so the rail paints in one fetch with no per-session hydration.
+/** Where the rail of one space is published, as it is on screen (new and renamed threads included). */
+export const railViewKey = (agentId: string, profile: string | null) => `rail-view:${agentId}:${profile ?? ""}`;
+
 export function ChatProvider({
   agentId,
   profile,
@@ -82,10 +87,12 @@ export function ChatProvider({
 }) {
   // Every chat route takes the expert as ?profile=; threads of one expert are invisible to another.
   const q = profileQuery(profile);
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  // The rail last read for this expert, kept for the page's life: coming back to it paints at once.
+  const railKey = `sessions:${agentId}:${profile ?? ""}`;
+  const [sessions, setSessions] = useState<ChatSession[]>(() => cached<ChatSession[]>(railKey) ?? []);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(urlSessionId);
   const [composerFocusToken, setComposerFocusToken] = useState(0);
-  const [loadingSessions, setLoadingSessions] = useState(true);
+  const [loadingSessions, setLoadingSessions] = useState(() => cached(railKey) === undefined);
 
   // Adopt the thread from the URL whenever it changes — a rail click, Back/Forward, or a refresh.
   // Done during render (React's "adjust state when a prop changes" pattern) so there's no extra
@@ -110,7 +117,7 @@ export function ChatProvider({
   }, [onChatTab]);
 
   // The rail follows the instance: first load (retried while it wakes up), then every 30 s while the
-  // tab is visible, on focus, and on demand. A failed read keeps the rows already shown.
+  // tab is visible, once on return to it, and on demand. A failed read keeps the rows already shown.
   const [refreshingSessions, setRefreshingSessions] = useState(false);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [threadVersion, setThreadVersion] = useState(0);
@@ -128,6 +135,7 @@ export function ChatProvider({
         if (seq !== loadSeq.current) return;
         if (movedUpstream(serverRail.current, res.sessions, openRef.current)) setThreadVersion((v) => v + 1);
         serverRail.current = res.sessions;
+        remember(railKey, res.sessions);
         setSessions((prev) => mergeRail(res.sessions, prev));
         setSessionsError(null);
       } catch (e) {
@@ -145,26 +153,22 @@ export function ChatProvider({
         }
       }
     },
-    [agentId, q]
+    [agentId, q, railKey]
   );
 
   useEffect(() => {
-    serverRail.current = null;
-    setSessions([]);
-    setLoadingSessions(true);
+    const kept = cached<ChatSession[]>(railKey) ?? null;
+    serverRail.current = kept;
+    setSessions(kept ?? []);
+    setLoadingSessions(kept === null);
     void reloadSessions(3);
-    const tick = () => {
-      if (document.visibilityState === "visible") void reloadSessions();
-    };
-    const timer = setInterval(tick, 30_000);
-    document.addEventListener("visibilitychange", tick);
-    window.addEventListener("focus", tick);
+    // Every 30 s while visible; hidden, nothing, and one reading on the way back.
+    const poll = startPoll(() => reloadSessions(), { everyMs: 30_000, immediate: false }, browserPollEnv());
     return () => {
       loadSeq.current += 1;
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", tick);
-      window.removeEventListener("focus", tick);
+      poll.stop();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadSessions]);
 
   const requestComposerFocus = useCallback(() => setComposerFocusToken((n) => n + 1), []);
@@ -276,6 +280,11 @@ export function ChatProvider({
   }, []);
 
   // A routine run announced by the tracker joins the rail if it is not there yet.
+  // What the rail shows, for the other lists of the same space (the menu's company chats).
+  useEffect(() => {
+    if (!loadingSessions) remember(railViewKey(agentId, profile), sessions);
+  }, [agentId, profile, sessions, loadingSessions]);
+
   const addSession = useCallback((row: ChatSession) => {
     setSessions((prev) => (prev.some((s) => s.session_id === row.session_id) ? prev : [row, ...prev]));
   }, []);

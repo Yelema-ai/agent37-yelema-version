@@ -4,7 +4,7 @@
 // into the sentences a member reads. Contract: yelema-platform docs/specs/client-api-v1/app.md,
 // "Clés de modèle du client".
 
-import { ACCOUNT_REFUSALS, type LlmSetup } from "./llm-accounts.ts";
+import { ACCOUNT_REFUSALS, isRecord, readSetup, recordsOf, type LlmSetup } from "./llm-accounts.ts";
 
 /** `refused`: the provider no longer accepts the key; the experts do not answer until it is replaced or removed. */
 export type LlmState = "applied" | "pending" | "failed" | "refused";
@@ -86,6 +86,39 @@ export interface LlmYelema {
   models: { id: string; label: string }[];
   /** `model`: for the whole instance, null = Yelema's default. `profiles`: per expert, where it differs. */
   own: { model: string | null; profiles: Record<string, string> };
+}
+
+const str = (v: unknown): v is string => typeof v === "string";
+
+function readYelema(v: unknown): LlmYelema | null {
+  if (!isRecord(v)) return null;
+  const models = recordsOf(v.models, (m) => (str(m.id) ? { id: m.id, label: str(m.label) ? m.label : m.id } : null));
+  if (!models.length) return null;
+  const own = isRecord(v.own) ? v.own : {};
+  const profiles = isRecord(own.profiles) ? (Object.fromEntries(Object.entries(own.profiles).filter(([, m]) => str(m))) as Record<string, string>) : {};
+  return { default: str(v.default) ? v.default : models[0]!.id, models, own: { model: str(own.model) ? own.model : null, profiles } };
+}
+
+const readKey = (v: unknown): LlmKey | null => (isRecord(v) && str(v.provider) && str(v.hint) ? (v as unknown as LlmKey) : null);
+
+/** `GET /api/llm` as the models screen renders it: missing or malformed parts become empty, never a crash. */
+export function readOverview(v: unknown): LlmOverview {
+  const o = isRecord(v) ? v : {};
+  return {
+    catalogue: recordsOf(o.catalogue, (p) =>
+      str(p.id) && str(p.label) ? ({ ...p, id: p.id, label: p.label, family: str(p.family) ? p.family : p.id, placeholder: str(p.placeholder) ? p.placeholder : "" } as LlmProvider) : null,
+    ),
+    mine: isRecord(o.mine) ? (o.mine as unknown as LlmMine) : null,
+    own: readKey(o.own),
+    membersMayBringKey: o.membersMayBringKey === true,
+    logins: recordsOf(o.logins, (l) => (str(l.id) && str(l.label) ? { id: l.id, label: l.label, family: str(l.family) ? l.family : l.id } : null)),
+    yelema: readYelema(o.yelema),
+    customEndpoints: o.customEndpoints === true,
+    ...(Array.isArray(o.members)
+      ? { members: recordsOf(o.members, (m) => (str(m.id) && str(m.email) ? ({ ...m, id: m.id, email: m.email, name: str(m.name) ? m.name : null, own: readKey(m.own), setup: readSetup(m.setup) } as LlmMember) : null)) }
+      : {}),
+    setup: readSetup(o.setup),
+  };
 }
 
 /** A pick among Yelema's models: for the whole instance, or for one expert (`profile`). `model: null` goes back to the default. */

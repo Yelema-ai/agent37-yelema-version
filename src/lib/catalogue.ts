@@ -1,4 +1,5 @@
 import "server-only";
+import { memo } from "@/lib/memo";
 import { backofficeUrl } from "@/lib/runtime-config";
 import type { CatalogueExpert, CatalogueExpertDetail, ExpertSheet } from "@/lib/types";
 
@@ -13,6 +14,8 @@ import type { CatalogueExpert, CatalogueExpertDetail, ExpertSheet } from "@/lib/
 
 const TTL_MS = 10 * 60_000;
 const TIMEOUT_MS = 8_000;
+// After a failed read with nothing kept, the next one waits this long instead of every request paying the timeout.
+const RETRY_AFTER_MS = 30_000;
 
 export interface Catalogue {
   available: boolean;
@@ -24,7 +27,10 @@ export interface Catalogue {
 const EMPTY: Catalogue = { available: false, defaultExpertKey: null, categories: [], experts: [] };
 
 let listCache: { at: number; value: Catalogue } | null = null;
-const detailCache = new Map<string, { at: number; value: CatalogueExpertDetail | null }>();
+let listFailedAt = 0;
+// A failed read throws inside the loader, so it is never kept: only an answer (or a 404) is.
+const details = memo<CatalogueExpertDetail | null>({ ttlMs: TTL_MS, staleOnErrorMs: 6 * 60 * 60_000, maxEntries: 500, maxFlightMs: TIMEOUT_MS + 2_000 });
+class Unreachable extends Error {}
 
 type Raw = Record<string, unknown>;
 
@@ -115,7 +121,8 @@ function toDetail(raw: Raw): CatalogueExpertDetail | null {
   };
 }
 
-async function getJson(path: string): Promise<unknown | null> {
+// null: the back office has no such thing (404) or is not configured; undefined: it did not answer.
+async function getJson(path: string): Promise<unknown | null | undefined> {
   const base = backofficeUrl();
   if (!base) return null;
   try {
@@ -124,14 +131,15 @@ async function getJson(path: string): Promise<unknown | null> {
       cache: "no-store",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+    if (res.status === 404) return null;
     if (!res.ok) {
-      if (res.status !== 404) console.error(`[catalogue] ${path}: ${res.status}`);
-      return null;
+      console.error(`[catalogue] ${path}: ${res.status}`);
+      return undefined;
     }
     return await res.json();
   } catch (e) {
     console.error(`[catalogue] ${path} unreachable:`, e instanceof Error ? e.message : e);
-    return null;
+    return undefined;
   }
 }
 
@@ -139,6 +147,7 @@ let listLoading: Promise<Catalogue> | null = null;
 
 export async function loadCatalogue(): Promise<Catalogue> {
   if (listCache && Date.now() - listCache.at < TTL_MS) return listCache.value;
+  if (!listCache && Date.now() - listFailedAt < RETRY_AFTER_MS) return EMPTY;
   // One fetch for every caller waiting on it; a copy past its time is served while it runs.
   listLoading ??= fetchCatalogue().finally(() => {
     listLoading = null;
@@ -154,7 +163,9 @@ async function fetchCatalogue(): Promise<Catalogue> {
   const envelope = (body && !Array.isArray(body) && typeof body === "object" ? body : {}) as Raw;
   const rows = Array.isArray(body) ? body : Array.isArray(envelope.experts) ? envelope.experts : null;
   if (!rows) {
-    // Keep a stale copy over an empty screen when the back office blips.
+    // Keep a stale copy over an empty screen when the back office blips; ask again a little later.
+    if (body === undefined) listFailedAt = Date.now();
+    if (listCache) listCache = { at: Date.now() - TTL_MS + RETRY_AFTER_MS, value: listCache.value };
     return listCache?.value ?? EMPTY;
   }
 
@@ -188,13 +199,16 @@ async function fetchCatalogue(): Promise<Catalogue> {
 }
 
 export async function loadCatalogueExpert(key: string): Promise<CatalogueExpertDetail | null> {
-  const hit = detailCache.get(key);
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
-  const body = await getJson(`/api/v1/public/experts/${encodeURIComponent(key)}`);
-  const value = body && typeof body === "object" ? toDetail(body as Raw) : null;
-  // Do not remember a miss when the back office is merely unreachable.
-  if (value || backofficeUrl()) detailCache.set(key, { at: Date.now(), value });
-  return value;
+  try {
+    return await details.get(key, async () => {
+      const body = await getJson(`/api/v1/public/experts/${encodeURIComponent(key)}`);
+      // An outage is not "no such expert": it is not kept, the next request asks again.
+      if (body === undefined) throw new Unreachable();
+      return body && typeof body === "object" ? toDetail(body as Raw) : null;
+    });
+  } catch {
+    return null;
+  }
 }
 
 // ---- Joining a Hermes profile to its catalogue entry ------------------------------------------

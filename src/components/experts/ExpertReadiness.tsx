@@ -7,6 +7,7 @@ import { readiness, type JourZero } from "@/lib/jour-zero";
 import { cn } from "@/lib/utils";
 import { UpdateSpinner, useDeployPhase } from "@/components/app/DeployStatus";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { cached, cachedFetch } from "@/lib/client-cache";
 
 const TONE = {
   ready: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300",
@@ -28,20 +29,23 @@ export function ExpertReadiness({
   onOpenTools: () => void;
   className?: string;
 }) {
-  const [jz, setJz] = useState<JourZero | null>(null);
+  const jzKey = `jour-zero:${agentId}:${profileId}`;
+  const [jz, setJz] = useState<JourZero | null>(() => cached<JourZero>(jzKey) ?? null);
   const [open, setOpen] = useState(false);
   const updating = useDeployPhase() === "maintenance";
 
+  // Changes as the expert prepares itself: kept a minute, so moving between experts asks nothing.
   useEffect(() => {
     let live = true;
-    apiFetch<JourZero>(`/api/agents/${agentId}/experts/${profileId}/jour-zero`).then(
+    setJz(cached<JourZero>(jzKey) ?? null);
+    cachedFetch(jzKey, () => apiFetch<JourZero>(`/api/agents/${agentId}/experts/${profileId}/jour-zero`), 60_000).then(
       (r) => live && setJz(r),
       () => undefined
     );
     return () => {
       live = false;
     };
-  }, [agentId, profileId]);
+  }, [agentId, profileId, jzKey]);
 
   // During an update the chip says so: the expert answers slower, and it is not a fault of its own.
   if (updating)

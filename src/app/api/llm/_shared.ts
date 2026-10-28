@@ -1,23 +1,15 @@
 import { NextResponse } from "next/server";
 import { BackofficeError } from "@/lib/backoffice";
-import { ApiError, apiError, handleError } from "@/lib/http";
+import { apiError, handleError } from "@/lib/http";
 import { llmRefusalMessage } from "@/lib/llm";
-import { authViaBackoffice } from "@/lib/runtime-config";
-import { readSession } from "@/lib/session";
+import { requireBackofficeToken } from "@/lib/auth";
 
 // The model keys are the back office's: these routes exist only where it signs users in. They
 // answer the session token to call it with and nothing about the caller's role, which the back
 // office reads on the session itself, on every call.
-export async function settingsToken(): Promise<string> {
-  if (!authViaBackoffice()) throw new ApiError(404, "not_found", "Ce réglage n’est pas disponible.");
-  const session = await readSession();
-  if (!session) throw new ApiError(401, "unauthorized", "Connectez-vous pour continuer.");
-  return session.accessToken;
-}
+export const settingsToken = (): Promise<string> => requireBackofficeToken("Ce réglage n’est pas disponible.");
 
-export function noStore<T>(data: T): NextResponse {
-  return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
-}
+export { noStore } from "@/lib/http";
 
 // A refusal of the back office reaches the member as a sentence written here, chosen by its code:
 // its own text is for the operator. An expired session and an outage keep their usual answers.

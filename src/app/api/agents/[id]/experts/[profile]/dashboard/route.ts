@@ -2,7 +2,10 @@ import { backoffice, BackofficeError, type BoDashboardShareView, type DashboardS
 import { shareForBrowser, shareUrlOf } from "@/lib/dashboard-share";
 import { agent37, instanceFetch } from "@/lib/agent37";
 import { requireAgentAccess } from "@/lib/auth";
-import { getDashboardMeta, getDashboardStateCandidatePaths } from "@/lib/dashboards";
+import { fetchCachedDashboardState } from "@/lib/dashboard-cache";
+import { getDashboardMeta, isTrustedDashboardUrl } from "@/lib/dashboards";
+import { JSON_TIMEOUT_MS, withTimeout } from "@/lib/fetch-timeout";
+import { memo } from "@/lib/memo";
 import { ApiError, handleError, json, readJson } from "@/lib/http";
 import { authViaBackoffice } from "@/lib/runtime-config";
 import { readSession } from "@/lib/session";
@@ -23,7 +26,107 @@ async function shareAnswer(view: BoDashboardShareView | null) {
   return { ...shareForBrowser(view), shareUrl: shareUrlOf(await pinnedWorkspaceId().catch(() => undefined), view) };
 }
 
-export async function GET(request: Request, { params }: Ctx) {
+// What the instance holds for a dashboard: its link, files and the team view. Kept a few seconds,
+// so the generation poll and several tabs share one reading; longer once the link is there.
+interface InstanceView {
+  lien: string | null;
+  hebergeur: string;
+  maj: string | null;
+  pdfPath: string | null;
+  htmlPath: string | null;
+  pptxPath: string | null;
+  teamViewLien: string | null;
+}
+const views = memo<InstanceView>({ ttlMs: 30_000, ttlOf: (v) => (v.lien ? 30_000 : 5_000), maxEntries: 500, maxFlightMs: 60_000 });
+const MAX_SUBFOLDERS = 8;
+
+const trusted = (url: unknown): string | null => (isTrustedDashboardUrl(url) ? url.trim() : null);
+
+async function readJsonFile(id: string, path: string): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await instanceFetch(id, `/v1/files/content?path=${encodeURIComponent(path)}`, withTimeout(undefined, JSON_TIMEOUT_MS));
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => undefined);
+      return null;
+    }
+    const parsed = JSON.parse(await res.text()) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+const listOrEmpty = (id: string, dir: string) => agent37.listFiles(id, dir).then((r) => r.entries ?? [], () => []);
+
+// The first PDF, HTML and PowerPoint found, folders in order, a folder's sub-folders in place of it.
+async function deliverableFiles(id: string, dirs: string[]): Promise<Pick<InstanceView, "pdfPath" | "htmlPath" | "pptxPath">> {
+  const levels = await Promise.all(dirs.map((d) => listOrEmpty(id, d)));
+  const subdirs = levels.flatMap((entries, i) => entries.filter((e) => e.type === "directory" && e.name !== "archives").map((e) => `${dirs[i]}/${e.name}`)).slice(0, MAX_SUBFOLDERS);
+  const nested = new Map((await Promise.all(subdirs.map(async (d) => [d, await listOrEmpty(id, d)] as const))));
+  const out = { pdfPath: null as string | null, htmlPath: null as string | null, pptxPath: null as string | null };
+  const take = (name: string, path: string) => {
+    const n = name.toLowerCase();
+    if (!out.pdfPath && n.endsWith(".pdf")) out.pdfPath = path;
+    if (!out.htmlPath && n.endsWith(".html")) out.htmlPath = path;
+    if (!out.pptxPath && n.endsWith(".pptx")) out.pptxPath = path;
+  };
+  levels.forEach((entries, i) => {
+    for (const entry of entries) {
+      if (entry.type === "directory") for (const sub of nested.get(`${dirs[i]}/${entry.name}`) ?? []) take(sub.name, sub.path);
+      else if (entry.type === "file") take(entry.name, entry.path);
+    }
+  });
+  return out;
+}
+
+// Before the state file lands, the link may already be in one of the last conversations.
+async function linkFromSessions(id: string, profile: string): Promise<string | null> {
+  const q = `?profile=${encodeURIComponent(profile)}`;
+  try {
+    const { data: sessions } = await agent37.listSessions(id, q);
+    const details = await Promise.all((sessions ?? []).slice(0, 3).map((s) => agent37.getSession(id, s.id, q).catch(() => null)));
+    for (const detail of details) {
+      const history = detail?.history ?? [];
+      for (let i = history.length - 1; i >= 0; i--) {
+        const match = (history[i].content || "").match(/https:\/\/(?:mstudio-frames\.onrender\.com|yelema-dashboards\.onrender\.com)\/share\/frame\/[a-zA-Z0-9_\-]+/i);
+        const link = trusted(match?.[0]);
+        if (link) return link;
+      }
+    }
+  } catch {
+    // No fallback: the dashboard shows its model.
+  }
+  return null;
+}
+
+async function instanceView(id: string, profile: string): Promise<InstanceView> {
+  const capitalized = profile.charAt(0).toUpperCase() + profile.slice(1).toLowerCase();
+  const isDjeneba = profile.toLowerCase().includes("djeneba");
+  const defaults = [`Livrables/${capitalized}/Tableau-de-bord`, `Livrables/${profile}/Tableau-de-bord`];
+  const [state, team, defaultFiles] = await Promise.all([
+    fetchCachedDashboardState(id, profile),
+    isDjeneba
+      ? Promise.all(
+          [`Livrables/Djeneba/_memoire/state/tableaux-de-l-equipe.json`, `Livrables/${capitalized}/_memoire/state/tableaux-de-l-equipe.json`, `memory/state/tableaux-de-l-equipe.json`].map((p) => readJsonFile(id, p))
+        ).then((all) => all.map((t) => trusted(t?.lien)).find(Boolean) ?? null)
+      : Promise.resolve(null),
+    deliverableFiles(id, defaults),
+  ]);
+  const lien = trusted(state?.lien);
+  const folder = lien && typeof state?.fichiers === "string" ? state.fichiers.trim() : "";
+  const own = folder ? await deliverableFiles(id, [`Livrables/${capitalized}/${folder}`.replace(/\/+$/, ""), `Livrables/${profile}/${folder}`.replace(/\/+$/, "")]) : null;
+  return {
+    lien: lien ?? (await linkFromSessions(id, profile)),
+    hebergeur: lien && typeof state?.hebergeur === "string" ? state.hebergeur : "render",
+    maj: lien && typeof state?.maj === "string" ? state.maj : null,
+    pdfPath: own?.pdfPath ?? defaultFiles.pdfPath,
+    htmlPath: own?.htmlPath ?? defaultFiles.htmlPath,
+    pptxPath: own?.pptxPath ?? defaultFiles.pptxPath,
+    teamViewLien: team,
+  };
+}
+
+export async function GET(_request: Request, { params }: Ctx) {
   try {
     const { id, profile } = await params;
     if (!profile || !/^[a-z0-9_-]+$/i.test(profile)) {
@@ -32,8 +135,6 @@ export async function GET(request: Request, { params }: Ctx) {
     await requireAgentAccess(id);
 
     const meta = getDashboardMeta(profile);
-    const isDjeneba = profile.toLowerCase().includes("djeneba");
-
     if (!meta) {
       return json({
         available: false,
@@ -41,151 +142,13 @@ export async function GET(request: Request, { params }: Ctx) {
       });
     }
 
-    let state = {
-      lien: null as string | null,
-      hebergeur: "render",
-      maj: null as string | null,
-      pdfPath: null as string | null,
-      htmlPath: null as string | null,
-      pptxPath: null as string | null,
-    };
-
-    const capitalizedProfile = profile.charAt(0).toUpperCase() + profile.slice(1).toLowerCase();
-    const candidatePaths = getDashboardStateCandidatePaths(profile);
-
-    let foundFichiersFolder: string | null = null;
-
-    for (const p of candidatePaths) {
-      try {
-        const res = await instanceFetch(id, `/v1/files/content?path=${encodeURIComponent(p)}`);
-        if (res.ok) {
-          const text = await res.text();
-          const parsed = JSON.parse(text);
-          if (parsed && typeof parsed === "object" && typeof parsed.lien === "string" && parsed.lien) {
-            state = {
-              lien: parsed.lien,
-              hebergeur: typeof parsed.hebergeur === "string" ? parsed.hebergeur : "render",
-              maj: typeof parsed.maj === "string" ? parsed.maj : null,
-              pdfPath: null,
-              htmlPath: null,
-              pptxPath: null,
-            };
-
-            if (typeof parsed.fichiers === "string" && parsed.fichiers.trim()) {
-              foundFichiersFolder = parsed.fichiers.trim();
-            }
-            break;
-          }
-        }
-      } catch {
-        // try next candidate path
-      }
-    }
-
     // Who may read it is the back office's; a share it cannot read is shown as not shared.
-    const sharing = authViaBackoffice() && (await readSession()) !== null;
-    const share = sharing ? await backoffice.dashboardShare(await shareToken(), profile).catch(() => null) : null;
-
-    // Recherche des fichiers PDF et HTML de livrable
-    try {
-      const searchDirs: string[] = [];
-      if (foundFichiersFolder) {
-        searchDirs.push(`Livrables/${capitalizedProfile}/${foundFichiersFolder}`.replace(/\/+$/, ""));
-        searchDirs.push(`Livrables/${profile}/${foundFichiersFolder}`.replace(/\/+$/, ""));
-      }
-      searchDirs.push(`Livrables/${capitalizedProfile}/Tableau-de-bord`);
-      searchDirs.push(`Livrables/${profile}/Tableau-de-bord`);
-
-      for (const dir of searchDirs) {
-        try {
-          const listRes = await agent37.listFiles(id, dir);
-          const entries = listRes.entries || [];
-          
-          for (const entry of entries) {
-            if (entry.type === "directory" && entry.name !== "archives" && !state.pdfPath) {
-              try {
-                const subRes = await agent37.listFiles(id, `${dir}/${entry.name}`);
-                for (const sub of subRes.entries || []) {
-                  if (!state.pdfPath && sub.name.toLowerCase().endsWith(".pdf")) {
-                    state.pdfPath = sub.path;
-                  }
-                  if (!state.htmlPath && sub.name.toLowerCase().endsWith(".html")) {
-                    state.htmlPath = sub.path;
-                  }
-                  if (!state.pptxPath && sub.name.toLowerCase().endsWith(".pptx")) {
-                    state.pptxPath = sub.path;
-                  }
-                }
-              } catch {}
-            } else if (entry.type === "file") {
-              if (!state.pdfPath && entry.name.toLowerCase().endsWith(".pdf")) {
-                state.pdfPath = entry.path;
-              }
-              if (!state.htmlPath && entry.name.toLowerCase().endsWith(".html")) {
-                state.htmlPath = entry.path;
-              }
-              if (!state.pptxPath && entry.name.toLowerCase().endsWith(".pptx")) {
-                state.pptxPath = entry.path;
-              }
-            }
-          }
-          if (state.pdfPath && state.htmlPath && state.pptxPath) break;
-        } catch {}
-      }
-    } catch {
-      // Ignorer les erreurs d'énumération des fichiers
-    }
-
-    let teamLien: string | null = null;
-    if (isDjeneba) {
-      const teamCandidatePaths = [
-        `Livrables/Djeneba/_memoire/state/tableaux-de-l-equipe.json`,
-        `Livrables/${capitalizedProfile}/_memoire/state/tableaux-de-l-equipe.json`,
-        `memory/state/tableaux-de-l-equipe.json`,
-      ];
-      for (const p of teamCandidatePaths) {
-        try {
-          const teamRes = await instanceFetch(id, `/v1/files/content?path=${encodeURIComponent(p)}`);
-          if (teamRes.ok) {
-            const teamText = await teamRes.text();
-            const parsedTeam = JSON.parse(teamText);
-            if (parsedTeam && typeof parsedTeam.lien === "string" && parsedTeam.lien) {
-              teamLien = parsedTeam.lien;
-              break;
-            }
-          }
-        } catch {
-          // try next path
-        }
-      }
-    }
-
-    // Fallback: si le fichier n'est pas encore sur le disque de l'instance, verifier les derniers messages de session
-    if (!state.lien) {
-      try {
-        const { data: sessions } = await agent37.listSessions(id, `?profile=${encodeURIComponent(profile)}`);
-        if (sessions && sessions.length > 0) {
-          for (const s of sessions.slice(0, 3)) {
-            const detail = await agent37.getSession(id, s.id, `?profile=${encodeURIComponent(profile)}`);
-            const history = detail.history || [];
-            for (let i = history.length - 1; i >= 0; i--) {
-              const content = history[i].content || "";
-              const match = content.match(/https:\/\/(?:mstudio-frames\.onrender\.com|yelema-dashboards\.onrender\.com)\/share\/frame\/[a-zA-Z0-9_\-]+/i);
-              if (match) {
-                state.lien = match[0];
-                state.hebergeur = "render";
-                break;
-              }
-            }
-            if (state.lien) break;
-          }
-        }
-      } catch {
-        // Ignorer les erreurs du fallback
-      }
-    }
-
-    const previewUrl = state.lien || `/modeles/${meta.modelFile}`;
+    const session = authViaBackoffice() ? await readSession() : null;
+    const sharing = session !== null;
+    const [view, share] = await Promise.all([
+      views.get(`${id}:${profile.toLowerCase()}`, () => instanceView(id, profile)),
+      session ? backoffice.dashboardShare(session.accessToken, profile).catch(() => null) : Promise.resolve(null),
+    ]);
 
     return json({
       available: true,
@@ -194,15 +157,15 @@ export async function GET(request: Request, { params }: Ctx) {
       role: meta.role,
       reader: meta.reader,
       kpis: meta.kpis,
-      lien: state.lien,
-      hebergeur: state.hebergeur || "render",
-      maj: state.maj,
-      pdfPath: state.pdfPath,
-      pptxPath: state.pptxPath,
-      htmlPath: state.htmlPath,
-      previewUrl,
-      isDjeneba,
-      teamViewLien: teamLien,
+      lien: view.lien,
+      hebergeur: view.hebergeur,
+      maj: view.maj,
+      pdfPath: view.pdfPath,
+      pptxPath: view.pptxPath,
+      htmlPath: view.htmlPath,
+      previewUrl: view.lien || `/modeles/${meta.modelFile}`,
+      isDjeneba: profile.toLowerCase().includes("djeneba"),
+      teamViewLien: view.teamViewLien,
       sharing,
       ...(await shareAnswer(share)),
     });

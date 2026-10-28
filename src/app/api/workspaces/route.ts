@@ -1,9 +1,8 @@
 import { requireUser } from "@/lib/auth";
 import { authViaBackoffice } from "@/lib/runtime-config";
 import { pinnedWorkspaceId } from "@/lib/tenant";
-import { currentPrincipal } from "@/lib/session";
+import { currentPrincipal, workspaceOfMe } from "@/lib/session";
 import { handleError, json, ApiError, dbError } from "@/lib/http";
-import type { BoMe } from "@/lib/backoffice";
 import type { Role, Workspace, WorkspaceWithRole } from "@/lib/types";
 
 export async function GET() {
@@ -11,7 +10,7 @@ export async function GET() {
     const { db, user } = await requireUser();
     if (authViaBackoffice()) {
       const me = await currentPrincipal();
-      return json({ workspaces: me ? [workspaceOf(me)] : [] });
+      return json({ workspaces: me ? [workspaceOfMe(me)] : [] });
     }
     // A deployment only ever lists its own client's workspace (shared database).
     let query = db.from("memberships").select("role, workspaces(*)").eq("user_id", user.id);
@@ -35,10 +34,6 @@ export async function GET() {
   }
 }
 
-// The one workspace of a user signed in through the back office, in this app's shape.
-function workspaceOf(me: BoMe): WorkspaceWithRole {
-  return { id: me.workspace.id, name: me.workspace.name, owner_id: "", created_at: "", role: me.user.role, logo_url: me.workspace.logoUrl, brand_color: me.workspace.brandColor ?? null, access: me.access ?? "instance" };
-}
 
 export async function POST() {
   try {

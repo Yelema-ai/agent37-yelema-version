@@ -132,7 +132,7 @@ export default function LoginPage() {
         </span>
         <AuthHeading title="Vérifiez vos emails">
           Un lien vient de partir vers <b className="text-ink">{sentTo.current}</b>. Il reste
-          valable 30 minutes.
+          valable 24 heures.
         </AuthHeading>
 
         <div className="flex items-start gap-2.5 rounded-xl bg-soft px-3.5 py-3 text-[13.5px] text-ink-2">

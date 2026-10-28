@@ -3,7 +3,10 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { isTrustedDashboardUrl as isTrustedFrameUrl } from "@/lib/dashboards";
+import { usePoll } from "@/components/usePoll";
 import type { ChatMessage } from "@/components/chat/types";
+import type { DashboardShareMode } from "@/lib/backoffice";
 
 const WIDE = "(min-width: 85rem)";
 
@@ -31,7 +34,7 @@ export interface DashboardData {
   shareUrl?: string | null;
 }
 
-export type ShareMode = "team" | "people" | "link";
+export type ShareMode = DashboardShareMode;
 type ShareAnswer = Pick<DashboardData, "share" | "candidates" | "shareUrl">;
 
 interface DashboardContextValue {
@@ -75,24 +78,16 @@ export function useDashboard() {
   return ctx;
 }
 
+/** A frame of the dashboard host (36-hex id, lib/dashboards), or one of this app's own models. */
+export function isTrustedDashboardUrl(url: string | null | undefined): url is string {
+  if (!url) return false;
+  if (url.startsWith("/modeles/")) return !url.includes("..") && !url.includes("//");
+  return isTrustedFrameUrl(url);
+}
+
 /**
  * Extrait le dernier lien de tableau de bord ou frame partage dans l'historique des messages.
  */
-export function isTrustedDashboardUrl(url: string): boolean {
-  if (!url) return false;
-  if (url.startsWith("/modeles/")) return true;
-  try {
-    const parsed = new URL(url);
-    const h = parsed.hostname.toLowerCase();
-    return (
-      (h === "mstudio-frames.onrender.com" || h === "yelema-dashboards.onrender.com") &&
-      parsed.pathname.startsWith("/share/frame/")
-    );
-  } catch {
-    return false;
-  }
-}
-
 export function extractDashboardLinkFromMessages(messages: ChatMessage[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
@@ -173,14 +168,8 @@ export function DashboardProvider({
     }
   }, [isGenerating, isStreaming, openDashboard, onTriggerTableau]);
 
-  // Polling pendant la generation pour recuperer le lien des qu'il est ecrit sur l'instance
-  useEffect(() => {
-    if (!isGenerating) return;
-    const interval = setInterval(() => {
-      void fetchDashboard();
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [isGenerating, fetchDashboard]);
+  // Pendant la génération, relu toutes les 5 s (onglet visible), 10 min au plus, pour voir arriver le lien.
+  usePoll(fetchDashboard, { everyMs: 5_000, deadlineMs: 10 * 60_000, immediate: false, enabled: isGenerating });
 
   // Detection automatique du lien depuis les messages du chat
   const messageUrl = useMemo(() => {
@@ -190,23 +179,22 @@ export function DashboardProvider({
 
   // URL publique active (pour affichage, lien externe, partage)
   const activeUrl = useMemo(() => {
+    // Only a link the dashboard host serves (or one of our models) is ever framed or opened.
+    const pick = (...urls: (string | null | undefined)[]) => urls.find(isTrustedDashboardUrl) ?? null;
     if (activeTab === "equipe" && data?.isDjeneba) {
-      return data.teamViewLien || customUrl || messageUrl || null;
+      return pick(data.teamViewLien, customUrl, messageUrl);
     }
-    return customUrl || data?.lien || messageUrl || null;
+    return pick(customUrl, data?.lien, messageUrl);
   }, [customUrl, data, messageUrl, activeTab]);
 
   // URL pour l'integration dans l'iframe (securisee par sandbox strict sans allow-same-origin)
   const embedUrl = useMemo(() => {
     if (!activeUrl) return null;
-    if (
-      activeUrl.startsWith("https://mstudio-frames.onrender.com/share/frame/") ||
-      activeUrl.startsWith("https://yelema-dashboards.onrender.com/share/frame/")
-    ) {
-      if (agentId && profile) { return `/api/dashboards/frame?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`; } return activeUrl;
+    if (isTrustedFrameUrl(activeUrl) && agentId && profile) {
+      return `/api/dashboards/frame?agentId=${encodeURIComponent(agentId)}&profile=${encodeURIComponent(profile)}`;
     }
     return activeUrl;
-  }, [activeUrl]);
+  }, [activeUrl, agentId, profile]);
 
   // Quand le lien arrive alors qu'on generait
   useEffect(() => {

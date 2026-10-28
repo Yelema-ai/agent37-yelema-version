@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { useMyAgents } from "@/components/useMyAgents";
 import type { Companion } from "@/lib/companion";
 import type { Expert } from "@/lib/types";
 
@@ -34,8 +35,8 @@ export interface InitialExperts {
 
 const woken = new Set<string>();
 
-// While the back office installs the experts, the list is read again at this pace.
-const INSTALL_POLL_MS = 10_000;
+// While the back office installs the experts, the list is read again at this pace (tab visible).
+const INSTALL_POLL_MS = 15_000;
 // An installation takes minutes. The back office only says "not ready", never "failed": past this
 // long the wait is called off, so a failed one does not leave the screen turning forever.
 const INSTALL_GIVE_UP_MS = 15 * 60_000;
@@ -168,23 +169,38 @@ export function useExperts(workspaceId: string | undefined, initial: InitialExpe
       setStalled(true);
       return;
     }
-    const timer = setTimeout(() => {
+    const next = () => {
       quiet.current = true;
       setTick((t) => t + 1);
-    }, INSTALL_POLL_MS);
-    return () => clearTimeout(timer);
+    };
+    // Hidden: the next reading waits for the tab to show again.
+    const onShown = () => {
+      if (document.visibilityState === "hidden") return;
+      document.removeEventListener("visibilitychange", onShown);
+      next();
+    };
+    const timer = setTimeout(() => (document.hidden ? document.addEventListener("visibilitychange", onShown) : next()), INSTALL_POLL_MS);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onShown);
+    };
   }, [installing, tick, workspaceId]);
 
   // An instance asleep takes seconds to answer its first request. Asking it something light as soon
   // as the app opens gets that wait over with before the user opens a chat or a folder. Once per
   // instance and per page load; the answer is not used.
+  // Not where the page itself asks the instance at once (an expert's space), nor for one running.
+  const { agents } = useMyAgents(workspaceId);
   useEffect(() => {
+    if (window.location.pathname.startsWith("/experts/")) return;
     for (const agentId of new Set(experts.map((e) => e.agentId))) {
       if (woken.has(agentId)) continue;
+      const state = agents.find((a) => a.agent37_id === agentId)?.live_status;
+      if (state === "running") continue;
       woken.add(agentId);
       fetch(`/api/agents/${agentId}/chat/models`).catch(() => {});
     }
-  }, [experts]);
+  }, [experts, agents]);
 
   return { experts: shown, companion, unreadable, installing, stalled, failed: failure.failed, failedExperts: failure.experts, loading, reload, applyLook };
 }

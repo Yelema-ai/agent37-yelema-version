@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { browserPollEnv, startPoll } from "@/lib/poll";
 import { DEPLOY_POLL_MS, deployPhase, parseDeployStatus, type DeployPhase, type DeployStatus } from "@/lib/deploy-status";
 import { cn } from "@/lib/utils";
 
@@ -40,14 +41,10 @@ export function DeployStatusProvider({ children }: { children: React.ReactNode }
         },
         () => undefined
       );
-    void ask();
-    const timer = window.setInterval(ask, DEPLOY_POLL_MS);
-    const onFocus = () => document.visibilityState === "visible" && void ask();
-    document.addEventListener("visibilitychange", onFocus);
+    const poll = startPoll(ask, { everyMs: DEPLOY_POLL_MS }, browserPollEnv());
     return () => {
       live = false;
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onFocus);
+      poll.stop();
     };
   }, []);
 

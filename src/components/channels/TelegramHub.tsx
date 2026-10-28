@@ -5,6 +5,7 @@ import { AlertTriangle, Check, Copy, ExternalLink, Loader2, RefreshCw, RotateCcw
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DisconnectButton } from "@/components/channels/DisconnectButton";
+import { TelegramStartLink } from "@/components/channels/TelegramStartLink";
 import { isTelegramLink, type TelegramHubApi } from "@/components/channels/useTelegramHub";
 
 const WARN_ICON = "mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400";
@@ -34,17 +35,14 @@ export function TelegramHub({ hub, source, canManage }: { hub: TelegramHubApi; s
             <p className="text-sm font-semibold">Bot Yelema</p>
             <p className="text-xs text-muted-foreground">Un bot à vous, créé en un geste, et un groupe où chaque Expert a son sujet.</p>
           </div>
-          {canManage && (
-            <Button onClick={() => (other ? setConfirmReplace(true) : void hub.connect())} disabled={busy || hub.waiting}>
-              {hub.busy === "link" || hub.waiting ? <><Loader2 className="animate-spin" />{hub.waiting ? "En attente de Telegram…" : "Ouverture…"}</> : "Connecter Telegram"}
+          {canManage && !hub.link && (
+            <Button onClick={() => (other ? setConfirmReplace(true) : void hub.connect())} disabled={busy}>
+              {hub.busy === "link" ? <><Loader2 className="animate-spin" />Ouverture…</> : "Connecter Telegram"}
             </Button>
           )}
         </div>
-        {hub.waiting && (
-          <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            Dans Telegram : appuyez sur Démarrer, puis sur « Créer mon bot Yelema » et confirmez.
-            <button type="button" onClick={hub.stopWaiting} className="font-semibold text-ink-2 hover:underline">Annuler</button>
-          </p>
+        {hub.link && (
+          <TelegramStartLink url={hub.link.url} started={hub.link.started} since={hub.waitingSince} onCancel={() => void hub.stopWaiting()} busy={busy} />
         )}
         <ConfirmDialog
           open={confirmReplace}

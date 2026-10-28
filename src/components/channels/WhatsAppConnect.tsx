@@ -77,6 +77,9 @@ export function WhatsAppConnect({
     };
 
     const poll = async (pairingId: string, finish = false) => {
+      if (cancelled) return;
+      // Hidden: the code is not asked again until the tab shows (the save of a scan still goes out).
+      if (document.hidden && !finish) return void (timer = setTimeout(() => void poll(pairingId), POLL_MS));
       try {
         settle(await pair({ pairing_id: pairingId, ...(finish ? { finish: true } : {}) }));
       } catch (cause) {

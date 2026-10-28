@@ -3,6 +3,7 @@ import { parse } from "yaml";
 import { agent37, instanceFetch, instancePortFetch } from "@/lib/agent37";
 import { ApiError } from "@/lib/http";
 import { composePrompt, splitPrompt, summarize, type Routine } from "@/lib/routines";
+import { runPool } from "@/lib/bulk";
 
 // Hermes's own scheduler: each expert's routines live in its profile, the instance's gateway runs
 // them ONLY while the instance is awake (instances sleep after 45 idle minutes, so a routine due
@@ -28,7 +29,7 @@ const fileQuery = (path: string) => `/v1/files/content?path=${encodeURIComponent
 async function apiKey(agentId: string): Promise<string> {
   const cached = keys.get(agentId);
   if (cached) return cached;
-  const res = await instanceFetch(agentId, fileQuery(KEY_FILE));
+  const res = await instanceFetch(agentId, fileQuery(KEY_FILE), { signal: AbortSignal.timeout(30_000) });
   const key = res.ok ? (await res.text()).trim() : "";
   if (!key) {
     await res.body?.cancel().catch(() => undefined);
@@ -214,7 +215,7 @@ export const hermesCron = {
 // Where an expert's routines post their result: every chat routed to the expert (its Telegram topic),
 // or only the app ("local": the run is still a conversation under the expert) when there is none.
 async function deliveries(agentId: string): Promise<(profile: string) => string> {
-  const res = await instanceFetch(agentId, fileQuery(CONFIG_FILE));
+  const res = await instanceFetch(agentId, fileQuery(CONFIG_FILE), { signal: AbortSignal.timeout(30_000) });
   if (!res.ok) {
     await res.body?.cancel().catch(() => undefined);
     console.error(`[routines] could not read the Hermes config on ${agentId}`, res.status);
@@ -238,13 +239,16 @@ async function deliveryFor(agentId: string, profile: string): Promise<string> {
 // to their expert's topic too.
 export async function repointRoutines(agentId: string, profiles: string[]): Promise<void> {
   const deliverFor = await deliveries(agentId);
-  for (const profile of profiles) {
+  // The experts side by side (each its own jobs), three at a time; one expert's jobs one by one.
+  const done = await runPool(profiles, 3, async (profile) => {
     const deliver = deliverFor(profile);
-    if (deliver === "local") continue;
+    if (deliver === "local") return;
     const { jobs } = await hermes<{ jobs: HermesJob[] }>(agentId, "GET", jobsPath(profile, "?include_disabled=true"));
     for (const job of jobs) {
       if (job.deliver && job.deliver !== "local" && job.deliver !== "origin") continue;
       await hermes<{ job: HermesJob }>(agentId, "PATCH", jobPath(profile, job.id), { deliver });
     }
-  }
+  });
+  const failed = done.find((r) => r.status === "rejected");
+  if (failed) throw (failed as PromiseRejectedResult).reason;
 }

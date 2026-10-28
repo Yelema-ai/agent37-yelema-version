@@ -14,11 +14,11 @@ export async function PATCH(request: Request, { params }: Ctx) {
     const { id, routineId } = await params;
     const { row } = await requireAgentAccess(id);
     const body = await readJson<RoutineBody>(request);
-    const expert = await routineExpert(row, body.expert);
-    const routine =
-      typeof body.enabled === "boolean"
-        ? await (await routinesOf(id)).setEnabled(id, expert.profile, expert.name, routineId, body.enabled)
-        : await (await routinesOf(id)).update(id, expert.profile, expert.name, routineId, routineFields(body, expert));
+    const toggle = typeof body.enabled === "boolean";
+    const [expert, store] = await Promise.all([routineExpert(row, body.expert, { skills: !toggle }), routinesOf(id)]);
+    const routine = toggle
+      ? await store.setEnabled(id, expert.profile, expert.name, routineId, body.enabled as boolean)
+      : await store.update(id, expert.profile, expert.name, routineId, routineFields(body, expert));
     return json({ routine });
   } catch (e) {
     return handleError(e);
@@ -29,8 +29,8 @@ export async function DELETE(request: Request, { params }: Ctx) {
   try {
     const { id, routineId } = await params;
     const { row } = await requireAgentAccess(id);
-    const expert = await routineExpert(row, new URL(request.url).searchParams.get("expert"));
-    await (await routinesOf(id)).remove(id, expert.profile, routineId);
+    const [expert, store] = await Promise.all([routineExpert(row, new URL(request.url).searchParams.get("expert"), { skills: false }), routinesOf(id)]);
+    await store.remove(id, expert.profile, routineId);
     return json({ id: routineId, deleted: true });
   } catch (e) {
     return handleError(e);

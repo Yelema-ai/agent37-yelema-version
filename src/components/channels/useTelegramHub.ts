@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import type { TelegramHubStatus } from "@/lib/agent37";
+import { usePoll } from "@/components/usePoll";
 
-const POLL_MS = 4_000;
-// The manager bot's /start link lives 15 minutes: past that, waiting for Telegram is pointless.
-const WAIT_MAX_MS = 15 * 60_000;
+const POLL_MS = 5_000;
+// Past this, nothing came from Telegram: the screen says so and puts the QR code and the link forward.
+export const SLOW_START_MS = 2 * 60_000;
 const TG_LINK = /^https:\/\/t\.me\//;
 
 export type HubBusy = "link" | "own" | "sync" | "off" | null;
@@ -21,6 +22,7 @@ export function useTelegramHub(agentId: string) {
   const [unavailable, setUnavailable] = useState(false);
   const [waitingSince, setWaitingSince] = useState<number | null>(null);
   const [busy, setBusy] = useState<HubBusy>(null);
+  const [posted, setPosted] = useState<{ url: string; expiresAt: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -33,13 +35,12 @@ export function useTelegramHub(agentId: string) {
   useEffect(() => void load(), [load]);
 
   const phase = status?.state?.phase;
-  const waiting = waitingSince !== null;
-  useEffect(() => {
-    if (!(waiting || phase === "awaiting_group" || phase === "needs_topics")) return;
-    if (waitingSince !== null && Date.now() - waitingSince > WAIT_MAX_MS) return setWaitingSince(null);
-    const t = setTimeout(() => void load(), POLL_MS);
-    return () => clearTimeout(t);
-  }, [waiting, waitingSince, phase, status, load]);
+  // The gateway keeps the manager bot's link (one per instance) until it expires: it survives a reload.
+  const kept = status?.link ?? (posted && Date.parse(posted.expiresAt) > Date.now() ? { ...posted, started: false } : null);
+  const link = !status?.state && kept && TG_LINK.test(kept.url) ? kept : null;
+  // Bounded by the link's own expiry: the gateway stops returning it, the polling stops.
+  const waiting = link !== null;
+  usePoll(load, { everyMs: POLL_MS, immediate: false, enabled: waiting || phase === "awaiting_group" || phase === "needs_topics" });
   useEffect(() => {
     if (status?.state) setWaitingSince(null);
   }, [status?.state]);
@@ -63,17 +64,38 @@ export function useTelegramHub(agentId: string) {
     instanceBot: status?.instanceBot ?? null,
     unavailable,
     waiting,
+    /** When this screen asked for the link (null after a reload: the wait is then already old). */
+    waitingSince,
+    link,
     busy,
     load,
     /** A new Yelema bot (via the manager bot), or the resumption of a set-up already started. */
-    connect: () =>
-      act("link", async () => {
-        const { url } = await apiFetch<{ url: string }>(base, { method: "POST", body: "{}" });
-        if (TG_LINK.test(url)) window.open(url, "_blank", "noopener,noreferrer");
+    connect: () => {
+      // Opened during the click: after the gateway's answer (seconds) the browser would block it silently.
+      const tab = window.open("", "_blank");
+      return act("link", async () => {
+        try {
+          const { url, expiresAt } = await apiFetch<{ url: string; expiresAt: string }>(base, { method: "POST", body: "{}" });
+          setPosted({ url, expiresAt });
+          if (tab && TG_LINK.test(url)) {
+            tab.opener = null;
+            tab.location.href = url;
+          } else tab?.close();
+        } catch (e) {
+          tab?.close();
+          throw e;
+        }
         setWaitingSince(Date.now());
         await load();
+      });
+    },
+    stopWaiting: () =>
+      act("off", async () => {
+        setWaitingSince(null);
+        setPosted(null);
+        await apiFetch(base, { method: "DELETE" });
+        await load();
       }),
-    stopWaiting: () => setWaitingSince(null),
     own: (token: string) =>
       act("own", async () => {
         await apiFetch(`${base}/own`, { method: "POST", body: JSON.stringify({ token }) });

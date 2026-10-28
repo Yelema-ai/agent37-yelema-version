@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
-import { agentAccessRole, getAgentRow, getRole, requireUser } from "@/lib/auth";
+import { agentAccessRole, backofficeAgentRow, getAgentRow, getRole, requireUser } from "@/lib/auth";
+import { authViaBackoffice } from "@/lib/runtime-config";
 import { openConversation } from "@/lib/conversation-token";
 import { movedTabPath, parseAgentRoute } from "@/lib/expert-tabs";
 import { AgentWorkspace } from "@/components/AgentWorkspace";
@@ -24,6 +25,14 @@ export default async function AgentWorkspacePage({
   // One grammar, shared with the client SPA: an unknown tab or extra segments 404 here.
   const route = parseAgentRoute(onglet);
   if (route === null) notFound();
+
+  // Through the back office the page is its member's own instance or nothing: its answer for the
+  // caller's instance says so, without another round of "who is this".
+  if (authViaBackoffice()) {
+    const row = await backofficeAgentRow();
+    if (!row || row.agent37_id !== agentId) notFound();
+    return <AgentWorkspace key={`${agentId}:${route.profileId ?? ""}`} agentId={agentId} profileId={route.profileId} workspaceId={row.workspace_id} initialTab={route.tab} />;
+  }
 
   const { db, user } = await requireUser();
 

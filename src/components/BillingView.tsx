@@ -6,28 +6,11 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import type { BoBilling, BoInvoice } from "@/lib/backoffice";
 
-// The shapes of GET /api/billing, as the back office gives them (see BoBilling, BoInvoice).
-interface Invoice {
-  id: string;
-  reference: string;
-  period: string;
-  status: string;
-  amountTTC: number;
-  currency: string;
-  issuedAt: string | null;
-  dueDate: string | null;
-  payable: boolean;
-}
-
-interface Billing {
-  plan: { key: string; name: string } | null;
-  status: string | null;
-  nextDueDate: string | null;
-  amount: number | null;
-  currency: string;
-  openInvoice: Invoice | null;
-}
+// The shapes of GET /api/billing, as the back office gives them.
+type Invoice = BoInvoice;
+type Billing = BoBilling;
 
 const STATUS: Record<string, { label: string; variant: "success" | "warning" | "secondary" }> = {
   paid: { label: "Payée", variant: "success" },
@@ -71,15 +54,12 @@ export function BillingView() {
 
   useEffect(() => {
     void load();
+    // Back from the payment tab: one reading (not one for the focus and one for the visibility).
     const onBack = () => {
       if (document.visibilityState === "visible") void load();
     };
     document.addEventListener("visibilitychange", onBack);
-    window.addEventListener("focus", onBack);
-    return () => {
-      document.removeEventListener("visibilitychange", onBack);
-      window.removeEventListener("focus", onBack);
-    };
+    return () => document.removeEventListener("visibilitychange", onBack);
   }, [load]);
 
   async function pay(invoice: Invoice) {

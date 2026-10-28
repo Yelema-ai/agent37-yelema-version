@@ -3,15 +3,16 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { profileQuery } from "@/lib/profile-id";
-import { DRIVE_ROOT } from "@/lib/drive-paths";
+import { driveTree } from "@/lib/drive-store";
 import { isDriveClutter } from "@/lib/drive-order";
 import { agentTabPath } from "@/lib/expert-tabs";
 import type { ChatSession } from "@/components/chat/types";
-import { isDir, type FileEntry, type FileListResponse } from "@/components/files/types";
+import type { FileEntry } from "@/components/files/types";
 import type { Expert } from "@/lib/types";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useMyAgents } from "@/components/useMyAgents";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
+import { toMs } from "@/lib/activity";
 
 /** The member's own instance: with no Expert chosen, it is their chat d'entreprise. */
 export function useOwnAgentId(): string | null {
@@ -30,7 +31,6 @@ export interface ConversationRow {
   at: number;
 }
 
-const ms = (t: number) => (t < 1e12 ? t * 1000 : t);
 
 // Every conversation of the member: the chat d'entreprise's (the instance with no profile) and each
 // Expert's, newest first. One read per space, in parallel; a space that does not answer is left out.
@@ -52,7 +52,7 @@ export function useAllConversations(ownAgentId: string | null, experts: Expert[]
             r.sessions.map((session) => ({
               session,
               expert,
-              at: ms(session.last_active),
+              at: toMs(session.last_active),
               href: `${agentTabPath(agentId, "chat", expert?.profileId)}?session=${encodeURIComponent(session.session_id)}`,
             })),
           () => [] as ConversationRow[]
@@ -71,24 +71,20 @@ export function useAllConversations(ownAgentId: string | null, experts: Expert[]
 }
 
 // The drive's files, at its root and one level down (each Expert keeps its own folder there),
-// newest first. Null while reading.
+// newest first. Null while reading. The tree is the one the deliverable watcher reads.
 export function useDriveFiles(agentId: string | null, enabled = true) {
   const [files, setFiles] = useState<FileEntry[] | null>(null);
   useEffect(() => {
     if (!enabled || !agentId) return;
     let live = true;
-    const list = (path: string) =>
-      apiFetch<FileListResponse>(`/api/agents/${agentId}/files/list?path=${encodeURIComponent(path)}`).then(
-        (r) => r.entries.filter((e) => !e.hidden && !isDriveClutter(e)),
-        () => [] as FileEntry[]
-      );
-    void (async () => {
-      const root = await list(DRIVE_ROOT);
-      const nested = await Promise.all(root.filter(isDir).map((d) => list(d.path)));
-      const all = [...root, ...nested.flat()].filter((e) => e.type === "file");
-      all.sort((a, b) => b.modified - a.modified);
-      if (live) setFiles(all);
-    })();
+    driveTree(agentId).then(
+      (tree) => {
+        const all = tree.entries.filter((e) => e.depth <= 1 && e.type === "file" && !e.hidden && !isDriveClutter(e));
+        all.sort((a, b) => b.modified - a.modified);
+        if (live) setFiles(all);
+      },
+      () => live && setFiles([])
+    );
     return () => {
       live = false;
     };

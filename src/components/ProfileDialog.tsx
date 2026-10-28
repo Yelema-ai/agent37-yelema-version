@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useWorkspace } from "@/components/WorkspaceProvider";
-import { apiFetch, readApiError } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import { MAX_UPLOAD_BYTES, TOO_LARGE } from "@/lib/upload-limit";
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -76,9 +76,7 @@ export function ProfileDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     const form = new FormData();
     form.set("file", file);
     void changePhoto(async () => {
-      const res = await fetch("/api/account/avatar", { method: "PUT", body: form });
-      if (!res.ok) throw new Error(await readApiError(res, "La photo n’a pas pu être enregistrée"));
-      return (await res.json()) as Profile;
+      return apiFetch<Profile>("/api/account/avatar", { method: "PUT", body: form }, "La photo n’a pas pu être enregistrée");
     }, "Photo enregistrée.");
   }
 
