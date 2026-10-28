@@ -14,6 +14,12 @@ const TONE = {
   partial: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
   absent: "bg-soft text-ink-3",
 };
+// Beside the expert's name (Leslie, 28/10): a dot and a word, lighter than a chip.
+const DOT = {
+  ready: { dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-300" },
+  partial: { dot: "bg-amber-500", text: "text-amber-700 dark:text-amber-300" },
+  absent: { dot: "bg-ink-3", text: "text-ink-3" },
+};
 
 // Whether the expert has done its day-zero preparation: a chip, and its checks behind it.
 export function ExpertReadiness({
@@ -22,12 +28,14 @@ export function ExpertReadiness({
   expertName,
   onOpenTools,
   className,
+  variant = "chip",
 }: {
   agentId: string;
   profileId: string;
   expertName: string;
   onOpenTools: () => void;
   className?: string;
+  variant?: "chip" | "dot";
 }) {
   const jzKey = `jour-zero:${agentId}:${profileId}`;
   const [jz, setJz] = useState<JourZero | null>(() => cached<JourZero>(jzKey) ?? null);
@@ -59,14 +67,25 @@ export function ExpertReadiness({
   const Icon = r.state === "ready" ? Check : CircleDashed;
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        title="Voir sa préparation"
-        className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold", TONE[r.state], className)}
-      >
-        <Icon className="size-3.5" /> {r.label}
-      </button>
+      {variant === "dot" ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          title="Voir sa préparation"
+          className={cn("inline-flex items-center gap-1.5 text-[13px] font-semibold hover:underline", DOT[r.state].text, className)}
+        >
+          <span className={cn("size-2 rounded-full", DOT[r.state].dot)} /> {r.label}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          title="Voir sa préparation"
+          className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold", TONE[r.state], className)}
+        >
+          <Icon className="size-3.5" /> {r.label}
+        </button>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>

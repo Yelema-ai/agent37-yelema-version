@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import { ComputerButton, ComputerDialog, ComputerPanel } from "@/components/experts/ExpertComputer";
 import { DashboardProvider } from "@/components/experts/DashboardProvider";
@@ -9,6 +10,9 @@ import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { expertDisplayName } from "@/lib/experts";
 import { cn } from "@/lib/utils";
+import { agentTabPath } from "@/lib/expert-tabs";
+import { citedFolder, type TurnDoc } from "@/lib/drive-links";
+import { ConversationDocs } from "./ConversationDocs";
 import { DropOverlay } from "@/components/DropOverlay";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessages } from "./ChatMessages";
@@ -28,7 +32,19 @@ const SCREEN_TEMPLATE = "yelema-hermes";
 const SCREEN_MIN_REVISION = 5;
 
 // `driveFolder`: the expert's folder in the drive, where the documents of its replies are looked for.
-export function ChatView({ initialMessage, driveFolder = null }: { initialMessage?: string | null; driveFolder?: string | null }) {
+export function ChatView({
+  initialMessage,
+  driveFolder = null,
+  actionsSlot = null,
+  onAction,
+}: {
+  initialMessage?: string | null;
+  driveFolder?: string | null;
+  /** On an expert's page, its header: « Ordinateur » and « Tableau » sit there, beside its name (Leslie, 28/10). */
+  actionsSlot?: HTMLElement | null;
+  /** Called on a click on one of them, so the Discussion shows where its panel opens. */
+  onAction?: () => void;
+}) {
   const {
     agentId,
     profile,
@@ -153,6 +169,13 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
     instance?.image?.template === SCREEN_TEMPLATE &&
     (instance.image.revision ?? 0) >= SCREEN_MIN_REVISION;
 
+  // The documents this discussion produced: the « Livrables » button of the chat's bar lists them.
+  const [docs, setDocs] = useState<TurnDoc[]>([]);
+  useEffect(() => setDocs([]), [activeSessionId]);
+  const docsFolder = (docs[0] && citedFolder(docs[0].path.slice(0, docs[0].path.lastIndexOf("/")))) || driveFolder;
+  const docsHref = `${agentTabPath(agentId, "files", profile)}${docsFolder ? `?dossier=${encodeURIComponent(docsFolder)}` : ""}`;
+  const inHeader = Boolean(profile && actionsSlot);
+
     const handleTriggerTableau = useCallback(() => {
     void send("/tableau");
   }, [send]);
@@ -192,8 +215,23 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-        {hasComputer && <ComputerButton />}
-        {Boolean(profile) && <DashboardButton />}
+        {profile && messages.length > 0 && <ConversationDocs agentId={agentId} docs={docs} folderHref={docsHref} />}
+        {inHeader && actionsSlot ? (
+          createPortal(
+            <span className="contents" onClickCapture={onAction}>
+              {hasComputer && <ComputerButton inHeader />}
+              <DashboardButton inHeader />
+            </span>,
+            actionsSlot
+          )
+        ) : (
+          <>
+            {hasComputer && <ComputerButton />}
+            {Boolean(profile) && <DashboardButton />}
+          </>
+        )}
+        {/* An expert's new conversation lives in its list of conversations (Leslie, 28/10). */}
+        {!profile && (
         <button
           type="button"
           onClick={startNewChat}
@@ -204,6 +242,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
           {/* Beside an open panel the chat is narrow: the icon says enough, the title keeps its room. */}
           <span className={cn("hidden sm:inline", sidePanel && "wide:hidden")}>Nouvelle conversation</span>
         </button>
+        )}
         {/* Plein écran: in the corner, where a window is enlarged. */}
         <button
           type="button"
@@ -235,7 +274,7 @@ export function ChatView({ initialMessage, driveFolder = null }: { initialMessag
           </div>
         ) : messages.length > 0 ? (
           <div ref={contentRef}>
-            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} onUnqueue={unqueue} />
+            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} onUnqueue={unqueue} onDocs={setDocs} />
           </div>
         ) : (
           <>

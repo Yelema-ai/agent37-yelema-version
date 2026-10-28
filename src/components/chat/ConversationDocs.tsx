@@ -1,0 +1,76 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { FolderOpen } from "lucide-react";
+import type { DocKind, TurnDoc } from "@/lib/drive-links";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { FilePreview } from "@/components/files/FilePreview";
+import type { FileEntry } from "@/components/files/types";
+import { cn } from "@/lib/utils";
+
+const TONE: Record<DocKind, string> = {
+  pdf: "bg-[#B4321F]",
+  excel: "bg-[#137A4B]",
+  word: "bg-[#2E4EC4]",
+  powerpoint: "bg-[#B85A12]",
+  image: "bg-brand",
+  other: "bg-ink-3",
+};
+
+const ext = (name: string) => (name.includes(".") ? name.split(".").pop()!.slice(0, 4).toUpperCase() : "FICH");
+
+function modifiedLabel(ms: number | null): string | null {
+  if (!ms) return null;
+  const d = new Date(ms);
+  const today = new Date().toDateString() === d.toDateString();
+  return today
+    ? `Modifié à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`
+    : `Modifié le ${d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}`;
+}
+
+// The deliverables this discussion produced (Leslie, 28/10): a button in the chat's bar, the files in
+// a list, each opened in place, then the whole folder in Livrables.
+export function ConversationDocs({ agentId, docs, folderHref }: { agentId: string; docs: TurnDoc[]; folderHref: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState<FileEntry | null>(null);
+  if (!docs.length) return null;
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            title="Livrables de cette discussion"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-tint px-3 text-[13px] font-semibold text-brand-ink hover:bg-soft-2"
+          >
+            <FolderOpen className="h-4 w-4" />
+            <span className="max-sm:hidden">Livrables</span>
+            <span className="grid min-w-5 place-items-center rounded-full bg-brand px-1.5 text-[11px] leading-5 text-on-brand tabular-nums">{docs.length}</span>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-80 p-1.5">
+          <DropdownMenuLabel className="text-[12.5px] font-semibold text-ink-2">Livrables de cette discussion</DropdownMenuLabel>
+          {docs.map((d) => (
+            <DropdownMenuItem
+              key={d.path}
+              onSelect={() => setOpen({ name: d.name, path: d.path, type: "file", size: d.size, modified: d.modified ?? 0, hidden: false })}
+              className="gap-2.5 rounded-lg py-2"
+            >
+              <span className={cn("grid size-8 shrink-0 place-items-center rounded-md text-[9.5px] font-bold text-white", TONE[d.kind])}>{ext(d.name)}</span>
+              <span className="min-w-0">
+                <span className="block truncate text-[13.5px] font-medium text-ink">{d.name}</span>
+                {modifiedLabel(d.modified) && <span className="block text-[12px] text-ink-3">{modifiedLabel(d.modified)}</span>}
+              </span>
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => router.push(folderHref)} className="rounded-lg py-2 text-[13.5px] font-semibold text-brand-ink">
+            Ouvrir dans Livrables
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <FilePreview agentId={agentId} entry={open} onClose={() => setOpen(null)} />
+    </>
+  );
+}

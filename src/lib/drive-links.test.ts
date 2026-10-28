@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { citedFolder, docKind, drivePathsIn, FOLDER_BARE, FOLDER_CODE, isHiddenInChat, normDrivePath, turnDocs } from "./drive-links.ts";
+import { citedFolder, docKind, drivePathsIn, FOLDER_BARE, FOLDER_CODE, isHiddenInChat, normDrivePath, noteFolder, turnDocs } from "./drive-links.ts";
 
 test("the paths a reply names, in order, once each, in one spelling", () => {
   const text = [
@@ -11,6 +11,18 @@ test("the paths a reply names, in order, once each, in one spelling", () => {
   ].join("\n");
   assert.deepEqual(drivePathsIn(text), ["~/Livrables/Kouassi/Devis Yao.pdf", "~/Livrables/Kouassi/pipeline.xlsx", "~/Livrables/Kouassi/Note de visite.docx"]);
   assert.equal(normDrivePath("/home/node/Livrables/A%20B.pdf"), "~/Livrables/A B.pdf");
+});
+
+test("a path written from the drive itself, without ~/, is a file too (Leslie, 28/10)", () => {
+  const text = "Le détail est ici : Livrables/Djeneba/Reunions/2026-10-28_comptes-rendus.md.\nEt `Livrables/Djeneba/plan.xlsx`";
+  assert.deepEqual(drivePathsIn(text), ["~/Livrables/Djeneba/Reunions/2026-10-28_comptes-rendus.md", "~/Livrables/Djeneba/plan.xlsx"]);
+  assert.equal(normDrivePath("Livrables/A.pdf"), "~/Livrables/A.pdf");
+  // A note gets no card, but its name opens its folder; memory stays unlinked.
+  assert.equal(noteFolder("Livrables/Djeneba/Reunions/2026-10-28_comptes-rendus.md"), "~/Livrables/Djeneba/Reunions");
+  assert.equal(noteFolder("~/Livrables/Koffi/_memoire/client.md"), null);
+  assert.equal(noteFolder("~/Livrables/Koffi/deck.pdf"), null);
+  // A folder stays a folder.
+  assert.deepEqual(drivePathsIn("Dossier : Livrables/Fatima/tajplast/"), []);
 });
 
 test("formats", () => {

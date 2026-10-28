@@ -311,6 +311,20 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           </button>
           </span>
         </div>
+        {/* An expert's new conversation starts from its list of conversations (Leslie, 28/10). */}
+        {profile && (
+          <button
+            type="button"
+            onClick={() => {
+              startNewChat();
+              onNavigate?.();
+            }}
+            className="mx-1 mb-2.5 inline-flex h-10 items-center justify-center gap-1.5 rounded-[10px] border border-brand/60 bg-surface text-[13.5px] font-semibold text-brand-ink transition-colors hover:bg-tint"
+          >
+            <Plus className="h-4 w-4" />
+            Nouvelle conversation
+          </button>
+        )}
         {sessionsError ? (
           <p className="px-2.5 pb-2 text-xs text-ink-3">
             Liste non mise à jour : l’instance ne répond pas.{" "}
