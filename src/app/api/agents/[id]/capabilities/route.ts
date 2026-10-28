@@ -1,6 +1,6 @@
-import { agent37 } from "@/lib/agent37";
 import { requireAgentAccess } from "@/lib/auth";
 import { handleError, json } from "@/lib/http";
+import { runtimeCapabilities } from "@/lib/runtime-capabilities";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -10,7 +10,7 @@ export async function GET(_request: Request, { params }: Ctx) {
   try {
     const { id } = await params;
     await requireAgentAccess(id);
-    const caps = await agent37.capabilities(id);
+    const caps = await runtimeCapabilities(id);
     return json({ runtime: caps?.runtime ?? "hermes", hermesTools: caps ? caps.capabilities.includes("hermesTools") : true });
   } catch (e) {
     return handleError(e);

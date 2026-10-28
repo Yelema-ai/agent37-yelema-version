@@ -1,6 +1,7 @@
 import { requireAgentAccess } from "@/lib/auth";
 import { handleError, json } from "@/lib/http";
-import { listPlatforms } from "@/lib/hermes-messaging";
+import { knownCatalogue, listPlatforms } from "@/lib/hermes-messaging";
+import { imageKeyOf, servesHermesTools } from "@/lib/runtime-capabilities";
 import { isConnectableChannel, neutralizeHarnessName, sortChannels } from "@/lib/channels";
 import type { ChannelsResponse, MessagingPlatform } from "@/lib/channels";
 import { currentInstance } from "@/lib/session";
@@ -11,19 +12,23 @@ export const maxDuration = 120;
 type Ctx = { params: Promise<{ id: string }> };
 
 // Every messaging channel this agent supports, with its live state and the credentials it wants.
-// Read-only, so any workspace member can see what the agent is connected to.
-export async function GET(_request: Request, { params }: Ctx) {
+// `?view=catalogue`: the channels its image offers, without state, when already known (no exec);
+// `state: "unknown"` then says the live state is still to be read. A non-Hermes runtime has none.
+export async function GET(request: Request, { params }: Ctx) {
   try {
     const { id } = await params;
     await requireAgentAccess(id);
+    const catalogueOnly = new URL(request.url).searchParams.get("view") === "catalogue";
 
-    const [platforms, instance] = await Promise.all([listPlatforms(id), currentInstance().catch(() => null)]);
-    const response: ChannelsResponse = {
-      channels: sortChannels(platforms).filter(isConnectableChannel).map(rebrand),
-      // The address to give Microsoft: the back office opened it on this instance (the member's own).
-      teams_endpoint: instance?.id === id ? (instance.channels?.teams?.endpoint ?? null) : null,
-    };
-    return json(response);
+    const [hermes, imageKey, instance] = await Promise.all([servesHermesTools(id).catch(() => true), imageKeyOf(id), currentInstance().catch(() => null)]);
+    // The address to give Microsoft: the back office opened it on this instance (the member's own).
+    const teams_endpoint = instance?.id === id ? (instance.channels?.teams?.endpoint ?? null) : null;
+    if (!hermes) return json<ChannelsResponse & { hermesTools: false }>({ channels: [], teams_endpoint, hermesTools: false });
+    const known = catalogueOnly ? knownCatalogue(imageKey) : undefined;
+    if (catalogueOnly && !known) return json({ channels: null, teams_endpoint, state: "unknown" });
+    const platforms = known ?? (await listPlatforms(id, imageKey));
+    const response: ChannelsResponse = { channels: sortChannels(platforms).filter(isConnectableChannel).map(rebrand), teams_endpoint };
+    return json(known ? { ...response, state: "unknown" } : response);
   } catch (e) {
     return handleError(e);
   }

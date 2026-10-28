@@ -8,6 +8,7 @@ import { tokenKid, verifyEs256, type Jwk } from "@/lib/jwt";
 import { memo } from "@/lib/memo";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/runtime-config";
 import { pinnedWorkspaceId } from "@/lib/tenant";
+import type { WorkspaceWithRole } from "@/lib/types";
 
 // The signed-in user when the back office owns the sign-in (AUTH_VIA_BACKOFFICE): its session
 // tokens live in ONE httpOnly cookie set by this server, never readable by the page's scripts.
@@ -209,3 +210,8 @@ export const currentInstallation = cache(async (): Promise<Pick<BoInstanceReadin
   const reading = await currentReading();
   return reading ? { installation: reading.installation, failedExperts: reading.failedExperts } : null;
 });
+
+/** The one workspace of a user signed in through the back office, in this app's shape. */
+export function workspaceOfMe(me: BoMe): WorkspaceWithRole {
+  return { id: me.workspace.id, name: me.workspace.name, owner_id: "", created_at: "", role: me.user.role, logo_url: me.workspace.logoUrl, brand_color: me.workspace.brandColor ?? null, access: me.access ?? "instance" };
+}

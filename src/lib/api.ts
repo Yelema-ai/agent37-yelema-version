@@ -19,10 +19,14 @@ function leaveIfSignedOut(res: Response): boolean {
 
 const EXPIRED = "Votre session a expiré. Reconnectez-vous.";
 
-export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
+// A form or a file sets its own type (multipart boundary); anything else is sent as JSON.
+const ownType = (body: RequestInit["body"]) => typeof FormData !== "undefined" && (body instanceof FormData || body instanceof Blob || body instanceof URLSearchParams || body instanceof ArrayBuffer);
+
+/** `fallback`: the sentence (without its full stop) when a refusal carries none of its own. */
+export async function apiFetch<T>(url: string, init?: RequestInit, fallback?: string): Promise<T> {
   const res = await fetch(url, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    headers: { ...(ownType(init?.body) ? {} : { "Content-Type": "application/json" }), ...(init?.headers || {}) },
   });
   const text = await res.text();
   // A proxy or a crashed route can answer with an HTML page: fall back to a plain sentence, not a
@@ -39,7 +43,7 @@ export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     if (leaveIfSignedOut(res)) throw new Error(EXPIRED);
     const message = (data as { error?: { message?: string } })?.error?.message;
-    throw new Error(message || FAILED);
+    throw new Error(message || (fallback ? `${fallback}.` : FAILED));
   }
   return data as T;
 }

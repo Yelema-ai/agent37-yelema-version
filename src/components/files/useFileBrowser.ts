@@ -39,8 +39,9 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
 
   // Load one directory level. `target` undefined loads the agent's default workspace dir (first
   // mount); on success the resolved abs path replaces whatever we asked for.
+  // `orRoot`: a folder that cannot be opened falls back to the drive's root instead of an error.
   const load = useCallback(
-    async (target?: string) => {
+    async (target?: string, orRoot = false): Promise<void> => {
       const seq = ++loadSeq.current;
       setLoading(true);
       setError(null);
@@ -54,6 +55,7 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
         setTruncated(res.truncated);
       } catch (e) {
         if (seq !== loadSeq.current) return;
+        if (orRoot && target) return load();
         setError((e as Error).message || "Ce dossier n’a pas pu être ouvert.");
       } finally {
         if (seq === loadSeq.current) setLoading(false);
@@ -66,22 +68,8 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
   // starting folder that does not exist yet falls back to the root instead of an error screen.
   const initialPathRef = useRef(initialPath);
   useEffect(() => {
-    const start = initialPathRef.current;
-    if (!start) {
-      load();
-      return;
-    }
-    let cancelled = false;
-    apiFetch<FileListResponse>(`/api/agents/${agentId}/files/list?path=${encodeURIComponent(start)}`)
-      .then(() => {
-        if (!cancelled) void load(start);
-      })
-      .catch(() => {
-        if (!cancelled) void load();
-      });
-    return () => {
-      cancelled = true;
-    };
+    // One reading: the folder itself, the root only if it cannot be opened.
+    void load(initialPathRef.current, true);
   }, [agentId, load]);
 
   // The search is the folder's: opening another one starts it again.

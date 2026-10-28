@@ -3,13 +3,14 @@ import { getSession, type DB } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { authViaBackoffice } from "@/lib/runtime-config";
 import { pinnedWorkspaceId } from "@/lib/tenant";
-import { currentInstance, currentPrincipal } from "@/lib/session";
-import { profilesMirrored, userExperts, visibleAgents } from "@/lib/installed-experts";
+import { currentInstance, currentPrincipal, workspaceOfMe } from "@/lib/session";
+import { catalogueWithInstalled, profilesMirrored, userExperts, visibleAgents } from "@/lib/installed-experts";
+import { backofficeAgents } from "@/lib/my-agents";
 import { WorkspaceProvider } from "@/components/WorkspaceProvider";
 import { UnlinkedAccount } from "@/components/UnlinkedAccount";
 import { AppShell } from "@/components/app/AppShell";
 import type { InitialExperts } from "@/components/experts/useExperts";
-import type { Role, Workspace, WorkspaceWithRole } from "@/lib/types";
+import type { CatalogueResponse, MergedAgent, Role, Workspace, WorkspaceWithRole } from "@/lib/types";
 
 // Read the user's workspaces with two plain table queries joined in JS, NOT a PostgREST relationship
 // embed (`memberships?select=role,workspaces(*)`). The embed needs the memberships→workspaces
@@ -41,16 +42,23 @@ async function loadWorkspaces(db: DB, userId: string): Promise<WorkspaceWithRole
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
-// The user's experts, read with the page so the menu and the home arrive filled instead of asking
-// for them once the page is up. Only when it costs no call into an instance (the profiles are
-// mirrored); otherwise, or on any failure, the browser asks as before and shows the error itself.
-async function loadInitialExperts(workspaceId: string, userId: string): Promise<InitialExperts | null> {
+// What the shell shows from the start, read with the page so the menu, the home and the gallery
+// arrive filled instead of asking for them once the page is up: the experts, the catalogue and the
+// instance. Only when it costs no call into an instance (the profiles are mirrored); otherwise, or
+// on any failure, the browser asks as before and shows the error itself.
+async function loadInitialShell(workspaceId: string, userId: string, email: string | null): Promise<{ experts: InitialExperts | null; catalogue: CatalogueResponse | null; agents: MergedAgent[] | null }> {
+  const none = { experts: null, catalogue: null, agents: null };
   try {
     const agents = await visibleAgents(createAdminClient(), workspaceId, userId);
-    if (!profilesMirrored(agents)) return null;
-    return { workspaceId, ...(await userExperts(agents)) };
+    if (!profilesMirrored(agents)) return none;
+    const [experts, catalogue, rows] = await Promise.all([
+      userExperts(agents),
+      catalogueWithInstalled(agents).catch(() => null),
+      authViaBackoffice() ? backofficeAgents(email).catch(() => null) : null,
+    ]);
+    return { experts: { workspaceId, ...experts }, catalogue, agents: rows };
   } catch {
-    return null;
+    return none;
   }
 }
 
@@ -64,8 +72,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Otherwise table access goes through the privileged client; the user came from the verified
   // session above.
   const me = authViaBackoffice() ? await currentPrincipal() : null;
+  // The whole workspace, its access included: a chat-only member gets the chat-only shell.
   const workspaces: WorkspaceWithRole[] = me
-    ? [{ id: me.workspace.id, name: me.workspace.name, owner_id: "", created_at: "", role: me.user.role, logo_url: me.workspace.logoUrl }]
+    ? [workspaceOfMe(me)]
     : authViaBackoffice()
       ? []
       : await loadWorkspaces(createAdminClient(), user.id);
@@ -76,11 +85,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Un seul chrome pour tout le groupe (app), espace expert compris : c'est ce qui remplace
   // l'écran de choix d'instance. Le <main> ne pose aucune marge — chaque page choisit son mode
   // en enveloppant ou non son contenu dans <Page>.
-  const initialExperts = await loadInitialExperts(workspaces[0].id, user.id);
+  const initial = await loadInitialShell(workspaces[0].id, user.id, user.email);
 
   return (
     <WorkspaceProvider initialWorkspaces={workspaces} userEmail={user.email ?? ""} userName={user.name} userFirstName={user.firstName} userAvatarUrl={me?.user.avatarUrl ?? null}>
-      <AppShell initialExperts={initialExperts}>{children}</AppShell>
+      <AppShell initialExperts={initial.experts} initialAgents={initial.agents} initialCatalogue={initial.catalogue}>
+        {children}
+      </AppShell>
     </WorkspaceProvider>
   );
 }

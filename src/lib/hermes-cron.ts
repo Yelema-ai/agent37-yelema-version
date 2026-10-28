@@ -3,6 +3,7 @@ import { parse } from "yaml";
 import { agent37, instanceFetch, instancePortFetch } from "@/lib/agent37";
 import { ApiError } from "@/lib/http";
 import { composePrompt, splitPrompt, summarize, type Routine } from "@/lib/routines";
+import { runPool } from "@/lib/bulk";
 
 // Hermes's own scheduler: each expert's routines live in its profile, the instance's gateway runs
 // them ONLY while the instance is awake (instances sleep after 45 idle minutes, so a routine due
@@ -238,13 +239,16 @@ async function deliveryFor(agentId: string, profile: string): Promise<string> {
 // to their expert's topic too.
 export async function repointRoutines(agentId: string, profiles: string[]): Promise<void> {
   const deliverFor = await deliveries(agentId);
-  for (const profile of profiles) {
+  // The experts side by side (each its own jobs), three at a time; one expert's jobs one by one.
+  const done = await runPool(profiles, 3, async (profile) => {
     const deliver = deliverFor(profile);
-    if (deliver === "local") continue;
+    if (deliver === "local") return;
     const { jobs } = await hermes<{ jobs: HermesJob[] }>(agentId, "GET", jobsPath(profile, "?include_disabled=true"));
     for (const job of jobs) {
       if (job.deliver && job.deliver !== "local" && job.deliver !== "origin") continue;
       await hermes<{ job: HermesJob }>(agentId, "PATCH", jobPath(profile, job.id), { deliver });
     }
-  }
+  });
+  const failed = done.find((r) => r.status === "rejected");
+  if (failed) throw (failed as PromiseRejectedResult).reason;
 }

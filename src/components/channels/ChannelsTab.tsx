@@ -52,20 +52,22 @@ export function ChannelsTab({
   const hermesTools = useRuntimeTools(agentId);
 
   const [channels, setChannels] = useState<MessagingPlatform[] | null>(null);
+  // False while the rows come from the image's channel list and their state is still being read.
+  const [stateKnown, setStateKnown] = useState(false);
   const [teamsEndpoint, setTeamsEndpoint] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   // Un bot posé par la passerelle (et relevé par l'instance) a déjà ses sujets : l'ancien bouton « Créer les sujets » s'efface.
   const [hubTelegram, setHubTelegram] = useState(false);
+  // The hub is the gateway's (no exec): asked at once, alongside the channels and the runtime.
   useEffect(() => {
-    if (hermesTools !== true) return;
     let alive = true;
     apiFetch<TelegramHubStatus>(`/api/agents/${agentId}/channels/telegram/hub`).then((r) => alive && setHubTelegram(r.state?.active === true), () => undefined);
     return () => {
       alive = false;
     };
-  }, [agentId, hermesTools]);
+  }, [agentId]);
 
   const load = useCallback(
     async (quiet = false) => {
@@ -74,6 +76,7 @@ export function ChannelsTab({
         const { channels: list, teams_endpoint } = await apiFetch<ChannelsResponse>(`/api/agents/${agentId}/channels`);
         setChannels(list);
         setTeamsEndpoint(teams_endpoint ?? null);
+        setStateKnown(true);
       } catch (e) {
         toast.error((e as Error).message);
       } finally {
@@ -83,10 +86,24 @@ export function ChannelsTab({
     [agentId]
   );
 
+  // Started at once: the route answers no channel for a runtime that has none. The image's channel
+  // list, when already known, shows first; the live state follows.
   useEffect(() => {
-    // Only once the runtime is known: a Claude Code instance has no Hermes channel API to read.
-    if (reachable && hermesTools === true) void load();
-  }, [reachable, hermesTools, load]);
+    if (!reachable) return;
+    let alive = true;
+    apiFetch<{ channels: MessagingPlatform[] | null; teams_endpoint: string | null }>(`/api/agents/${agentId}/channels?view=catalogue`).then(
+      (r) => {
+        if (!alive || !r.channels) return;
+        setChannels((prev) => prev ?? r.channels);
+        setTeamsEndpoint((prev) => prev ?? r.teams_endpoint ?? null);
+      },
+      () => undefined
+    );
+    void load();
+    return () => {
+      alive = false;
+    };
+  }, [reachable, load, agentId]);
 
   if (hermesTools === false) {
     return (
@@ -161,6 +178,7 @@ export function ChannelsTab({
                 key={channel.id}
                 channel={channel}
                 canManage={canManage}
+                checking={!stateKnown}
                 onOpen={() => setOpenId(channel.id)}
               />
             ))}
@@ -169,6 +187,7 @@ export function ChannelsTab({
                 key={channel.id}
                 channel={channel}
                 canManage={canManage}
+                checking={!stateKnown}
                 onOpen={() => setOpenId(channel.id)}
               />
             ))}
@@ -201,6 +220,7 @@ export function ChannelsTab({
                         key={channel.id}
                         channel={channel}
                         canManage={canManage}
+                        checking={!stateKnown}
                         onOpen={() => setOpenId(channel.id)}
                       />
                     ))}
@@ -227,10 +247,13 @@ function Header() {
 function ChannelRow({
   channel,
   canManage,
+  checking = false,
   onOpen,
 }: {
   channel: MessagingPlatform;
   canManage: boolean;
+  /** The state is still being read: no button that would set up a channel already connected. */
+  checking?: boolean;
   onOpen: () => void;
 }) {
   const { Icon, color } = channelBrand(channel.id);
@@ -260,6 +283,17 @@ function ChannelRow({
         {connected ? <Badge variant="success">Connecté</Badge> : <Badge variant="warning">À vérifier</Badge>}
         <ChevronRight className="h-4 w-4 shrink-0 text-ink-3" />
       </button>
+    );
+  }
+  if (checking) {
+    return (
+      <div className="flex min-h-[68px] items-center gap-3 px-4 py-3">
+        {body}
+        <span className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Vérification…
+        </span>
+      </div>
     );
   }
   return (

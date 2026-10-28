@@ -43,8 +43,9 @@ function encode(file: File): Promise<MailOutgoingAttachment> {
   });
 }
 
-export function ExpertEmails({ inbox, expertName, loaded }: { inbox: MailInbox | null; expertName: string; loaded: boolean }) {
-  const expert = inbox?.expert ?? null;
+// `expertKey`: the catalogue key, the inbox's own key, so the messages are asked without waiting for the inboxes.
+export function ExpertEmails({ inbox, expertKey = null, expertName, loaded }: { inbox: MailInbox | null; expertKey?: string | null; expertName: string; loaded: boolean }) {
+  const expert = inbox?.expert ?? expertKey;
   const [page, setPage] = useState<Page | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

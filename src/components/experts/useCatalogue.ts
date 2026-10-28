@@ -2,11 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { cached, remember } from "@/lib/client-cache";
+import { cached, cachedFetch, remember } from "@/lib/client-cache";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import type { CatalogueExpertDetail, CatalogueResponse } from "@/lib/types";
 
 const EMPTY: CatalogueResponse = { available: false, defaultExpertKey: null, categories: [], experts: [] };
+// The catalogue changes with a release, what is installed with an installation: one reading shared
+// by every screen of the page, renewed past this age.
+const CATALOGUE_TTL_MS = 5 * 60_000;
+
+export const catalogueKey = (userEmail: string, workspaceId: string) => `catalogue:${userEmail}:${workspaceId}`;
 
 /**
  * Le catalogue du back-office, croisé avec ce qui est installé pour l'utilisateur. Un écran rouvert
@@ -14,7 +19,7 @@ const EMPTY: CatalogueResponse = { available: false, defaultExpertKey: null, cat
  */
 export function useCatalogue(workspaceId: string | undefined): { catalogue: CatalogueResponse; loading: boolean } {
   const { userEmail } = useWorkspace();
-  const key = workspaceId ? `catalogue:${userEmail}:${workspaceId}` : null;
+  const key = workspaceId ? catalogueKey(userEmail, workspaceId) : null;
   const [catalogue, setCatalogue] = useState<CatalogueResponse>(() => (key && cached<CatalogueResponse>(key)) || EMPTY);
   const [loading, setLoading] = useState(() => !key || !cached(key));
 
@@ -24,9 +29,8 @@ export function useCatalogue(workspaceId: string | undefined): { catalogue: Cata
     const known = cached<CatalogueResponse>(key);
     if (known) setCatalogue(known);
     setLoading(!known);
-    apiFetch<CatalogueResponse>(`/api/catalogue?workspace=${workspaceId}`)
+    cachedFetch(key, () => apiFetch<CatalogueResponse>(`/api/catalogue?workspace=${workspaceId}`), CATALOGUE_TTL_MS)
       .then((d) => {
-        remember(key, d);
         if (alive) setCatalogue(d);
       })
       .catch(() => {

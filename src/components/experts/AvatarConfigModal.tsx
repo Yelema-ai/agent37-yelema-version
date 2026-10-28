@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { readApiError } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 import type { ExpertAvatarDraft } from '@/lib/backoffice';
 import { MAX_UPLOAD_BYTES, TOO_LARGE } from '@/lib/upload-limit';
 import {
@@ -167,9 +167,7 @@ export function AvatarConfigModal({
       form.set('accessory', choice.accessory);
       form.set('background', choice.background);
       if (referenceFile) form.set('reference', referenceFile);
-      const res = await fetch(`/api/experts/${encodeURIComponent(expertKey)}/avatar/generate`, { method: 'POST', body: form });
-      if (!res.ok) throw new Error(await readApiError(res, 'Le portrait n’a pas pu être créé. Réessayez.'));
-      setDraftResult((await res.json()) as ExpertAvatarDraft);
+      setDraftResult(await apiFetch<ExpertAvatarDraft>(`/api/experts/${encodeURIComponent(expertKey)}/avatar/generate`, { method: 'POST', body: form }, 'Le portrait n’a pas pu être créé. Réessayez'));
       setPhase('ready');
     } catch (err) {
       setError((err as Error).message);

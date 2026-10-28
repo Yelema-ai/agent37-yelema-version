@@ -19,9 +19,11 @@ export async function GET(request: Request, { params }: Ctx) {
   try {
     const { id, routineId } = await params;
     const { row } = await requireAgentAccess(id);
-    const expert = await routineExpert(row, new URL(request.url).searchParams.get("expert"));
+    // The store is asked at once, alongside the expert and its conversations.
+    const store = routinesOf(id);
+    const expert = await routineExpert(row, new URL(request.url).searchParams.get("expert"), { skills: false });
     const query = profileQuery(expert.profile);
-    const [hermesName, { data }] = await Promise.all([(await routinesOf(id)).hermesName(id, expert.profile, routineId), agent37.listSessions(id, query)]);
+    const [hermesName, { data }] = await Promise.all([store.then((s) => s.hermesName(id, expert.profile, routineId)), agent37.listSessions(id, query)]);
 
     const sessions = data
       .filter((s) => isRunOf(s, { id: routineId, hermesName }))

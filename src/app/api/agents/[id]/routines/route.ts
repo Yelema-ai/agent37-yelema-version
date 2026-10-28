@@ -14,8 +14,8 @@ export async function GET(request: Request, { params }: Ctx) {
   try {
     const { id } = await params;
     const { row } = await requireAgentAccess(id);
-    const expert = await routineExpert(row, new URL(request.url).searchParams.get("expert"));
-    return json({ routines: await (await routinesOf(id)).list(id, expert.profile, expert.name) });
+    const [expert, store] = await Promise.all([routineExpert(row, new URL(request.url).searchParams.get("expert"), { skills: false }), routinesOf(id)]);
+    return json({ routines: await store.list(id, expert.profile, expert.name) });
   } catch (e) {
     return handleError(e);
   }
@@ -27,8 +27,8 @@ export async function POST(request: Request, { params }: Ctx) {
     const { id } = await params;
     const { row } = await requireAgentAccess(id);
     const body = await readJson<RoutineBody>(request);
-    const expert = await routineExpert(row, body.expert);
-    const routine = await (await routinesOf(id)).create(id, expert.profile, expert.name, routineFields(body, expert));
+    const [expert, store] = await Promise.all([routineExpert(row, body.expert), routinesOf(id)]);
+    const routine = await store.create(id, expert.profile, expert.name, routineFields(body, expert));
     return json({ routine }, 201);
   } catch (e) {
     return handleError(e);
