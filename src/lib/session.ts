@@ -28,6 +28,8 @@ const TTL_MS = 30_000;
 // An answer older than TTL_MS is served once more while it is renewed, never one older than this.
 // A suspension is felt at the request after the renewal, so within this delay at the very most.
 const STALE_MS = 5 * 60_000;
+// The back office down: the last answer keeps the member working this long (a refusal still drops it).
+const STALE_ON_OUTAGE_MS = 30 * 60_000;
 
 export function encodeSession(session: BoSession): string {
   return Buffer.from(JSON.stringify(session), "utf8").toString("base64url");
@@ -89,7 +91,7 @@ const refused = (e: unknown) => e instanceof BackofficeError && (e.status === 40
 // to a request for another, even with the same token. Calls made together share one round-trip; an
 // answer past TTL_MS is served while renewed (up to STALE_MS); a refusal drops it at once.
 function sessionMemo<T>(load: (token: string) => Promise<T>) {
-  const m = memo<T>({ ttlMs: TTL_MS, staleMs: STALE_MS, evict: refused, maxEntries: 2000, background: keepAlive });
+  const m = memo<T>({ ttlMs: TTL_MS, staleMs: STALE_MS, staleOnErrorMs: STALE_ON_OUTAGE_MS, evict: refused, maxEntries: 2000, background: keepAlive });
   const key = (workspace: string, token: string) => `${workspace}:${fingerprint(token)}`;
   const read = (workspace: string, token: string): Promise<T> => m.get(key(workspace, token), () => load(token));
   // An answer the caller already holds (the back office's reply to a change) replaces the kept one.

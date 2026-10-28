@@ -13,6 +13,7 @@ import { cleanUserMessage } from "@/lib/chat-errors";
 import { useTurnReporter } from "@/components/activity/hooks";
 import { type SessionDetail } from "@/lib/types";
 import { uid, type ChatMessage, type ChatSettings, type MessageAttachment, type ToolEvent, type ToolStatus } from "./types";
+import { toMs } from "@/lib/activity";
 
 export interface SendSettings extends Partial<ChatSettings> {
   files?: string[];
@@ -158,7 +159,7 @@ function mapHistory(history: SessionDetail["history"]): ChatMessage[] {
     content: h.role === "user" ? cleanUserMessage(steerText(h.content ?? "")) : (h.content ?? ""),
     thinking: h.thinking,
     ...(h.files?.length ? { files: h.files } : {}),
-    ...(h.created_at ? { at: h.created_at < 1e12 ? h.created_at * 1000 : h.created_at } : {}),
+    ...(h.created_at ? { at: toMs(h.created_at) } : {}),
     ...(h.role === "user" && isSteer(h.content ?? "") ? { steered: true } : {}),
   }));
 }

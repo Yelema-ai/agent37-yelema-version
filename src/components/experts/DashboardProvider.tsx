@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { isTrustedDashboardUrl as isTrustedFrameUrl } from "@/lib/dashboards";
 import { usePoll } from "@/components/usePoll";
 import type { ChatMessage } from "@/components/chat/types";
+import type { DashboardShareMode } from "@/lib/backoffice";
 
 const WIDE = "(min-width: 85rem)";
 
@@ -33,7 +34,7 @@ export interface DashboardData {
   shareUrl?: string | null;
 }
 
-export type ShareMode = "team" | "people" | "link";
+export type ShareMode = DashboardShareMode;
 type ShareAnswer = Pick<DashboardData, "share" | "candidates" | "shareUrl">;
 
 interface DashboardContextValue {

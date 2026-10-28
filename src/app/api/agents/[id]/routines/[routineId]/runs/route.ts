@@ -5,6 +5,7 @@ import { handleError, json } from "@/lib/http";
 import { profileQuery } from "@/lib/profiles";
 import { isRunOf, runOutcome, type RoutineRun } from "@/lib/routines";
 import { routineExpert } from "../../_body";
+import { toMs } from "@/lib/activity";
 
 export const maxDuration = 120;
 
@@ -49,4 +50,3 @@ export async function GET(request: Request, { params }: Ctx) {
 }
 
 // Hermes reports seconds, the gateway milliseconds.
-const toMs = (t: number) => (t < 1e12 ? t * 1000 : t);

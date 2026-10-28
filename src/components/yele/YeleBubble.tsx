@@ -20,6 +20,7 @@ import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { useCallState } from "@/components/voice/CallProvider";
 import type { Companion } from "@/lib/companion";
 import { cn } from "@/lib/utils";
+import { toMs } from "@/lib/activity";
 
 type Shortcut = { label: string; desc: string; prompt: string; icon: LucideIcon };
 type PastSession = { session_id: string; title: string | null; last_active: number };
@@ -69,7 +70,7 @@ function pagesIn(text: string, here: string) {
 
 // When each Yélé discussion was last active, as in the conversations rail.
 function shortWhen(at: number): string {
-  const ms = at < 1e12 ? at * 1000 : at;
+  const ms = toMs(at);
   const d = new Date(ms);
   const today = new Date();
   today.setHours(0, 0, 0, 0);

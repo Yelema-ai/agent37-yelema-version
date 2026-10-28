@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Eye, Loader2, Lock, MessageSquarePlus } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Markdown } from "./Markdown";
+import { toMs } from "@/lib/activity";
 
 interface Shared {
   title: string;
@@ -14,7 +15,7 @@ interface Shared {
 }
 
 const when = (at: number) =>
-  new Date(at < 1e12 ? at * 1000 : at).toLocaleString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+  new Date(toMs(at)).toLocaleString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
 
 // The page a shared conversation link opens: the thread as its owner sees it, read-only, with who
 // shared it and until when the link works. No composer, no actions.

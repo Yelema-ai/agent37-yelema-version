@@ -12,6 +12,7 @@ import type { Expert } from "@/lib/types";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useMyAgents } from "@/components/useMyAgents";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
+import { toMs } from "@/lib/activity";
 
 /** The member's own instance: with no Expert chosen, it is their chat d'entreprise. */
 export function useOwnAgentId(): string | null {
@@ -30,7 +31,6 @@ export interface ConversationRow {
   at: number;
 }
 
-const ms = (t: number) => (t < 1e12 ? t * 1000 : t);
 
 // Every conversation of the member: the chat d'entreprise's (the instance with no profile) and each
 // Expert's, newest first. One read per space, in parallel; a space that does not answer is left out.
@@ -52,7 +52,7 @@ export function useAllConversations(ownAgentId: string | null, experts: Expert[]
             r.sessions.map((session) => ({
               session,
               expert,
-              at: ms(session.last_active),
+              at: toMs(session.last_active),
               href: `${agentTabPath(agentId, "chat", expert?.profileId)}?session=${encodeURIComponent(session.session_id)}`,
             })),
           () => [] as ConversationRow[]

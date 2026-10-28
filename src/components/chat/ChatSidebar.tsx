@@ -17,9 +17,10 @@ import { copyLater } from "@/lib/clipboard";
 import { profileQuery } from "@/lib/profile-id";
 import { useChatContext } from "./ChatProvider";
 import type { ChatSession } from "./types";
+import { toMs } from "@/lib/activity";
 
 // Hermes reports seconds or milliseconds depending on the build.
-const activeAt = (s: ChatSession) => (s.last_active < 1e12 ? s.last_active * 1000 : s.last_active);
+const activeAt = (s: ChatSession) => toMs(s.last_active);
 
 // The short date at the end of a row: the hour today and yesterday, the weekday this week, the day and
 // month before.

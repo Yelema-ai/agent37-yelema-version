@@ -41,7 +41,19 @@ export async function getSession(): Promise<{ user: SessionUser | null }> {
 export async function requireUser() {
   const { user } = await getSession();
   if (!user) throw new ApiError(401, "unauthorized", "Connectez-vous pour continuer.");
-  return { db: createAdminClient(), user };
+  return { db: authViaBackoffice() ? lazyDb() : createAdminClient(), user };
+}
+
+// Through the back office no route reads the tables: the client is built only if one ever does.
+function lazyDb(): DB {
+  let real: DB | null = null;
+  return new Proxy({} as DB, {
+    get(_target, prop) {
+      real ??= createAdminClient();
+      const value: unknown = Reflect.get(real, prop);
+      return typeof value === "function" ? value.bind(real) : value;
+    },
+  });
 }
 
 // Every authorization helper below goes through here, so this is where a request stays inside its
@@ -137,7 +149,7 @@ export async function requireAgentAccess(agent37Id: string, access: "owner" | "a
     }
     if (row.agent37_id !== agent37Id) throw new ApiError(404, "not_found", "Expert introuvable.");
     if (access === "owner") return { row, userId: row.owner_user_id!, role: null };
-    const role = await getRole(createAdminClient(), row.workspace_id, row.owner_user_id!);
+    const role = await getRole(lazyDb(), row.workspace_id, row.owner_user_id!);
     if (!role) throw new ApiError(404, "not_found", "Expert introuvable.");
     if (role !== "admin") throw new ApiError(403, "forbidden", "Cette action est réservée aux administrateurs.");
     return { row, userId: row.owner_user_id!, role };
