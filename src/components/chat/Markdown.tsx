@@ -16,10 +16,12 @@ const HIDDEN_LINK = /\[([^\]\n]*)\]\(<?(?:file:\/\/|sandbox:)?((?:\/home\/node|~
 function linkDriveFiles(content: string, agentId: string, profileId?: string | null): string {
   const url = (path: string) =>
     `/api/agents/${agentId}/files/content?path=${encodeURIComponent(normDrivePath(path))}&disposition=attachment`;
-  const name = (path: string) => safeDecode(path.split("/").pop() ?? path);
+  // A link's text is markdown: an underscore or a star in a file name must not turn into emphasis.
+  const md = (label: string) => label.replace(/([_*\[\]])/g, "\\$1");
+  const name = (path: string) => md(safeDecode(path.split("/").pop() ?? path));
   const link = (label: string, path: string) => {
     const note = noteFolder(path);
-    if (note) return `[${normDrivePath(path).replace(/^~\//, "")}](${agentTabPath(agentId, "files", profileId)}?dossier=${encodeURIComponent(note)})`;
+    if (note) return `[${md(normDrivePath(path).replace(/^~\//, ""))}](${agentTabPath(agentId, "files", profileId)}?dossier=${encodeURIComponent(note)})`;
     return isHiddenInChat(path) ? label : `[${label}](${url(path)})`;
   };
   return content
@@ -38,7 +40,7 @@ function linkDriveFiles(content: string, agentId: string, profileId?: string | n
 function folderLink(path: string, agentId: string, profileId?: string | null): string | null {
   const folder = citedFolder(path);
   if (!folder) return null;
-  const label = folder.replace(/^~\//, "");
+  const label = folder.replace(/^~\//, "").replace(/([_*\[\]])/g, "\\$1");
   return `[${label}](${agentTabPath(agentId, "files", profileId)}?dossier=${encodeURIComponent(folder)})`;
 }
 
