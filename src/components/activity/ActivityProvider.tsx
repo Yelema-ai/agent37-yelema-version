@@ -152,7 +152,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
 
   // The pop-ups of answers and routines share one place (Leslie, 28/10, A): a second one turns it into
   // « N nouvelles notifications » with « Tout fermer », instead of a pile to close one by one.
-  const grouped = useRef(0);
+  const grouped = useRef(new Set<string>());
   const announce = useCallback(
     (n: Notice, text: string, routine?: string) => {
       const expert = expertsRef.current.find((e) => expertKey(e.agentId, e.profileId) === expertKey(n.agentId, n.profile));
@@ -169,9 +169,10 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       if (!readNotifyPrefs()[n.kind]) return;
       if (n.toast && n.kind === "failed") {
         toast.error(title, { id: n.key, description: body, action: { label: "Ouvrir", onClick: open }, duration: 8000 });
-      } else if (n.toast) {
-        const reset = () => void (grouped.current = 0);
-        const count = (grouped.current += 1);
+      } else if (n.toast && !grouped.current.has(n.key)) {
+        // Counted by key: the same event from the stream and from polling is one notification.
+        const reset = () => grouped.current.clear();
+        const count = grouped.current.add(n.key).size;
         const ends = { id: GROUP_TOAST, duration: GROUP_MS, onDismiss: reset, onAutoClose: reset };
         if (count === 1) {
           // The expert's face stands in for the icon of a reply or a routine.
@@ -183,7 +184,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
             ...ends,
             description: `Dernière : ${title}`,
             icon: null,
-            action: { label: "Tout fermer", onClick: () => toast.dismiss() },
+            action: { label: "Tout fermer", onClick: () => toast.dismiss(GROUP_TOAST) },
           });
         }
       }
