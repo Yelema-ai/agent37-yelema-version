@@ -4,6 +4,9 @@ import { cookies } from "next/headers";
 import { after } from "next/server";
 import { cache } from "react";
 import { backoffice, BackofficeError, type BoInstance, type BoInstanceReading, type BoMe, type BoSession } from "@/lib/backoffice";
+import { tokenKid, verifyEs256, type Jwk } from "@/lib/jwt";
+import { memo } from "@/lib/memo";
+import { supabaseAnonKey, supabaseUrl } from "@/lib/runtime-config";
 import { pinnedWorkspaceId } from "@/lib/tenant";
 
 // The signed-in user when the back office owns the sign-in (AUTH_VIA_BACKOFFICE): its session
@@ -82,69 +85,28 @@ const fingerprint = (token: string) => createHash("sha256").update(token).digest
 const refused = (e: unknown) => e instanceof BackofficeError && (e.status === 401 || e.status === 403);
 
 // Keyed by the workspace as well as the session: an answer given for one client is never served
-// to a request for another, even with the same token.
-//
-// The calls a page makes together share ONE round-trip (the request in flight is what is kept, not
-// only its answer). An answer past TTL_MS is still served while a new one is fetched, so nobody
-// waits on the back office after a pause; past STALE_MS it is not, and the request waits. A refusal
-// drops the kept answer at once, so a suspended user gets at most the requests already under way.
-function memo<T>(load: (token: string) => Promise<T>) {
-  const store = new Map<string, { at: number; value: T }>();
-  const flying = new Map<string, Promise<T>>();
-
-  function refresh(key: string, token: string): Promise<T> {
-    let pending = flying.get(key);
-    if (!pending) {
-      pending = load(token).then(
-        (value) => {
-          flying.delete(key);
-          store.set(key, { at: Date.now(), value });
-          // Sessions come and go: keep the map from growing without bound.
-          if (store.size > 500) for (const [k, v] of store) if (Date.now() - v.at >= STALE_MS) store.delete(k);
-          return value;
-        },
-        (e) => {
-          flying.delete(key);
-          if (refused(e)) store.delete(key);
-          throw e;
-        }
-      );
-      flying.set(key, pending);
-    }
-    return pending;
-  }
-
-  const read = async (workspace: string, token: string): Promise<T> => {
-    const key = `${workspace}:${fingerprint(token)}`;
-    const hit = store.get(key);
-    const age = hit ? Date.now() - hit.at : Infinity;
-    if (hit && age < TTL_MS) return hit.value;
-    const fresh = refresh(key, token);
-    if (!hit || age >= STALE_MS) return fresh;
-    // Nobody waits for this one: its failure is the next request's to see.
-    const settled = fresh.then(noop, noop);
-    try {
-      // Keeps the function alive until the answer is in, where the host would otherwise freeze it.
-      after(() => settled);
-    } catch {
-      // Outside a request there is nothing to keep alive.
-    }
-    return hit.value;
-  };
+// to a request for another, even with the same token. Calls made together share one round-trip; an
+// answer past TTL_MS is served while renewed (up to STALE_MS); a refusal drops it at once.
+function sessionMemo<T>(load: (token: string) => Promise<T>) {
+  const m = memo<T>({ ttlMs: TTL_MS, staleMs: STALE_MS, evict: refused, maxEntries: 2000, background: keepAlive });
+  const key = (workspace: string, token: string) => `${workspace}:${fingerprint(token)}`;
+  const read = (workspace: string, token: string): Promise<T> => m.get(key(workspace, token), () => load(token));
   // An answer the caller already holds (the back office's reply to a change) replaces the kept one.
-  const put = (workspace: string, token: string, value: T): void => {
-    store.set(`${workspace}:${fingerprint(token)}`, { at: Date.now(), value });
-  };
-  // An answer the caller knows is out of date (a change the back office answered with another shape).
-  const drop = (workspace: string, token: string): void => {
-    store.delete(`${workspace}:${fingerprint(token)}`);
-  };
+  const put = (workspace: string, token: string, value: T): void => m.put(key(workspace, token), value);
+  const drop = (workspace: string, token: string): void => m.drop(key(workspace, token));
   return Object.assign(read, { put, drop });
 }
 
-function noop(): void {}
+// Keeps the function alive until a revalidation is in, where the host would otherwise freeze it.
+function keepAlive(settled: Promise<void>): void {
+  try {
+    after(() => settled);
+  } catch {
+    // Outside a request there is nothing to keep alive.
+  }
+}
 
-const meOf = memo((token) => backoffice.me(token));
+const meOf = sessionMemo((token) => backoffice.me(token));
 
 /** After the user changed their own profile: the next page shows it at once, not the kept answer. */
 export function rememberPrincipal(workspace: string, token: string, me: BoMe): void {
@@ -155,7 +117,7 @@ export function rememberPrincipal(workspace: string, token: string, me: BoMe): v
 export function forgetPrincipal(workspace: string, token: string): void {
   meOf.drop(workspace, token);
 }
-const instanceOf = memo((token) => backoffice.instance(token));
+const instanceOf = sessionMemo((token) => backoffice.instance(token));
 
 // A refused session (expired, suspended, no longer a member) reads as "nobody signed in"; an
 // outage is NOT that, and is thrown so the caller answers "try again" rather than signing out.
@@ -178,16 +140,65 @@ export const currentPrincipal = cache(async (): Promise<BoMe | null> => {
   return me && me.workspace.id === workspace ? me : null;
 });
 
-// What the back office says of the signed-in user's instance; null when nobody is signed in.
+// What the back office says of the signed-in user's instance; null when nobody is signed in. It is
+// asked for this request's workspace and refused to a session this client does not admit.
 const currentReading = cache(async (): Promise<BoInstanceReading | null> => {
   const session = await readSession();
   if (!session) return null;
   const workspace = await pinnedWorkspaceId();
   if (!workspace) return null;
-  // Asked alongside "who is this" rather than after it. The back office refuses the instance to a
-  // session this client does not admit, and the answer is kept only for a user this request admits.
-  const [me, reading] = await Promise.all([currentPrincipal(), instanceOf(workspace, session.accessToken).catch(nobodyOn)]);
-  return me ? reading : null;
+  return instanceOf(workspace, session.accessToken).catch(nobodyOn);
+});
+
+// ---- Who is signed in, checked here ------------------------------------------------------------
+
+const JWKS_TTL_MS = 10 * 60_000;
+const jwks = memo<Jwk[]>({ ttlMs: JWKS_TTL_MS, staleOnErrorMs: 6 * 60 * 60_000, maxEntries: 4, maxFlightMs: 6_000 });
+let jwksForcedAt = 0;
+
+async function readJwks(base: string): Promise<Jwk[]> {
+  const anon = supabaseAnonKey();
+  const res = await fetch(`${base}/auth/v1/.well-known/jwks.json`, {
+    headers: { Accept: "application/json", ...(anon ? { apikey: anon } : {}) },
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!res.ok) throw new Error(`jwks answered ${res.status}`);
+  const body = (await res.json()) as { keys?: unknown };
+  return Array.isArray(body.keys) ? (body.keys as Jwk[]) : [];
+}
+
+/** The account a session's token names, checked against the project's keys; null when it cannot be told here. */
+async function localClaims(token: string): Promise<{ sub: string; email: string | null } | null> {
+  const base = supabaseUrl()?.replace(/\/+$/, "");
+  if (!base) return null;
+  const expect = { issuer: `${base}/auth/v1`, audience: "authenticated" };
+  try {
+    let keys = await jwks.get(base, () => readJwks(base));
+    // A key rotated since the last read: read the set once more, at most once a minute.
+    const kid = tokenKid(token);
+    if (kid && !keys.some((k) => k.kid === kid) && Date.now() - jwksForcedAt > 60_000) {
+      jwksForcedAt = Date.now();
+      jwks.drop(base);
+      keys = await jwks.get(base, () => readJwks(base));
+    }
+    const check = verifyEs256(token, keys, expect);
+    return check.ok ? { sub: check.claims.sub, email: check.claims.email } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The id of the signed-in account, read from the session's token when its signature checks out
+ * (no call); otherwise from the back office. Says WHO, not that they are admitted: a route that
+ * reads the user's instance or data has the back office check that.
+ */
+export const currentUserId = cache(async (): Promise<string | null> => {
+  const session = await readSession();
+  if (!session) return null;
+  const local = await localClaims(session.accessToken);
+  if (local) return local.sub;
+  return (await currentPrincipal())?.user.id ?? null;
 });
 
 /** The signed-in user's own instance with its installed experts; null when they have none yet. */

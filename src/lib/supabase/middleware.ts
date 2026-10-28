@@ -1,12 +1,17 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { backoffice, BackofficeError } from "@/lib/backoffice";
-import { authViaBackoffice, deploymentWorkspaceId, multiTenant, siteUrl, supabaseAnonKey, supabaseUrl } from "@/lib/runtime-config";
+import { createHash } from "node:crypto";
+import { backoffice, BackofficeError, type BoOpenedSession } from "@/lib/backoffice";
+import { memo } from "@/lib/memo";
+import { authViaBackoffice, deploymentWorkspaceId, multiTenant, resolverToken, siteUrl, supabaseAnonKey, supabaseUrl } from "@/lib/runtime-config";
 import { decodeSession, encodeSession, LEGACY_SESSION_COOKIE, secondsLeft, SESSION_COOKIE, sessionCookieOptions, sessionCookieValue } from "@/lib/session";
 import { publicSiteOrigin } from "@/lib/site-url";
-import { hostOf, resolveHost, TenantError } from "@/lib/tenant-resolver";
+import { sealTenant, TENANT_HEADER } from "@/lib/tenant-header";
+import { hostOf, resolveHost, TenantError, type ResolvedTenant } from "@/lib/tenant-resolver";
 
 export async function updateSession(request: NextRequest) {
+  // Only this proxy writes the resolved client: whatever the browser sent is dropped.
+  request.headers.delete(TENANT_HEADER);
   // Health checks come from the back-office, carry no session, and must answer even when the
   // Supabase variables are missing — so they skip the auth client entirely.
   if (request.nextUrl.pathname === "/api/health") return NextResponse.next({ request });
@@ -16,7 +21,8 @@ export async function updateSession(request: NextRequest) {
   if (multiTenant()) {
     const gate = await tenantGate(request);
     if (gate instanceof NextResponse) return gate;
-    workspace = gate;
+    workspace = gate.tenant.workspaceId;
+    request.headers.set(TENANT_HEADER, sealTenant(gate.tenant, gate.host, resolverToken() ?? ""));
   }
   if (authViaBackoffice()) return updateBackofficeSession(request, workspace);
 
@@ -75,7 +81,7 @@ export async function updateSession(request: NextRequest) {
 
 // A host the back office does not know, or a suspended client, gets its own page (JSON for the API)
 // and nothing else: no sign-in screen, no session renewal. Otherwise, the client's workspace.
-async function tenantGate(request: NextRequest): Promise<NextResponse | string> {
+async function tenantGate(request: NextRequest): Promise<NextResponse | { tenant: ResolvedTenant; host: string }> {
   const refuse = (status: number, code: string, message: string, page: string) =>
     request.nextUrl.pathname.startsWith("/api/")
       ? NextResponse.json({ error: { code, message } }, { status })
@@ -94,11 +100,17 @@ async function tenantGate(request: NextRequest): Promise<NextResponse | string> 
   }
   if (!tenant) return refuse(404, "not_found", "Cet espace n’existe pas.", "/espace-introuvable");
   if (tenant.status === "suspended") return refuse(403, "suspended", "Cet espace est suspendu.", "/espace-suspendu");
-  return tenant.workspaceId;
+  return { tenant, host: host! };
 }
 
 // Renew the access token this long before it expires, so a request never leaves with a dead one.
 const RENEW_BEFORE_S = 120;
+
+// The requests of one page renew together: one call per refresh token, its answer shared, so they
+// all leave with the same new session instead of racing the back office's token rotation.
+const renewals = memo<BoOpenedSession>({ ttlMs: 30_000, maxEntries: 2000, maxFlightMs: 20_000 });
+const renew = (refreshToken: string, workspace: string | undefined) =>
+  renewals.get(`${workspace ?? ""}:${createHash("sha256").update(refreshToken).digest("hex")}`, () => backoffice.refresh(refreshToken, workspace));
 
 function isPublicPath(pathname: string): boolean {
   return (
@@ -127,7 +139,7 @@ async function updateBackofficeSession(request: NextRequest, workspace: string |
 
   if (session && secondsLeft(session) < RENEW_BEFORE_S) {
     try {
-      const opened = await backoffice.refresh(session.refreshToken, workspace);
+      const opened = await renew(session.refreshToken, workspace);
       session = opened.session;
       renewed = encodeSession(session);
       // The handlers of THIS request must see the new tokens too.
@@ -135,8 +147,8 @@ async function updateBackofficeSession(request: NextRequest, workspace: string |
       if (SESSION_COOKIE !== LEGACY_SESSION_COOKIE) request.cookies.delete(LEGACY_SESSION_COOKIE);
     } catch (e) {
       const refused = e instanceof BackofficeError && (e.status === 401 || e.status === 403);
-      // Refused: signed out. An outage: keep going on the current token while it still lives.
-      if (refused || secondsLeft(session) <= 0) {
+      // Refused: signed out. An outage keeps the cookie, even past expiry: it is renewed once the back office answers.
+      if (refused) {
         session = null;
         dropped = true;
         request.cookies.delete(SESSION_COOKIE);

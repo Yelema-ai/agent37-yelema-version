@@ -1,4 +1,4 @@
-import { requireAgentAccess } from "@/lib/auth";
+import { requireAgentAccess, requireUser } from "@/lib/auth";
 import { LINK_DAYS, sealConversation } from "@/lib/conversation-token";
 import { ApiError, handleError, json, readJson } from "@/lib/http";
 import { resolveProfile } from "@/lib/profiles";
@@ -10,7 +10,9 @@ type Ctx = { params: Promise<{ id: string; sessionId: string }> };
 export async function POST(request: Request, { params }: Ctx) {
   try {
     const { id, sessionId } = await params;
-    const { user, row } = await requireAgentAccess(id);
+    const { row } = await requireAgentAccess(id);
+    // The owner's name goes into the link: the one call that needs the whole profile.
+    const { user } = await requireUser();
     if (!/^[\w.-]{1,128}$/.test(sessionId)) throw new ApiError(404, "not_found", "Conversation introuvable.");
     const profile = await resolveProfile(row, new URL(request.url).searchParams.get("profile"));
     const { title } = await readJson<{ title?: string }>(request);

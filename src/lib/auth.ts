@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ApiError } from "@/lib/http";
 import { authViaBackoffice } from "@/lib/runtime-config";
 import { pinnedWorkspaceId } from "@/lib/tenant";
-import { currentInstance, currentPrincipal } from "@/lib/session";
+import { currentInstance, currentPrincipal, currentUserId, readSession } from "@/lib/session";
 import type { AgentRow, Role } from "@/lib/types";
 
 // `db` is the privileged service-role client (RLS bypassed). All table access in this app goes
@@ -77,13 +77,14 @@ export async function requireAdmin(db: DB, workspaceId: string, userId: string):
 }
 
 // The signed-in user's own instance, in the shape of an `agents` row, when the back office is the
-// source: it is what says which instance is theirs and which experts are installed on it.
+// source: it is what says which instance is theirs and which experts are installed on it. The back
+// office answers it only for an admitted member of this request's workspace.
 export async function backofficeAgentRow(): Promise<AgentRow | null> {
-  const [me, instance] = await Promise.all([currentPrincipal(), currentInstance()]);
-  if (!me || !instance) return null;
+  const [userId, instance, workspace] = await Promise.all([currentUserId(), currentInstance(), pinnedWorkspaceId()]);
+  if (!userId || !instance || !workspace) return null;
   return {
     agent37_id: instance.id,
-    workspace_id: me.workspace.id,
+    workspace_id: workspace,
     profiles: instance.experts.map((e) => e.profile),
     // Only its presence is read here (which Composio the instance uses); the tool proxy looks the
     // real hash up in the database.
@@ -95,7 +96,7 @@ export async function backofficeAgentRow(): Promise<AgentRow | null> {
     memory: null,
     disk: null,
     created_by: null,
-    owner_user_id: me.user.id,
+    owner_user_id: userId,
     created_at: instance.createdAt ?? "",
   };
 }
@@ -122,12 +123,25 @@ export async function agentAccessRole(db: DB, row: AgentRow, userId: string): Pr
   return getRole(db, row.workspace_id, userId);
 }
 
-// The auth + ownership preamble every per-agent BFF route repeats: require a signed-in user,
-// resolve the agent's mirror row, then gate on access. "owner" (the default) lets the agent's
-// owner in — using and configuring their own agent. "admin" is for what spends or destroys
-// (resize, budget): the owner again, and only if they are a workspace admin. Returns the
-// privileged client, user, and row so the handler can get on with its work.
-export async function requireAgentAccess(agent37Id: string, access: "owner" | "admin" = "owner") {
+// The auth + ownership preamble every per-agent BFF route repeats. "owner" (the default) lets the
+// agent's owner in; "admin" is for what spends or destroys: the owner again, if a workspace admin.
+// Through the back office, ownership is its answer for the caller's instance: no `/me` unless "admin".
+// `role` is null when it was not needed to decide.
+export async function requireAgentAccess(agent37Id: string, access: "owner" | "admin" = "owner"): Promise<{ row: AgentRow; userId: string; role: Role | null }> {
+  if (authViaBackoffice()) {
+    const row = await backofficeAgentRow();
+    if (!row) {
+      // Rare path: tell "signed out or refused" (401) from "not yours" (404).
+      if (!(await getSession()).user) throw new ApiError(401, "unauthorized", "Connectez-vous pour continuer.");
+      throw new ApiError(404, "not_found", "Expert introuvable.");
+    }
+    if (row.agent37_id !== agent37Id) throw new ApiError(404, "not_found", "Expert introuvable.");
+    if (access === "owner") return { row, userId: row.owner_user_id!, role: null };
+    const role = await getRole(createAdminClient(), row.workspace_id, row.owner_user_id!);
+    if (!role) throw new ApiError(404, "not_found", "Expert introuvable.");
+    if (role !== "admin") throw new ApiError(403, "forbidden", "Cette action est réservée aux administrateurs.");
+    return { row, userId: row.owner_user_id!, role };
+  }
   const { db, user } = await requireUser();
   const row = await getAgentRow(db, agent37Id);
   const role = await agentAccessRole(db, row, user.id);
@@ -135,5 +149,18 @@ export async function requireAgentAccess(agent37Id: string, access: "owner" | "a
   if (access === "admin" && role !== "admin") {
     throw new ApiError(403, "forbidden", "Cette action est réservée aux administrateurs.");
   }
-  return { db, user, row, role };
+  return { row, userId: user.id, role };
+}
+
+/**
+ * The session's token for a route that only relays to the back office: 404 with `unavailable` when
+ * the back office does not sign users in here, 401 without a session. `admin`: the refusal a member
+ * gets (the back office checks the role again; this saves the round-trip).
+ */
+export async function requireBackofficeToken(unavailable: string, opts: { admin?: string } = {}): Promise<string> {
+  if (!authViaBackoffice()) throw new ApiError(404, "not_found", unavailable);
+  const [session, me] = await Promise.all([readSession(), opts.admin ? currentPrincipal() : null]);
+  if (!session || (opts.admin && !me)) throw new ApiError(401, "unauthorized", "Connectez-vous pour continuer.");
+  if (opts.admin && me?.user.role !== "admin") throw new ApiError(403, "forbidden", opts.admin);
+  return session.accessToken;
 }

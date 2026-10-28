@@ -1,5 +1,7 @@
 import "server-only";
 import { coldStartWait } from "./cold-start";
+import { EXEC_TIMEOUT_MS, JSON_TIMEOUT_MS, withTimeout } from "./fetch-timeout";
+import { authViaBackoffice } from "./runtime-config";
 import { gatewayFetch, gatewayInstancePath, gatewayPortHeaders, runtimeGateway, type RuntimeGateway } from "./runtime-gateway";
 import type {
   Agent,
@@ -74,6 +76,9 @@ export type RelayChannel = "slack" | "teams";
 export type RelayLink = { code: string; expiresAt: string; installUrl?: string; appUrl?: string | null };
 export type RelayStatus = { enabled: boolean; accounts: number };
 
+// The gateway's own JSON routes (Telegram, relays, capabilities, pack files): never a stream.
+const gatewayJson = (gw: RuntimeGateway, path: string, init?: RequestInit) => gatewayFetch(gw, path, withTimeout(init, JSON_TIMEOUT_MS));
+
 function requireGateway(): RuntimeGateway {
   const gw = runtimeGateway();
   if (!gw) throw new Agent37Error(501, "unsupported", "Telegram for this runtime needs the runtime gateway");
@@ -132,7 +137,10 @@ async function parseAgent37<T>(res: Response, augment402 = false): Promise<T> {
 // The signed-in account, named to the runtime gateway: on an enterprise instance it picks that member's
 // agent and confines the call to it. Outside a request (no session), nothing is added.
 async function asUser(init: RequestInit): Promise<RequestInit> {
-  const id = await import("./auth").then((m) => m.getSession()).then((s) => s.user?.id ?? null, () => null);
+  const id = await (authViaBackoffice()
+    ? import("./session").then((m) => m.currentUserId())
+    : import("./auth").then((m) => m.getSession()).then((s) => s.user?.id ?? null)
+  ).catch(() => null);
   if (!id) return init;
   const headers = new Headers(init.headers);
   if (!headers.has("X-Yelema-User")) headers.set("X-Yelema-User", id);
@@ -140,8 +148,9 @@ async function asUser(init: RequestInit): Promise<RequestInit> {
 }
 
 // `gatewayPath`: the same call on the runtime gateway; absent = not offered there.
-async function call<T>(path: string, init?: RequestInit, gatewayPath?: string): Promise<T> {
+async function call<T>(path: string, init?: RequestInit, gatewayPath?: string, timeoutMs = JSON_TIMEOUT_MS): Promise<T> {
   const gw = runtimeGateway();
+  init = withTimeout(init, timeoutMs);
   if (gw) {
     if (!gatewayPath) throw new Agent37Error(501, "unsupported", `${path} is not offered by the runtime gateway`);
     const res = await gatewayFetch(gw, gatewayPath, await asUser({ ...init, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } }));
@@ -201,6 +210,7 @@ export async function instanceFetch(id: string, path: string, init?: RequestInit
 // Routines tab reaches Hermes's API server (lib/hermes-cron), which checks its own Bearer key: the
 // edge passes Authorization through untouched. JSON bodies only.
 export async function instancePortFetch(id: string, port: number, path: string, init?: RequestInit): Promise<Response> {
+  if (!init?.signal) init = withTimeout(init, JSON_TIMEOUT_MS);
   const gw = runtimeGateway();
   if (gw) {
     return gatewayFetch(gw, `/v1/instances/${urlId(id)}/ports/${Math.trunc(port)}${path}`, await asUser({ ...init, headers: gatewayPortHeaders(init?.headers) }));
@@ -220,10 +230,10 @@ export async function instancePortFetch(id: string, port: number, path: string, 
 // without the 402 wallet hint (a data-plane 402 is budget exhaustion mid-chat, not wallet funding).
 async function instanceCall<T>(id: string, path: string, init?: RequestInit): Promise<T> {
   for (let attempt = 0; ; attempt += 1) {
-    const res = await instanceFetch(id, path, {
+    const res = await instanceFetch(id, path, withTimeout({
       ...init,
       headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
-    });
+    }, JSON_TIMEOUT_MS));
     const wait = coldStartWait(init?.method, res.status, attempt);
     if (wait === null) return parseAgent37<T>(res);
     await res.body?.cancel();
@@ -247,7 +257,8 @@ export const agent37 = {
     call<{ exit_code: number; stdout: string; stderr: string; truncated: boolean }>(
       `/instances/${urlId(id)}/exec`,
       { method: "POST", body: JSON.stringify({ command, ...(user ? { user } : {}) }) },
-      `/v1/instances/${urlId(id)}/exec`
+      `/v1/instances/${urlId(id)}/exec`,
+      EXEC_TIMEOUT_MS
     ),
 
   signedUrl: (id: string, port: number, ttlSeconds?: number) =>
@@ -340,28 +351,28 @@ export const agent37 = {
   // gateway knows the expert's folder; direct, it is the Hermes profile. Raw response, 404 = no file.
   expertFile: (id: string, profile: string, name: string) => {
     const gw = runtimeGateway();
-    if (gw) return gatewayFetch(gw, `/v1/instances/${urlId(id)}/experts/${urlId(profile)}/files/${encodeURIComponent(name)}`);
-    return instanceFetch(id, `/v1/files/content?path=${encodeURIComponent(`~/.hermes/profiles/${profile}/${name}`)}`);
+    if (gw) return gatewayJson(gw, `/v1/instances/${urlId(id)}/experts/${urlId(profile)}/files/${encodeURIComponent(name)}`);
+    return instanceFetch(id, `/v1/files/content?path=${encodeURIComponent(`~/.hermes/profiles/${profile}/${name}`)}`, withTimeout(undefined, JSON_TIMEOUT_MS));
   },
 
   // Telegram of an instance (Hermes or Claude Code), through the runtime gateway: a t.me link that has the
   // member create their own bot, then its forum group with one topic per expert.
   telegramHub: {
     link: async (id: string, name: string): Promise<{ url: string; groupUrl?: string; expiresAt: string }> =>
-      parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram/link`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) })),
-    status: async (id: string): Promise<TelegramHubStatus> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram`)),
+      parseAgent37(await gatewayJson(requireGateway(), `/v1/instances/${urlId(id)}/telegram/link`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) })),
+    status: async (id: string): Promise<TelegramHubStatus> => parseAgent37(await gatewayJson(requireGateway(), `/v1/instances/${urlId(id)}/telegram`)),
     own: async (id: string, token: string): Promise<{ bot: string; groupUrl: string }> =>
-      parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram/own`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) })),
-    sync: async (id: string): Promise<{ ok: true; topics: number }> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram/sync`, { method: "POST" })),
-    disconnect: async (id: string): Promise<{ ok: true }> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/telegram`, { method: "DELETE" })),
+      parseAgent37(await gatewayJson(requireGateway(), `/v1/instances/${urlId(id)}/telegram/own`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) })),
+    sync: async (id: string): Promise<{ ok: true; topics: number }> => parseAgent37(await gatewayJson(requireGateway(), `/v1/instances/${urlId(id)}/telegram/sync`, { method: "POST" })),
+    disconnect: async (id: string): Promise<{ ok: true }> => parseAgent37(await gatewayJson(requireGateway(), `/v1/instances/${urlId(id)}/telegram`, { method: "DELETE" })),
   },
 
   // Slack and Teams of a Claude Code instance, relayed by the runtime gateway: a link code (and, for Slack,
   // the « Add to Slack » install link), how many accounts are linked, unplug.
   channelRelay: {
-    link: async (id: string, channel: RelayChannel): Promise<RelayLink> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/${channel}/link`, { method: "POST" })),
-    status: async (id: string, channel: RelayChannel): Promise<RelayStatus> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/${channel}`)),
-    unlink: async (id: string, channel: RelayChannel): Promise<{ ok: true }> => parseAgent37(await gatewayFetch(requireGateway(), `/v1/instances/${urlId(id)}/${channel}`, { method: "DELETE" })),
+    link: async (id: string, channel: RelayChannel): Promise<RelayLink> => parseAgent37(await gatewayJson(requireGateway(), `/v1/instances/${urlId(id)}/${channel}/link`, { method: "POST" })),
+    status: async (id: string, channel: RelayChannel): Promise<RelayStatus> => parseAgent37(await gatewayJson(requireGateway(), `/v1/instances/${urlId(id)}/${channel}`)),
+    unlink: async (id: string, channel: RelayChannel): Promise<{ ok: true }> => parseAgent37(await gatewayJson(requireGateway(), `/v1/instances/${urlId(id)}/${channel}`, { method: "DELETE" })),
   },
 
   // What the instance's runtime offers (the gateway's /capabilities); `null` direct, where every
@@ -369,6 +380,6 @@ export const agent37 = {
   capabilities: async (id: string): Promise<RuntimeCapabilities | null> => {
     const gw = runtimeGateway();
     if (!gw) return null;
-    return parseAgent37<RuntimeCapabilities>(await gatewayFetch(gw, `/v1/instances/${urlId(id)}/capabilities`));
+    return parseAgent37<RuntimeCapabilities>(await gatewayJson(gw, `/v1/instances/${urlId(id)}/capabilities`));
   },
 };

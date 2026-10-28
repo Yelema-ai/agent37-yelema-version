@@ -57,6 +57,7 @@ export async function listToolkits(search?: string): Promise<IntegrationToolkits
   const res = await fetch(`${COMPOSIO_API_BASE}/api/v3/toolkits?${params}`, {
     headers: { "x-api-key": apiKey() },
     cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) throw new ApiError(502, "composio_error", "Le catalogue des outils est indisponible. Réessayez dans un instant.");
   const data = (await res.json()) as { items?: unknown[] };

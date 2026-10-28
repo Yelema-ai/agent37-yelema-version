@@ -18,6 +18,11 @@ export function json<T>(data: T, status = 200) {
   return NextResponse.json(data, { status });
 }
 
+/** JSON that no browser or proxy keeps: what is personal and changes. */
+export function noStore<T>(data: T): NextResponse {
+  return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
+}
+
 export async function readJson<T = Record<string, unknown>>(request: Request): Promise<T> {
   try {
     return (await request.json()) as T;

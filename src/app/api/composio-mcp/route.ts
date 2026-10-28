@@ -5,6 +5,8 @@ import { backoffice, BackofficeError, type ComposioCallsDeclaration } from "@/li
 import { composioUserId, hashAppsToken, mintMcpSession, type McpSession } from "@/lib/composio";
 import { pinnedAccounts } from "@/lib/connection-accounts";
 import { extractComposioCalls } from "@/lib/composio-usage";
+import { fetchUntilHeaders } from "@/lib/fetch-timeout";
+import { memo } from "@/lib/memo";
 import { backofficeUrl } from "@/lib/runtime-config";
 import { pinnedWorkspaceId } from "@/lib/tenant";
 import { TenantError } from "@/lib/tenant-resolver";
@@ -25,50 +27,49 @@ const FORWARD_RESPONSE_HEADERS = ["content-type", "mcp-session-id", "mcp-protoco
 
 // One Composio session per member and set of default accounts, minted once per server instance and reused until
 // Composio answers 404 (evicted) or 401 (key changed); then it is re-minted and the request replayed once.
-const sessions = new Map<string, McpSession>();
-const minting = new Map<string, Promise<McpSession>>();
+const sessions = memo<McpSession>({ ttlMs: 12 * 60 * 60_000, maxEntries: 500, maxFlightMs: 30_000 });
+const sessionKey = (userId: string, pins: Record<string, string[]>) => `${userId}|${JSON.stringify(pins)}`;
 
 function getSession(userId: string, pins: Record<string, string[]>): Promise<McpSession> {
-  const key = `${userId}|${JSON.stringify(pins)}`;
-  const cached = sessions.get(key);
-  if (cached) return Promise.resolve(cached);
-  let inflight = minting.get(key);
-  if (!inflight) {
-    // A pin Composio refuses (account gone since) must not cost the expert its tools: unpinned then.
-    inflight = mintMcpSession(userId, pins)
-      .catch((e) => (Object.keys(pins).length ? mintMcpSession(userId) : Promise.reject(e)))
-      .then((session) => {
-        sessions.set(key, session);
-        return session;
-      })
-      .finally(() => minting.delete(key));
-    minting.set(key, inflight);
-  }
-  return inflight;
+  // A pin Composio refuses (account gone since) must not cost the expert its tools: unpinned then.
+  return sessions.get(sessionKey(userId, pins), () => mintMcpSession(userId, pins).catch((e) => (Object.keys(pins).length ? mintMcpSession(userId) : Promise.reject(e))));
 }
 
 // The member's default account per tool, chosen on the Intégrations screen and kept by the back office. Read
 // at most once a minute per instance (and agent); the last answer stands while the back office is away.
-const PINS_TTL_MS = 60_000;
-const pinsCache = new Map<string, { at: number; pins: Record<string, string[]> }>();
+const pinsCache = memo<Record<string, string[]>>({ ttlMs: 60_000, staleOnErrorMs: 6 * 60 * 60_000, maxEntries: 2000, maxFlightMs: 20_000 });
 
 async function defaultPins(token: string, workspace: string, profile: string | null): Promise<Record<string, string[]>> {
   if (!backofficeUrl()) return {};
-  const key = `${hashAppsToken(token)}|${profile ?? ""}`;
-  const hit = pinsCache.get(key);
-  if (hit && Date.now() - hit.at < PINS_TTL_MS) return hit.pins;
   try {
-    const { defaults } = await backoffice.appsAccounts(token, workspace, profile ?? undefined);
-    const pins = pinnedAccounts(defaults ?? {});
-    pinsCache.set(key, { at: Date.now(), pins });
-    return pins;
+    return await pinsCache.get(`${hashAppsToken(token)}|${profile ?? ""}`, async () => pinnedAccounts((await backoffice.appsAccounts(token, workspace, profile ?? undefined)).defaults ?? {}));
   } catch (e) {
     // 404: a back office without the route yet. Anything else is kept quiet past the first line.
     if (!(e instanceof BackofficeError && e.status === 404)) console.warn("[composio-mcp] default accounts unavailable:", e instanceof Error ? e.message : e);
-    pinsCache.set(key, { at: Date.now(), pins: hit?.pins ?? {} });
-    return hit?.pins ?? {};
+    return {};
   }
 }
+
+type TokenRow = { agent37_id: string; workspace_id: string; owner_user_id: string | null };
+// The instance an apps token belongs to: kept a minute (an unknown token 10 s), a database outage never kept.
+const tokenRows = memo<TokenRow | null>({ ttlMs: 60_000, ttlOf: (row) => (row ? 60_000 : 10_000), maxEntries: 2000, maxFlightMs: 15_000 });
+class LookupDown extends Error {}
+
+function rowOfToken(token: string): Promise<TokenRow | null> {
+  const hash = hashAppsToken(token);
+  return tokenRows.get(hash, async () => {
+    const { data, error } = await createAdminClient()
+      .from("agents")
+      .select("agent37_id, workspace_id, owner_user_id")
+      .eq("apps_token_hash", hash)
+      .maybeSingle<TokenRow>();
+    if (error) throw new LookupDown(error.message);
+    return data ?? null;
+  });
+}
+
+// Upstream answers its headers once the tool has run; the body may then stream.
+const FORWARD_HEADERS_TIMEOUT_MS = 150_000;
 
 function forward(session: McpSession, request: Request, body: ArrayBuffer | undefined): Promise<Response> {
   const headers: Record<string, string> = { ...session.headers };
@@ -77,13 +78,13 @@ function forward(session: McpSession, request: Request, body: ArrayBuffer | unde
     if (value) headers[name] = value;
   }
   // redirect: "manual", or fetch would carry the Composio key across a cross-origin redirect.
-  return fetch(session.url, {
+  return fetchUntilHeaders(session.url, {
     method: request.method,
     headers,
     body: request.method === "POST" ? body : undefined,
     redirect: "manual",
     cache: "no-store",
-  });
+  }, FORWARD_HEADERS_TIMEOUT_MS);
 }
 
 function errorJson(status: number, error: string): Response {
@@ -135,14 +136,24 @@ function declareCalls(token: string, row: { agent37_id: string; workspace_id: st
 
 // Chat d'entreprise: the enterprise instance has no agents row; its agent (`u-…`, header X-Yelema-Profile)
 // reaches the apps of ITS member, whom the back office names from the instance token. Unknown agent: no row.
-async function seatRow(token: string, workspace: string | undefined, header: string | null): Promise<{ agent37_id: string; workspace_id: string; owner_user_id: string } | Response | null> {
+const SEAT_PROFILE = /^u-[a-z0-9]{6}$/;
+const seats = memo<TokenRow | null>({ ttlMs: 60_000, ttlOf: (row) => (row ? 60_000 : 10_000), maxEntries: 2000, maxFlightMs: 20_000 });
+
+async function seatRow(token: string, workspace: string | undefined, header: string | null): Promise<TokenRow | Response | null> {
   const profile = header?.trim() ?? "";
-  if (!workspace || !/^u-[a-z0-9]{6}$/.test(profile)) return null;
+  if (!workspace || !SEAT_PROFILE.test(profile)) return null;
   try {
-    const { user } = await backoffice.seatAppsUser(token, workspace, profile);
-    return { agent37_id: profile, workspace_id: workspace, owner_user_id: user };
-  } catch (e) {
-    return e instanceof BackofficeError && e.status >= 400 && e.status < 500 ? null : errorJson(503, "token lookup unavailable");
+    return await seats.get(`${hashAppsToken(token)}|${workspace}|${profile}`, async () => {
+      try {
+        const { user } = await backoffice.seatAppsUser(token, workspace, profile);
+        return { agent37_id: profile, workspace_id: workspace, owner_user_id: user };
+      } catch (e) {
+        if (e instanceof BackofficeError && e.status >= 400 && e.status < 500) return null;
+        throw e;
+      }
+    });
+  } catch {
+    return errorJson(503, "token lookup unavailable");
   }
 }
 
@@ -159,14 +170,19 @@ async function handle(request: Request): Promise<Response> {
     return e instanceof TenantError && e.status < 500 ? errorJson(401, "invalid token") : errorJson(503, "token lookup unavailable");
   }
 
-  const { data: found, error } = await createAdminClient()
-    .from("agents")
-    .select("agent37_id, workspace_id, owner_user_id")
-    .eq("apps_token_hash", hashAppsToken(token))
-    .maybeSingle<{ agent37_id: string; workspace_id: string; owner_user_id: string | null }>();
-  // A database outage must not look like a revoked token to the expert.
-  if (error) return errorJson(503, "token lookup unavailable");
-  const row = found ?? (await seatRow(token, pinned, request.headers.get("x-yelema-profile")));
+  // An enterprise seat names itself: no agents row to look up.
+  const seatHeader = request.headers.get("x-yelema-profile");
+  const isSeat = SEAT_PROFILE.test(seatHeader?.trim() ?? "");
+  let found: TokenRow | null = null;
+  if (!isSeat) {
+    try {
+      found = await rowOfToken(token);
+    } catch {
+      // A database outage must not look like a revoked token to the expert.
+      return errorJson(503, "token lookup unavailable");
+    }
+  }
+  const row = found ?? (await seatRow(token, pinned, seatHeader));
   if (row instanceof Response) return row;
   if (!row) return errorJson(401, "invalid token");
   // An instance of another client than this address's is not ours to proxy.
@@ -179,7 +195,7 @@ async function handle(request: Request): Promise<Response> {
   try {
     let upstream = await forward(await getSession(userId, pins), request, body);
     if (upstream.status === 404 || upstream.status === 401) {
-      sessions.delete(`${userId}|${JSON.stringify(pins)}`);
+      sessions.drop(sessionKey(userId, pins));
       upstream = await forward(await getSession(userId, pins), request, body);
     }
     // Once per request, with the final status: a replay after a stale session is not a second call.

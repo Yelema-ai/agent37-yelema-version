@@ -28,7 +28,7 @@ const fileQuery = (path: string) => `/v1/files/content?path=${encodeURIComponent
 async function apiKey(agentId: string): Promise<string> {
   const cached = keys.get(agentId);
   if (cached) return cached;
-  const res = await instanceFetch(agentId, fileQuery(KEY_FILE));
+  const res = await instanceFetch(agentId, fileQuery(KEY_FILE), { signal: AbortSignal.timeout(30_000) });
   const key = res.ok ? (await res.text()).trim() : "";
   if (!key) {
     await res.body?.cancel().catch(() => undefined);
@@ -214,7 +214,7 @@ export const hermesCron = {
 // Where an expert's routines post their result: every chat routed to the expert (its Telegram topic),
 // or only the app ("local": the run is still a conversation under the expert) when there is none.
 async function deliveries(agentId: string): Promise<(profile: string) => string> {
-  const res = await instanceFetch(agentId, fileQuery(CONFIG_FILE));
+  const res = await instanceFetch(agentId, fileQuery(CONFIG_FILE), { signal: AbortSignal.timeout(30_000) });
   if (!res.ok) {
     await res.body?.cancel().catch(() => undefined);
     console.error(`[routines] could not read the Hermes config on ${agentId}`, res.status);

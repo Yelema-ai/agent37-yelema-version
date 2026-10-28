@@ -116,11 +116,13 @@ export type PublicConfig = {
   logoUrl: string | null;
 };
 
+// Signed in through the back office, the browser never talks to Supabase: it gets neither value.
 export function publicConfig(): PublicConfig {
+  const viaBackoffice = authViaBackoffice();
   return {
-    authVia: authViaBackoffice() ? "backoffice" : "supabase",
-    supabaseUrl: supabaseUrl() ?? "",
-    supabaseAnonKey: supabaseAnonKey() ?? "",
+    authVia: viaBackoffice ? "backoffice" : "supabase",
+    supabaseUrl: viaBackoffice ? "" : (supabaseUrl() ?? ""),
+    supabaseAnonKey: viaBackoffice ? "" : (supabaseAnonKey() ?? ""),
     siteUrl: siteUrl() ?? null,
     logoUrl: brandLogoUrl() ?? null,
   };
