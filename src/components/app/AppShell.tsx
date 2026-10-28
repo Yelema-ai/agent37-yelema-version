@@ -1,6 +1,7 @@
 "use client";
 
 import { DeliverableWatcher } from "@/components/activity/DeliverableWatcher";
+import { InstanceEventStream } from "@/components/activity/InstanceEventStream";
 import { syncPrefs } from "@/lib/prefs-sync";
 import { SearchDialog } from "@/components/conversations/SearchDialog";
 import { useWorkspace } from "@/components/WorkspaceProvider";
@@ -117,6 +118,7 @@ export function AppShell({
         </Suspense>
         <ReadAhead />
         <DeliverableWatcher />
+        <InstanceEventStream />
         <SearchDialog />
         <div
           className="min-h-screen md:grid"
