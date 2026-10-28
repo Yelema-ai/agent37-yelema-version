@@ -1,0 +1,172 @@
+// Protocole MCP JSON-RPC 2.0 pour Yélé (Supervision, Observabilité & Analytique).
+// Expose 6 super-pouvoirs en lecture seule (read-only) pour inspecter l'instance en toute sécurité.
+
+export const YELE_TOOLS = [
+  {
+    name: "analyser_activite_experts",
+    description:
+      "Inspecte l'activité récente des experts de l'entreprise : qui a travaillé aujourd'hui, qui est inactif, le nombre de tâches/sessions traitées et la dernière heure d'activité.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        periode: {
+          type: "string",
+          enum: ["aujourdhui", "7_jours", "30_jours"],
+          description: "La période d'analyse (par défaut 'aujourdhui').",
+        },
+      },
+    },
+  },
+  {
+    name: "lire_rapport_journalier",
+    description:
+      "Lit le rapport journalier (daily log) généré par le plugin Hermes Memory / Wiki pour une date donnée. Donne le compte-rendu des actions réalisées, des décisions et des apprentissages clés.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        date: {
+          type: "string",
+          description: "La date au format YYYY-MM-DD, ou 'aujourdhui', ou 'hier'.",
+        },
+      },
+    },
+  },
+  {
+    name: "auditer_outils_connecteurs",
+    description:
+      "Vérifie l'état de santé de tous les connecteurs (Composio, MCP, Telegram) et liste les outils associés à chaque expert (actifs, déconnectés ou en échec).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        expert: {
+          type: "string",
+          description: "Optionnel : filtrer pour un expert précis (ex: 'fatima', 'kouassi').",
+        },
+      },
+    },
+  },
+  {
+    name: "consulter_livrables_recents",
+    description:
+      "Liste les derniers livrables et documents produits par les experts dans le dossier Livrables (Word, Excel, PowerPoint, PDF), avec nom, auteur, date et taille.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limite: {
+          type: "integer",
+          minimum: 1,
+          maximum: 50,
+          description: "Nombre maximum de livrables à retourner (défaut: 10).",
+        },
+      },
+    },
+  },
+  {
+    name: "statistiques_et_analytique",
+    description:
+      "Fournit une analyse chiffrée et des statistiques globales sur l'équipe d'experts : répartition de l'activité, taux de réussite des routines, volume de production et tendances d'usage.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        vue: {
+          type: "string",
+          enum: ["synthese", "routines", "usage"],
+          description: "La vue analytique souhaitée (défaut 'synthese').",
+        },
+      },
+    },
+  },
+  {
+    name: "diagnostiquer_configuration",
+    description:
+      "Diagnostique la configuration générale de l'instance Hermes en toute sécurité (clés d'API et secrets automatiquement masqués). Vérifie les passerelles actives, les modèles configurés et la mémoire.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+] as const;
+
+export interface YeleBackend {
+  analyserActivite(periode?: string): Promise<string>;
+  lireRapportJournalier(date?: string): Promise<string>;
+  auditerOutils(expert?: string): Promise<string>;
+  consulterLivrables(limite?: number): Promise<string>;
+  statistiquesAnalytique(vue?: string): Promise<string>;
+  diagnostiquerConfiguration(): Promise<string>;
+}
+
+type Rpc = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Record<string, unknown> };
+type RpcAnswer = { jsonrpc: "2.0"; id: string | number | null; result?: unknown; error?: { code: number; message: string } };
+
+const text = (value: string, isError = false) => ({
+  content: [{ type: "text", text: value }],
+  ...(isError ? { isError: true } : {}),
+});
+
+async function callTool(backend: YeleBackend, name: unknown, args: Record<string, unknown>) {
+  switch (name) {
+    case "analyser_activite_experts": {
+      const p = typeof args.periode === "string" ? args.periode : undefined;
+      return text(await backend.analyserActivite(p));
+    }
+    case "lire_rapport_journalier": {
+      const d = typeof args.date === "string" ? args.date : undefined;
+      return text(await backend.lireRapportJournalier(d));
+    }
+    case "auditer_outils_connecteurs": {
+      const e = typeof args.expert === "string" ? args.expert : undefined;
+      return text(await backend.auditerOutils(e));
+    }
+    case "consulter_livrables_recents": {
+      const l = typeof args.limite === "number" ? args.limite : undefined;
+      return text(await backend.consulterLivrables(l));
+    }
+    case "statistiques_et_analytique": {
+      const v = typeof args.vue === "string" ? args.vue : undefined;
+      return text(await backend.statistiquesAnalytique(v));
+    }
+    case "diagnostiquer_configuration": {
+      return text(await backend.diagnostiquerConfiguration());
+    }
+    default:
+      return text("Outil inconnu.", true);
+  }
+}
+
+/**
+ * Traite un message JSON-RPC 2.0 pour le serveur MCP Yélé.
+ */
+export async function answerRpc(message: unknown, backend: YeleBackend): Promise<RpcAnswer | null> {
+  const rpc = (message && typeof message === "object" ? message : {}) as Rpc;
+  const id = rpc.id ?? null;
+  if (rpc.jsonrpc !== "2.0" || typeof rpc.method !== "string") {
+    return { jsonrpc: "2.0", id, error: { code: -32600, message: "Invalid Request" } };
+  }
+  if (rpc.id === undefined) return null;
+  const ok = (result: unknown): RpcAnswer => ({ jsonrpc: "2.0", id, result });
+
+  switch (rpc.method) {
+    case "initialize":
+      return ok({
+        protocolVersion: typeof rpc.params?.protocolVersion === "string" ? rpc.params.protocolVersion : "2025-03-26",
+        capabilities: { tools: {} },
+        serverInfo: { name: "yele-supervision", version: "1.0.0" },
+      });
+    case "ping":
+      return ok({});
+    case "tools/list":
+      return ok({ tools: YELE_TOOLS });
+    case "tools/call": {
+      const args = rpc.params?.arguments;
+      try {
+        return ok(await callTool(backend, rpc.params?.name, args && typeof args === "object" ? (args as Record<string, unknown>) : {}));
+      } catch (e) {
+        if ((e as { status?: number }).status === 401) throw e;
+        return ok(text(e instanceof Error && e.message ? e.message : "Erreur lors de l'exécution de l'outil.", true));
+      }
+    }
+    default:
+      return { jsonrpc: "2.0", id, error: { code: -32601, message: "Method not found" } };
+  }
+}

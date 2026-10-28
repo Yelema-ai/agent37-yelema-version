@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUpRight, Bug, ChevronLeft, History, KeyRound, Loader2, Mic, Plug, Receipt, Repeat, Send, Sparkles, SquarePen, Users, X, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, BarChart3, Bug, ChevronLeft, History, KeyRound, Loader2, Mic, Plug, Receipt, Repeat, FileSpreadsheet, ShieldCheck, Send, Sparkles, SquarePen, Users, X, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { profileQuery } from "@/lib/profile-id";
@@ -26,9 +26,11 @@ type Shortcut = { label: string; desc: string; prompt: string; icon: LucideIcon 
 type PastSession = { session_id: string; title: string | null; last_active: number };
 
 const SHORTCUTS: Shortcut[] = [
-  { label: "Recruter un Expert", desc: "Trouver le bon profil", prompt: "Je voudrais recruter un nouvel Expert.", icon: Users },
+  { label: "Activité des Experts", desc: "Qui a travaillé aujourd'hui ?", prompt: "Qui a travaillé aujourd'hui parmi mes experts et quelles ont été leurs activités ?", icon: BarChart3 },
+  { label: "Derniers Livrables", desc: "Documents récents créés", prompt: "Quels sont les derniers livrables et documents produits par mes experts ?", icon: FileSpreadsheet },
+  { label: "Santé des outils", desc: "Connecteurs et comptes", prompt: "Peux-tu faire un audit de l'état de mes connecteurs et outils ?", icon: ShieldCheck },
   { label: "Connecter mes outils", desc: "Drive, Telegram, MCP…", prompt: "Je voudrais connecter les outils de mon entreprise à mes Experts.", icon: Plug },
-  { label: "Ma consommation", desc: "Forfait et usage", prompt: "Je voudrais comprendre ma consommation et mon forfait.", icon: Receipt },
+  { label: "Recruter un Expert", desc: "Trouver le bon profil", prompt: "Je voudrais recruter un nouvel Expert.", icon: Users },
   { label: "Créer une routine", desc: "Une tâche récurrente", prompt: "Je voudrais qu'un Expert fasse une tâche régulièrement pour moi.", icon: Repeat },
   { label: "Signaler un problème", desc: "Aide et support", prompt: "J'ai besoin d'aide ou je rencontre un problème sur Yelema.", icon: Bug },
 ];
