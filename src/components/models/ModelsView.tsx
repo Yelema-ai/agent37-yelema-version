@@ -4,13 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { llmPending, type LlmMember, type LlmOverview, type LlmWritten } from "@/lib/llm";
+import { llmPending, readOverview, type LlmMember, type LlmOverview, type LlmWritten } from "@/lib/llm";
 import { scopeParam, type InstanceScope, type LlmSetup } from "@/lib/llm-accounts";
 import type { ClaudeAuthView } from "@/lib/claude-code-auth";
 import { AccountsBoard, describe } from "./AccountsBoard";
 import { ClaudeCodeModel } from "./ClaudeCodeModel";
 import { ExpertModels } from "./ExpertModels";
 import { MemberSources } from "./MemberSources";
+import { ModelsBoundary } from "./ModelsBoundary";
 import { useModelGroups } from "./useModelGroups";
 import { YelemaEngine } from "./YelemaEngine";
 import { usePoll } from "@/components/usePoll";
@@ -32,7 +33,7 @@ export function ModelsView() {
 
   const load = useCallback(async () => {
     try {
-      setData(await apiFetch<LlmOverview>("/api/llm"));
+      setData(readOverview(await apiFetch<unknown>("/api/llm")));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -112,19 +113,23 @@ export function ModelsView() {
         </div>
       )}
 
-      <AccountsBoard
-        setup={setup}
-        scope={scope}
-        title={title}
-        picker={picker}
-        scopeLabel={scopeLabel}
-        {...catalogues}
-        customEndpoints={data.customEndpoints === true}
-        models={models}
-        onChanged={() => changed()}
-      />
+      <ModelsBoundary key={`accounts-${scopeParam(scope) ?? "own"}`}>
+        <AccountsBoard
+          setup={setup}
+          scope={scope}
+          title={title}
+          picker={picker}
+          scopeLabel={scopeLabel}
+          {...catalogues}
+          customEndpoints={data.customEndpoints === true}
+          models={models}
+          onChanged={() => changed()}
+        />
+      </ModelsBoundary>
 
-      <ExpertModels key={scopeParam(scope) ?? "own"} scope={scope} setup={setup} yelema={data.yelema} models={models} groupName={(g) => describe(g, catalogues).name} onChanged={changed} />
+      <ModelsBoundary key={`experts-${scopeParam(scope) ?? "own"}`}>
+        <ExpertModels scope={scope} setup={setup} yelema={data.yelema} models={models} groupName={(g) => describe(g, catalogues).name} onChanged={changed} />
+      </ModelsBoundary>
 
       {data.yelema && <YelemaEngine yelema={data.yelema} />}
 

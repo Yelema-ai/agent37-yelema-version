@@ -101,7 +101,7 @@ export default function ResetPasswordPage() {
           <CircleX className="size-6" />
         </span>
         <AuthHeading title="Ce lien a expiré">
-          Un lien de réinitialisation reste valable 30 minutes et ne sert qu’une fois.
+          Un lien de réinitialisation reste valable 24 heures et ne sert qu’une fois.
           Demandez-en un nouveau.
         </AuthHeading>
         <a

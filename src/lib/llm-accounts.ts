@@ -47,6 +47,8 @@ export interface LlmSetup {
   state: "applied" | "pending" | "failed";
   /** Absent from an older back office. */
   profiles?: ProfileModels;
+  /** The Hermes profiles installed on this instance; absent from an older back office. */
+  experts?: string[];
 }
 
 export interface AccountDraft {
@@ -145,6 +147,36 @@ function parseProfiles(raw: unknown): ProfileModels | null {
     }
   }
   return out;
+}
+
+// What the screen reads from the back office, kept to the shapes it renders: a malformed entry is
+// dropped instead of crashing the page.
+export const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+const str = (v: unknown): v is string => typeof v === "string";
+export const recordsOf = <T>(v: unknown, keep: (x: Record<string, unknown>) => T | null): T[] => (Array.isArray(v) ? v.flatMap((x) => (isRecord(x) ? (keep(x) ?? []) : [])) : []);
+const ACCOUNT_STATES: readonly LlmAccountState[] = ["active", "pending", "failed", "refused"];
+
+function readAccount(a: Record<string, unknown>): LlmAccount | null {
+  if (!str(a.id) || !str(a.provider)) return null;
+  const l = isRecord(a.login) ? a.login : null;
+  return {
+    id: a.id, provider: a.provider, label: str(a.label) ? a.label : "", hint: str(a.hint) ? a.hint : "", verified: a.verified === true,
+    state: ACCOUNT_STATES.includes(a.state as LlmAccountState) ? (a.state as LlmAccountState) : "failed",
+    ...(l && str(l.verificationUrl) && str(l.userCode) && str(l.expiresAt) ? { login: { verificationUrl: l.verificationUrl, userCode: l.userCode, expiresAt: l.expiresAt } } : {}),
+    ...(str(a.name) ? { name: a.name } : {}), ...(str(a.baseUrl) ? { baseUrl: a.baseUrl } : {}),
+  };
+}
+
+export function readSetup(v: unknown): LlmSetup | undefined {
+  if (!isRecord(v)) return undefined;
+  const groups = recordsOf(v.groups, (g) =>
+    str(g.provider) && str(g.model) ? { provider: g.provider, model: g.model, fallbacks: Array.isArray(g.fallbacks) ? g.fallbacks.filter(str) : [], accounts: recordsOf(g.accounts, readAccount) } : null,
+  ).filter((g) => g.accounts.length > 0);
+  const profiles = isRecord(v.profiles)
+    ? (Object.fromEntries(Object.entries(v.profiles).filter(([, c]) => c === null || (isRecord(c) && str(c.provider) && str(c.model)))) as ProfileModels)
+    : undefined;
+  const state = v.state === "pending" || v.state === "failed" ? v.state : "applied";
+  return { groups, state, ...(profiles ? { profiles } : {}), ...(Array.isArray(v.experts) ? { experts: v.experts.filter(str) } : {}) };
 }
 
 /** The layout to send for groups as shown. */
