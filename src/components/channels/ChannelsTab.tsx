@@ -98,7 +98,8 @@ export function ChannelsTab({
   useEffect(() => {
     if (!reachable) return;
     let alive = true;
-    apiFetch<{ channels: MessagingPlatform[] | null; teams_endpoint: string | null }>(`/api/agents/${agentId}/channels?view=catalogue`).then(
+    // A remembered answer already has the rows: only the live state is read.
+    if (!cached(memoKey)) apiFetch<{ channels: MessagingPlatform[] | null; teams_endpoint: string | null }>(`/api/agents/${agentId}/channels?view=catalogue`).then(
       (r) => {
         if (!alive || !r.channels) return;
         setChannels((prev) => prev ?? r.channels);
@@ -110,7 +111,7 @@ export function ChannelsTab({
     return () => {
       alive = false;
     };
-  }, [reachable, load, agentId]);
+  }, [reachable, load, agentId, memoKey]);
 
   if (hermesTools === false) {
     return (

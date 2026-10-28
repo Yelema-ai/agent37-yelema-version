@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, ChevronRight, ClipboardCheck, Copy, CornerDownLeft, FileText, Image as ImageIcon, Loader2, PhoneCall, Repeat } from "lucide-react";
 import { turnDocs, type TurnDoc } from "@/lib/drive-links";
 import { kanbanNotice } from "@/lib/kanban-notice";
-import { isRoutineRun, isSilentRun, routineRunText, SILENT_RUN_LABEL } from "@/lib/routines";
+import { isRoutineRun, isSilentRun, routinePlainText, SILENT_RUN_LABEL } from "@/lib/routines";
 import { isCallTranscript } from "@/lib/voice";
 import { isResumeSeed } from "@/lib/conversation-resume";
 import { cn } from "@/lib/utils";
@@ -107,21 +107,16 @@ function ThinkingBlock({ content, live }: { content: string; live: boolean }) {
   );
 }
 
-// A routine's run opens with its instructions, sent by the scheduler, not by the member.
-function RoutineBrief({ content }: { content: string }) {
-  const [open, setOpen] = useState(false);
+// A routine's run opens with its instructions, sent by the scheduler, not by the member: the routine's
+// name and what it asks in plain words, never its commands nor its files (Leslie, 28/10).
+function RoutineBrief({ content, name }: { content: string; name: string | null }) {
+  const text = routinePlainText(content);
   return (
-    <div className="rounded-xl border border-line bg-surface">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] font-semibold text-ink-2"
-      >
-        <Repeat className="h-4 w-4 text-ink-3" /> Consigne de la routine
-        <ChevronDown className={cn("ml-auto h-4 w-4 text-ink-3 transition-transform", open && "rotate-180")} />
-      </button>
-      {open && <div className="whitespace-pre-wrap break-words border-t border-line px-3 py-2 text-[13px] text-ink-2">{routineRunText(content)}</div>}
+    <div className="rounded-xl border border-line bg-surface px-3.5 py-2.5">
+      <p className="flex items-center gap-2 text-[13px] font-semibold text-ink-2">
+        <Repeat className="h-4 w-4 shrink-0 text-ink-3" /> {name ? `Routine « ${name} »` : "Routine"}
+      </p>
+      {text && <p className="mt-1 pl-6 text-[13.5px] leading-relaxed text-ink-2">{text}</p>}
     </div>
   );
 }
@@ -136,6 +131,7 @@ export function ChatMessages({
   onShowEarlier,
   onUnqueue,
   onDocs,
+  routine = null,
 }: {
   messages: ChatMessage[];
   isStreaming: boolean;
@@ -148,6 +144,8 @@ export function ChatMessages({
   onUnqueue?: (id: string) => void;
   /** Every document of the finished replies, each once: the chat's « Livrables » button lists them. */
   onDocs?: (docs: TurnDoc[]) => void;
+  /** The routine this conversation is a run of, by name. */
+  routine?: string | null;
 }) {
   // The instance whose drive the paths in a reply point into (they become download links).
   const { agentId, profile } = useChatContext();
@@ -244,7 +242,7 @@ export function ChatMessages({
           );
         }
         if (m.role === "user" && isRoutineRun(m.content)) {
-          return <RoutineBrief key={m.id} content={m.content} />;
+          return <RoutineBrief key={m.id} content={m.content} name={routine} />;
         }
         if (m.role === "user") {
           const attachments = m.attachments ?? [];

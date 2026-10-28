@@ -373,7 +373,8 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                 )}
               >
                 {label}
-                {id === "unread" && unreadCount > 0 && <span className="ml-1 tabular-nums">{unreadCount}</span>}
+                {/* A dot, not a number (Leslie, 28/10, A): the count is on the bell. */}
+                {id === "unread" && unreadCount > 0 && <span className="ml-1.5 inline-block size-1.5 -translate-y-px rounded-full bg-brand align-middle" aria-label={`${unreadCount} non lues`} />}
               </button>
             ))}
           </div>

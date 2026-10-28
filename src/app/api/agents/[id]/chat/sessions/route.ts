@@ -4,6 +4,7 @@ import { handleError, json } from "@/lib/http";
 import { profileQuery, resolveProfile } from "@/lib/profiles";
 import { routineOfSession } from "@/lib/routines";
 import { isVoiceSession } from "@/lib/voice-sessions";
+import { silentRunIds } from "@/lib/silent-runs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -18,9 +19,12 @@ export async function GET(request: Request, { params }: Ctx) {
     const { row } = await requireAgentAccess(id);
     const profile = await resolveProfile(row, new URL(request.url).searchParams.get("profile"));
 
-    const { data } = await agent37.listSessions(id, profileQuery(profile));
+    const query = profileQuery(profile);
+    const { data } = await agent37.listSessions(id, query);
+    // A finished routine run with nothing to report is no conversation: the bell has it.
+    const silent = await silentRunIds(id, query, data);
     const sessions = data
-      .filter((s) => !isVoiceSession(s.preview))
+      .filter((s) => !isVoiceSession(s.preview) && !silent.has(s.id))
       .map((s) => ({
         session_id: s.id,
         title: s.title?.trim() || s.preview?.trim() || null,

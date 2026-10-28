@@ -20,7 +20,9 @@ import { expertDisplayName } from "@/lib/experts";
 import { DRIVE_ROOT } from "@/lib/drive-paths";
 import { ChatProvider } from "@/components/chat/ChatProvider";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
-import { ChatView } from "@/components/chat/ChatView";
+import { ChatView, hasScreen } from "@/components/chat/ChatView";
+import { ComputerButton } from "@/components/experts/ExpertComputer";
+import { DashboardButtonFace } from "@/components/experts/ExpertDashboard";
 import { setChatFull, useChatFull, useChatListHidden, useChatSidePanel } from "@/components/chat/chat-layout";
 import { FilesTab } from "@/components/files/FilesTab";
 import { cn } from "@/lib/utils";
@@ -171,6 +173,7 @@ export function AgentWorkspace({
   const [voiceOpen, setVoiceOpen] = useState(false);
   // The header's place for Ordinateur and Tableau (the chat renders them there).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  const [dashboardAsked, setDashboardAsked] = useState(false);
   // The phone's tab pills scroll: the current one is brought into view.
   const pillsRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -195,8 +198,7 @@ export function AgentWorkspace({
 
   // Latch Chat/Files mounted on first open, then keep them mounted (hidden) across tab switches.
   // Latched during render (not in an effect) so the mount lands in the same pass as the switch.
-  // Mounted from the start on an expert's page: Ordinateur and Tableau in its header come from the chat.
-  const [chatOpened, setChatOpened] = useState(isChat || profileId !== null);
+  const [chatOpened, setChatOpened] = useState(isChat);
   if (isChat && !chatOpened) setChatOpened(true);
   const [filesOpened, setFilesOpened] = useState(isFiles);
   if (isFiles && !filesOpened) setFilesOpened(true);
@@ -284,7 +286,19 @@ export function AgentWorkspace({
             {expert && (
               <div className="order-2 flex shrink-0 items-center gap-2 pr-4 pt-1.5 lg:order-3 lg:p-0">
                 {/* Ordinateur and Tableau, placed here by the chat (they open its panels). */}
-                <span ref={setActionsSlot} className="flex items-center gap-2" />
+                <span ref={setActionsSlot} className="flex items-center gap-2">
+                  {/* Until the chat is first opened, the same buttons open it there. */}
+                  {profileId && !chatOpened && (
+                    <>
+                      {hasScreen(agents.find((a) => a.agent37_id === agentId) ?? null) && (
+                        <span className="contents" onClickCapture={() => selectTab("chat")}>
+                          <ComputerButton inHeader />
+                        </span>
+                      )}
+                      <DashboardButtonFace inHeader onClick={() => { setDashboardAsked(true); selectTab("chat"); }} />
+                    </>
+                  )}
+                </span>
                 {callee && <CallButton expert={callee} iconOnly className="size-11 shrink-0 rounded-full lg:hidden" />}
                 {callee && <CallButton expert={callee} className="h-10 shrink-0 rounded-full bg-brand px-4 text-[14.5px] text-on-brand hover:bg-brand/90 max-lg:hidden" />}
                 <span className="flex items-center gap-2 max-lg:hidden">
@@ -321,6 +335,8 @@ export function AgentWorkspace({
                   driveFolder={driveFolder ?? (profileId ? `${DRIVE_ROOT}/${expertName}` : DRIVE_ROOT)}
                   actionsSlot={profileId ? actionsSlot : null}
                   onAction={() => selectTab("chat")}
+                  openDashboard={dashboardAsked}
+                  onDashboardOpened={() => setDashboardAsked(false)}
                 />
               </div>
             </div>

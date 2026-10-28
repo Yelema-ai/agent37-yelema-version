@@ -28,15 +28,10 @@ function formatMajDate(dateStr?: string | null): string | null {
 
 // `inHeader`: in the expert's own header (Leslie, 28/10, variante B), a short word on a computer, the
 // icon alone on a phone; the panel still opens beside the chat.
-export function DashboardButton({ inHeader = false }: { inHeader?: boolean }) {
-  const { profile, panelOpen, setPanelOpen, dialogOpen, setDialogOpen, activeUrl, triggerGeneration, isGenerating } = useDashboard();
+function useToggleDashboard() {
+  const { panelOpen, setPanelOpen, dialogOpen, setDialogOpen, activeUrl, triggerGeneration, isGenerating } = useDashboard();
   const comp = useComputer();
-  if (!profile) return null;
-
-  const label = inHeader ? "Tableau" : "Tableau de bord";
-  const isAnyPanelOpen = panelOpen || Boolean(comp?.panelOpen);
-
-  const handleClick = () => {
+  return () => {
     const isWide = typeof window !== "undefined" && window.matchMedia(WIDE).matches;
     if (isWide) {
       // One panel beside the chat at a time.
@@ -52,25 +47,66 @@ export function DashboardButton({ inHeader = false }: { inHeader?: boolean }) {
       void triggerGeneration();
     }
   };
+}
 
+export function DashboardButton({ inHeader = false }: { inHeader?: boolean }) {
+  const { profile, panelOpen, isGenerating } = useDashboard();
+  const comp = useComputer();
+  const toggle = useToggleDashboard();
+  if (!profile) return null;
+  return (
+    <DashboardButtonFace
+      inHeader={inHeader}
+      highlighted={panelOpen || isGenerating}
+      generating={isGenerating}
+      labelHidden={!inHeader && (panelOpen || Boolean(comp?.panelOpen))}
+      onClick={toggle}
+    />
+  );
+}
+
+// The button alone: also in the expert's header before its chat has ever been opened.
+export function DashboardButtonFace({ inHeader = false, highlighted = false, generating = false, labelHidden = false, onClick }: {
+  inHeader?: boolean;
+  highlighted?: boolean;
+  generating?: boolean;
+  labelHidden?: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
       title="Tableau de bord"
       aria-label="Tableau de bord"
-      onClick={handleClick}
+      onClick={onClick}
       // Same size and weight as « Son ordinateur » and « Nouvelle conversation » beside it.
       className={cn(
         "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border bg-card px-3 text-[13px] font-semibold text-ink transition-colors hover:bg-soft",
-        (panelOpen || isGenerating) && "wide:border-brand/30 wide:bg-soft-2 wide:text-brand-ink"
+        highlighted && "wide:border-brand/30 wide:bg-soft-2 wide:text-brand-ink"
       )}
     >
-      {isGenerating ? <Loader2 className="h-4 w-4 animate-spin text-brand" /> : <BarChart3 className="h-4 w-4" />}
-      <span className={cn(inHeader ? "max-lg:hidden" : "hidden sm:inline", !inHeader && isAnyPanelOpen && "wide:hidden")}>
-        {isGenerating ? "Génération…" : label}
+      {generating ? <Loader2 className="h-4 w-4 animate-spin text-brand" /> : <BarChart3 className="h-4 w-4" />}
+      <span className={cn(inHeader ? "max-lg:hidden" : "hidden sm:inline", labelHidden && "wide:hidden")}>
+        {generating ? "Génération…" : inHeader ? "Tableau" : "Tableau de bord"}
       </span>
     </button>
   );
+}
+
+// Opens the dashboard once the chat is up, as a click on its button would: after the provider's own mount reset.
+export function OpenDashboardOnMount({ onDone }: { onDone: () => void }) {
+  const toggle = useToggleDashboard();
+  const done = useRef(false);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (done.current) return;
+      done.current = true;
+      toggle();
+      onDone();
+    }, 0);
+    return () => clearTimeout(t);
+  });
+  return null;
 }
 
 function DashboardHeaderControls({

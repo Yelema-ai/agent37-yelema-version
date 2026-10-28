@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Loader2, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import { ComputerButton, ComputerDialog, ComputerPanel } from "@/components/experts/ExpertComputer";
 import { DashboardProvider } from "@/components/experts/DashboardProvider";
-import { DashboardButton, DashboardPanel, DashboardDialog, ShareDashboardModal, SidePanelSync } from "@/components/experts/ExpertDashboard";
+import { DashboardButton, DashboardPanel, DashboardDialog, OpenDashboardOnMount, ShareDashboardModal, SidePanelSync } from "@/components/experts/ExpertDashboard";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { expertDisplayName } from "@/lib/experts";
@@ -31,12 +31,17 @@ import { useChatAttachments } from "./useChatAttachments";
 const SCREEN_TEMPLATE = "yelema-hermes";
 const SCREEN_MIN_REVISION = 5;
 
+export const hasScreen = (instance: { image: { template: string; revision: number | null } | null } | null) =>
+  instance?.image?.template === SCREEN_TEMPLATE && (instance.image.revision ?? 0) >= SCREEN_MIN_REVISION;
+
 // `driveFolder`: the expert's folder in the drive, where the documents of its replies are looked for.
 export function ChatView({
   initialMessage,
   driveFolder = null,
   actionsSlot = null,
   onAction,
+  openDashboard = false,
+  onDashboardOpened,
 }: {
   initialMessage?: string | null;
   driveFolder?: string | null;
@@ -44,6 +49,9 @@ export function ChatView({
   actionsSlot?: HTMLElement | null;
   /** Called on a click on one of them, so the Discussion shows where its panel opens. */
   onAction?: () => void;
+  /** « Tableau » was clicked in the header before the chat was ever opened: opened once mounted. */
+  openDashboard?: boolean;
+  onDashboardOpened?: () => void;
 }) {
   const {
     agentId,
@@ -164,10 +172,7 @@ export function ChatView({
   const listHidden = useChatListHidden();
   const full = useChatFull();
   const sidePanel = useChatSidePanel();
-  const hasComputer =
-    Boolean(profile) &&
-    instance?.image?.template === SCREEN_TEMPLATE &&
-    (instance.image.revision ?? 0) >= SCREEN_MIN_REVISION;
+  const hasComputer = Boolean(profile) && hasScreen(instance);
 
   // The documents this discussion produced: the « Livrables » button of the chat's bar lists them.
   const [docs, setDocs] = useState<TurnDoc[]>([]);
@@ -190,6 +195,7 @@ export function ChatView({
       messages={messages}
     >
     <SidePanelSync hasComputer={hasComputer} />
+    {openDashboard && onDashboardOpened && <OpenDashboardOnMount onDone={onDashboardOpened} />}
     <div className="flex h-full min-h-0">
     <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col wide:min-w-[400px]" {...att.dragHandlers}>
       {att.dragOver && <DropOverlay label="Déposez vos fichiers pour les joindre" />}
@@ -274,7 +280,7 @@ export function ChatView({
           </div>
         ) : messages.length > 0 ? (
           <div ref={contentRef}>
-            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} onUnqueue={unqueue} onDocs={setDocs} />
+            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} onUnqueue={unqueue} onDocs={setDocs} routine={sessions.find((s) => s.session_id === activeSessionId)?.routine ?? null} />
           </div>
         ) : (
           <>
