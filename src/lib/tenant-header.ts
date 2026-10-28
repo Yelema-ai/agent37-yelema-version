@@ -16,6 +16,12 @@ export interface ResolvedTenant {
 
 const sign = (body: string, secret: string) => createHmac("sha256", `tenant-header:${secret}`).update(body).digest("base64url");
 
+/** What the proxy does to every request: drops the header whatever it came with, then writes its own (or none). */
+export function writeTenantHeader(headers: Headers, sealed: string | null): void {
+  headers.delete(TENANT_HEADER);
+  if (sealed) headers.set(TENANT_HEADER, sealed);
+}
+
 export function sealTenant(tenant: ResolvedTenant, host: string, secret: string, now = Date.now()): string {
   const body = Buffer.from(JSON.stringify({ t: tenant, h: host, at: now }), "utf8").toString("base64url");
   return `${body}.${sign(body, secret)}`;

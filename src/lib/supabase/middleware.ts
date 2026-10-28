@@ -6,12 +6,12 @@ import { memo } from "@/lib/memo";
 import { authViaBackoffice, deploymentWorkspaceId, multiTenant, resolverToken, siteUrl, supabaseAnonKey, supabaseUrl } from "@/lib/runtime-config";
 import { decodeSession, encodeSession, LEGACY_SESSION_COOKIE, secondsLeft, SESSION_COOKIE, sessionCookieOptions, sessionCookieValue } from "@/lib/session";
 import { publicSiteOrigin } from "@/lib/site-url";
-import { sealTenant, TENANT_HEADER } from "@/lib/tenant-header";
+import { sealTenant, writeTenantHeader } from "@/lib/tenant-header";
 import { hostOf, resolveHost, TenantError, type ResolvedTenant } from "@/lib/tenant-resolver";
 
 export async function updateSession(request: NextRequest) {
   // Only this proxy writes the resolved client: whatever the browser sent is dropped.
-  request.headers.delete(TENANT_HEADER);
+  writeTenantHeader(request.headers, null);
   // Health checks come from the back-office, carry no session, and must answer even when the
   // Supabase variables are missing — so they skip the auth client entirely.
   if (request.nextUrl.pathname === "/api/health") return NextResponse.next({ request });
@@ -22,7 +22,7 @@ export async function updateSession(request: NextRequest) {
     const gate = await tenantGate(request);
     if (gate instanceof NextResponse) return gate;
     workspace = gate.tenant.workspaceId;
-    request.headers.set(TENANT_HEADER, sealTenant(gate.tenant, gate.host, resolverToken() ?? ""));
+    writeTenantHeader(request.headers, sealTenant(gate.tenant, gate.host, resolverToken() ?? ""));
   }
   if (authViaBackoffice()) return updateBackofficeSession(request, workspace);
 

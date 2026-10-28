@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { openTenant, sealTenant, type ResolvedTenant } from "./tenant-header.ts";
+import { openTenant, sealTenant, TENANT_HEADER, writeTenantHeader, type ResolvedTenant } from "./tenant-header.ts";
 
 const tenant: ResolvedTenant = { workspaceId: "ws-1", name: "Acme", logoUrl: null, status: "active" };
 
@@ -24,5 +24,15 @@ describe("en-tête du client résolu", () => {
     assert.equal(openTenant(raw, "acme.app.yelema.ai", "s3cret", 1_000 + 6 * 60_000), null);
     assert.equal(openTenant(null, "acme.app.yelema.ai", "s3cret"), null);
     assert.equal(openTenant(raw, "acme.app.yelema.ai", ""), null);
+  });
+
+  it("le proxy remplace toujours la valeur venue du navigateur", () => {
+    const h = new Headers({ [TENANT_HEADER]: "valeur-du-navigateur" });
+    writeTenantHeader(h, null);
+    assert.equal(h.get(TENANT_HEADER), null);
+    const sealed = sealTenant(tenant, "acme.app.yelema.ai", "s3cret");
+    const h2 = new Headers({ [TENANT_HEADER]: "valeur-du-navigateur" });
+    writeTenantHeader(h2, sealed);
+    assert.equal(h2.get(TENANT_HEADER), sealed);
   });
 });
