@@ -93,6 +93,9 @@ export function TelegramConnect({
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
+      if (cancelled) return;
+      // Hidden: nothing is asked until the tab shows again.
+      if (document.hidden) return void (timer = setTimeout(() => void poll(), OWNER_POLL_MS));
       try {
         const result = await post<{ owner: TelegramOwner | null; unavailable: boolean }>({ action: "owner", token });
         if (cancelled) return;

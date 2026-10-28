@@ -55,6 +55,8 @@ export function TelegramQrConnect({
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
+      if (cancelled) return;
+      if (document.hidden) return void (timer = setTimeout(() => void poll(), POLL_MS));
       try {
         const next = await pair({ pairing_id: session.pairing_id });
         if (cancelled) return;

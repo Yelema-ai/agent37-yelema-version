@@ -13,6 +13,7 @@ import type { SettingScope } from "@/lib/llm";
 import { mcpPending, type McpOauthServer, type McpOverview, type McpServer, type McpServerDraft, type McpToolsOverview, type McpToolsReport, type McpWritten } from "@/lib/mcp-servers";
 import { type McpOauthFlow } from "./McpOauthSteps";
 import { McpServerDialog } from "./McpServerDialog";
+import { usePoll } from "@/components/usePoll";
 
 // Une pose prend d'ordinaire moins d'une minute par instance ; au-delà, on cesse de relire seul.
 const POLL_MS = 4_000;
@@ -134,7 +135,7 @@ export function McpView() {
   const [scope, setScope] = useState<SettingScope>({ kind: "own" });
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<McpServer | null>(null);
-  const [tries, setTries] = useState(0);
+  const [round, setRound] = useState(0);
   const [oauth, setOauth] = useState<Record<string, McpOauthServer>>({});
   const [flow, setFlow] = useState<McpOauthFlow | null>(null);
   const popup = useRef<Window | null>(null);
@@ -275,14 +276,7 @@ export function McpView() {
   }, [flow, oauthTries, loadOauth, loadTools, closePopup]);
 
   // Tant qu'une pose est en cours, l'état est relu : l'écran passe seul à « En service » ou à l'échec.
-  useEffect(() => {
-    if (!data || !mcpPending(data) || tries >= POLL_TRIES) return;
-    const timer = setTimeout(() => {
-      setTries((n) => n + 1);
-      void load();
-    }, POLL_MS);
-    return () => clearTimeout(timer);
-  }, [data, tries, load]);
+  usePoll(load, { everyMs: POLL_MS, deadlineMs: POLL_MS * POLL_TRIES, immediate: false, round, enabled: Boolean(data && mcpPending(data)) });
 
   const admin = data?.members !== undefined;
   // Le relevé de l'instance concernée : la sienne, ou celle du membre regardé par l'administrateur.
@@ -304,7 +298,7 @@ export function McpView() {
 
   async function written(call: Promise<McpWritten>, done: string): Promise<McpWritten> {
     const out = await call;
-    setTries(0);
+    setRound((r) => r + 1);
     await load();
     toast.success(done, { description: out.state === "pending" ? "L’installation sur les instances est en cours." : undefined });
     return out;

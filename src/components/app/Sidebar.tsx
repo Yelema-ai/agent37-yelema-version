@@ -33,8 +33,7 @@ import { useChatMarks } from "@/components/conversations/useChatMarks";
 import { arrange } from "@/lib/chat-marks";
 import { convKey } from "@/lib/activity";
 import { openSearch } from "@/components/conversations/SearchDialog";
-import type { ChatSession } from "@/components/chat/types";
-import { apiFetch } from "@/lib/api";
+import { useCompanySessions } from "@/components/conversations/useCompanySessions";
 import type { Expert } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -256,22 +255,12 @@ const isDjeneba = (e: { catalogueKey?: string | null; profileId: string }) =>
 // The latest conversations of the chat d'entreprise, under a lock: private to the company. An
 // Expert's conversations stay in its space. A failed read shows nothing rather than an error here.
 function CompanyChats({ agentId, pathname, onNavigate }: { agentId: string; pathname: string; onNavigate?: () => void }) {
-  const [all, setAll] = useState<ChatSession[]>([]);
+  const all = useCompanySessions(agentId);
   const { marks } = useChatMarks();
   // Pinned first, then the latest; archived ones stay in « Toutes les conversations ».
   const { pinned, rest } = arrange(all, (s) => convKey(agentId, null, s.session_id), marks);
   const sessions = [...pinned, ...rest].slice(0, Math.max(6, pinned.length));
   const pinnedIds = new Set(pinned.map((s) => s.session_id));
-  useEffect(() => {
-    let live = true;
-    apiFetch<{ sessions: ChatSession[] }>(`/api/agents/${agentId}/chat/sessions`).then(
-      (r) => live && setAll(r.sessions.filter((s) => !s.routine)),
-      () => undefined
-    );
-    return () => {
-      live = false;
-    };
-  }, [agentId, pathname]);
   const home = `/experts/${agentId}/chat`;
   return (
     <>

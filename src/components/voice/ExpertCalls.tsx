@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2, PhoneCall, RefreshCw, Search, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { usePoll } from "@/components/usePoll";
 import { callDuration, findInText, frenchSpacing, summarySections, transcriptOf, type CallRecord } from "@/lib/voice";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { cn } from "@/lib/utils";
@@ -64,11 +65,7 @@ export function ExpertCalls({ expert }: { expert: Expert }) {
   }, [load]);
 
   const pending = calls?.some((c) => c.subjectPending || c.status === "open") ?? false;
-  useEffect(() => {
-    if (!pending) return;
-    const t = setInterval(() => void load(), PENDING_POLL_MS);
-    return () => clearInterval(t);
-  }, [pending, load]);
+  usePoll(load, { everyMs: PENDING_POLL_MS, immediate: false, enabled: pending });
 
   const shown = calls?.find((c) => c.id === openId) ?? null;
   if (shown) return <CallPage call={shown} expert={expert} onBack={() => setOpenId(null)} />;

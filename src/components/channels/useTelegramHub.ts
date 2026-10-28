@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import type { TelegramHubStatus } from "@/lib/agent37";
+import { usePoll } from "@/components/usePoll";
 
 const POLL_MS = 5_000;
 // Past this, nothing came from Telegram: the screen says so and puts the QR code and the link forward.
@@ -39,11 +40,7 @@ export function useTelegramHub(agentId: string) {
   const link = !status?.state && kept && TG_LINK.test(kept.url) ? kept : null;
   // Bounded by the link's own expiry: the gateway stops returning it, the polling stops.
   const waiting = link !== null;
-  useEffect(() => {
-    if (!(waiting || phase === "awaiting_group" || phase === "needs_topics")) return;
-    const t = setTimeout(() => void load(), POLL_MS);
-    return () => clearTimeout(t);
-  }, [waiting, phase, status, load]);
+  usePoll(load, { everyMs: POLL_MS, immediate: false, enabled: waiting || phase === "awaiting_group" || phase === "needs_topics" });
   useEffect(() => {
     if (status?.state) setWaitingSince(null);
   }, [status?.state]);

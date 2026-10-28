@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { profileQuery } from "@/lib/profile-id";
-import { DRIVE_ROOT } from "@/lib/drive-paths";
+import { driveTree } from "@/lib/drive-store";
 import { isDriveClutter } from "@/lib/drive-order";
 import { agentTabPath } from "@/lib/expert-tabs";
 import type { ChatSession } from "@/components/chat/types";
-import { isDir, type FileEntry, type FileListResponse } from "@/components/files/types";
+import type { FileEntry } from "@/components/files/types";
 import type { Expert } from "@/lib/types";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { useMyAgents } from "@/components/useMyAgents";
@@ -71,24 +71,20 @@ export function useAllConversations(ownAgentId: string | null, experts: Expert[]
 }
 
 // The drive's files, at its root and one level down (each Expert keeps its own folder there),
-// newest first. Null while reading.
+// newest first. Null while reading. The tree is the one the deliverable watcher reads.
 export function useDriveFiles(agentId: string | null, enabled = true) {
   const [files, setFiles] = useState<FileEntry[] | null>(null);
   useEffect(() => {
     if (!enabled || !agentId) return;
     let live = true;
-    const list = (path: string) =>
-      apiFetch<FileListResponse>(`/api/agents/${agentId}/files/list?path=${encodeURIComponent(path)}`).then(
-        (r) => r.entries.filter((e) => !e.hidden && !isDriveClutter(e)),
-        () => [] as FileEntry[]
-      );
-    void (async () => {
-      const root = await list(DRIVE_ROOT);
-      const nested = await Promise.all(root.filter(isDir).map((d) => list(d.path)));
-      const all = [...root, ...nested.flat()].filter((e) => e.type === "file");
-      all.sort((a, b) => b.modified - a.modified);
-      if (live) setFiles(all);
-    })();
+    driveTree(agentId).then(
+      (tree) => {
+        const all = tree.entries.filter((e) => e.depth <= 1 && e.type === "file" && !e.hidden && !isDriveClutter(e));
+        all.sort((a, b) => b.modified - a.modified);
+        if (live) setFiles(all);
+      },
+      () => live && setFiles([])
+    );
     return () => {
       live = false;
     };

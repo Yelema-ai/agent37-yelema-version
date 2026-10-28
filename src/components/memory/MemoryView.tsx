@@ -11,6 +11,8 @@ import { HiddenFileInput } from "@/components/HiddenFileInput";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MemoryGroups } from "./MemoryGroups";
+import { usePoll } from "@/components/usePoll";
+import { runPool } from "@/lib/bulk";
 
 // The company memory: what the experts know of the company. Everyone sees the deposits of their own
 // compartments; whoever may deposit adds a note or a document. The back office sends each deposit
@@ -42,11 +44,7 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
 
   // A deposit is sent in the background: read again while one is still on its way.
   const waiting = list?.items.some((i) => i.status === "pending") ?? false;
-  useEffect(() => {
-    if (!waiting) return;
-    const timer = setTimeout(() => void load(), 5_000);
-    return () => clearTimeout(timer);
-  }, [waiting, list, load]);
+  usePoll(load, { everyMs: 5_000, immediate: false, enabled: waiting });
 
   const targets = [...(list?.canDepositForAll ? [{ id: ALL, name: "Toute l’entreprise" }] : []), ...(list?.units.filter((u) => u.canDeposit) ?? [])];
   // The first compartment the member may deposit in, while none is chosen.
@@ -62,17 +60,20 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
         setTitle("");
         setNote("");
       }
-      for (const file of files) {
+      // Three documents at a time; the ones refused stay in the picker, in their order.
+      const sent = await runPool(files, 3, async (file) => {
         const form = new FormData();
         form.set("title", (files.length === 1 && !note.trim() && title.trim()) || file.name);
         if (target !== ALL) form.set("unit", target);
         form.set("file", file);
         const res = await fetch("/api/memory/items", { method: "POST", body: form });
-        if (!res.ok) {
-          failed.push(file);
-          toast.error(`${file.name} : ${await readApiError(res, "le document n’a pas pu être déposé.")}`);
-        }
-      }
+        if (!res.ok) toast.error(`${file.name} : ${await readApiError(res, "le document n’a pas pu être déposé.")}`);
+        return res.ok;
+      });
+      sent.forEach((r, i) => {
+        if (r.status === "rejected") toast.error(`${files[i].name} : ${(r.reason as Error).message}`);
+        if (r.status === "rejected" || !r.value) failed.push(files[i]);
+      });
       if (files.length > 0 && failed.length < files.length) setTitle("");
       setFiles(failed);
     } catch (e) {

@@ -16,3 +16,10 @@ export function isDriveRoot(path: string): boolean {
 export function seatFolderOf(parts: readonly string[]): string | undefined {
   return parts[0] && /^u-[a-z0-9]{6}$/.test(parts[0]) ? parts[0] : undefined;
 }
+
+/** The drive a few levels deep, as `/api/agents/{id}/files/tree` answers it (`depth` 0 = the root's own entries). */
+export interface DriveTree {
+  entries: (import("./types").FileEntry & { depth: number })[];
+  /** False when a folder could not be listed: what it holds is missing, not gone. */
+  complete: boolean;
+}

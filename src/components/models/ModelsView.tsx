@@ -13,6 +13,7 @@ import { ExpertModels } from "./ExpertModels";
 import { MemberSources } from "./MemberSources";
 import { useModelGroups } from "./useModelGroups";
 import { YelemaEngine } from "./YelemaEngine";
+import { usePoll } from "@/components/usePoll";
 
 const REFUSED = "Le fournisseur n’accepte plus cette clé. Vos Experts ne répondent plus tant qu’elle n’est pas remplacée ou retirée.";
 // Une pose prend d'ordinaire moins d'une minute par instance ; au-delà, on cesse de relire seul.
@@ -27,7 +28,7 @@ export function ModelsView() {
   const [data, setData] = useState<LlmOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scope, setScope] = useState<InstanceScope>({ kind: "own" });
-  const [tries, setTries] = useState(0);
+  const [round, setRound] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -43,14 +44,7 @@ export function ModelsView() {
   }, [load]);
 
   // Tant qu'une pose est en cours, l'état est relu : l'écran passe seul à « En service » ou à l'échec.
-  useEffect(() => {
-    if (!data || !llmPending(data) || tries >= POLL_TRIES) return;
-    const timer = setTimeout(() => {
-      setTries((n) => n + 1);
-      void load();
-    }, POLL_MS);
-    return () => clearTimeout(timer);
-  }, [data, tries, load]);
+  usePoll(load, { everyMs: POLL_MS, deadlineMs: POLL_MS * POLL_TRIES, immediate: false, round, enabled: Boolean(data && llmPending(data)) });
 
   const admin = data?.members !== undefined;
   const others = useMemo(() => othersOf(data), [data]);
@@ -80,7 +74,7 @@ export function ModelsView() {
 
   const changed = useCallback(
     async (out?: LlmWritten | null) => {
-      setTries(0);
+      setRound((r) => r + 1);
       await load();
       if (out) toast.success("Modèle enregistré", { description: out.state === "pending" ? "L’installation sur l’instance est en cours." : undefined });
     },

@@ -7,12 +7,27 @@ import { profileQuery } from "@/lib/profile-id";
 import type { SessionDetail } from "@/lib/types";
 import type { ActivityActions } from "./ActivityProvider";
 
+// The session is asked again after 8 s, then less and less often, up to every 30 s.
 const POLL_MS = 8000;
+const POLL_MAX_MS = 30_000;
 
 const sleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
     const t = setTimeout(resolve, ms);
     signal.addEventListener("abort", () => (clearTimeout(t), resolve()), { once: true });
+  });
+
+// Nothing is asked while the tab is hidden.
+const visible = (signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    if (document.visibilityState !== "hidden") return resolve();
+    const on = () => {
+      if (document.visibilityState === "hidden") return;
+      document.removeEventListener("visibilitychange", on);
+      resolve();
+    };
+    document.addEventListener("visibilitychange", on);
+    signal.addEventListener("abort", () => (document.removeEventListener("visibilitychange", on), resolve()), { once: true });
   });
 
 // The terminal event of a reattached stream, or null when it ends without one.
@@ -54,7 +69,10 @@ async function follow(t: Turn, signal: AbortSignal): Promise<{ outcome: Outcome;
     if (signal.aborted) return null;
   }
   const url = `/api/agents/${t.agentId}/chat/sessions/${encodeURIComponent(t.sessionId!)}${profileQuery(t.profile)}`;
+  let delay = POLL_MS;
   while (!signal.aborted && Date.now() - t.startedAt < WATCH_TTL_MS) {
+    await visible(signal);
+    if (signal.aborted) break;
     try {
       const s = await apiFetch<SessionDetail>(url);
       if (s.active_response_id !== t.responseId) {
@@ -64,7 +82,8 @@ async function follow(t: Turn, signal: AbortSignal): Promise<{ outcome: Outcome;
     } catch {
       // Try again on the next round.
     }
-    await sleep(POLL_MS, signal);
+    await sleep(delay, signal);
+    delay = Math.min(Math.round(delay * 1.5), POLL_MAX_MS);
   }
   return null;
 }

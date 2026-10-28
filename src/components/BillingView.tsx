@@ -71,15 +71,12 @@ export function BillingView() {
 
   useEffect(() => {
     void load();
+    // Back from the payment tab: one reading (not one for the focus and one for the visibility).
     const onBack = () => {
       if (document.visibilityState === "visible") void load();
     };
     document.addEventListener("visibilitychange", onBack);
-    window.addEventListener("focus", onBack);
-    return () => {
-      document.removeEventListener("visibilitychange", onBack);
-      window.removeEventListener("focus", onBack);
-    };
+    return () => document.removeEventListener("visibilitychange", onBack);
   }, [load]);
 
   async function pay(invoice: Invoice) {
