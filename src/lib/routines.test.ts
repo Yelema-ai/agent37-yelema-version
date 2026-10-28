@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isRoutineRun, isRunOf, isSilentRun, routineOfSession, routineRunText, runOutcome } from "./routines.ts";
+import { isRoutineRun, isRunOf, isSilentRun, routineOfSession, routinePlainText, routineRunText, runOutcome } from "./routines.ts";
 
 const HINT = "[IMPORTANT: You are running as a scheduled cron job. DELIVERY: … [SILENT] … context for this run, not as a request to schedule another job.]\n\n";
 
@@ -37,4 +37,20 @@ test("runs of one routine, by id or by title", () => {
   assert.equal(isRunOf({ id: "1".repeat(32), title: "Point trésorerie · Oct 16 09:00", preview: HINT }, routine), true);
   assert.equal(isRunOf({ id: "1".repeat(32), title: "Point trésorerie · Oct 16 09:00", preview: "Bonjour" }, routine), false);
   assert.equal(isRunOf({ id: "cron_abcd_20261016_090000", title: "Autre · Oct 16 09:00" }, routine), false);
+});
+
+const run = (task: string) => `${HINT}${task}`;
+
+test("routinePlainText keeps the plain words of the task, never a command, a path or a marker", () => {
+  const text = run(
+    "Tu es Koffi. Relis les appels de la journée et mets à jour ta mémoire.\nLance `python3 -I /home/node/.yelema/agregation.py lire koffi` puis lis /home/node/.hermes/profiles/koffi/carte-appel.json.\nSi rien de neuf, réponds [SILENT].\nNote ce que le client a décidé."
+  );
+  assert.equal(routinePlainText(text), "Relis les appels de la journée et mets à jour ta mémoire.");
+  // Awa's memory routine (Leslie, 28/10): its first line, never the command of step 1.
+  const memory = run("Routine de mémoire, silencieuse : personne n'attend de réponse.\n1. Lance python3 -I /home/node/.yelema/agregation.py lire awa. Il te montre ce qui s'est dit.");
+  assert.equal(routinePlainText(memory), "Routine de mémoire, silencieuse : personne n'attend de réponse.");
+});
+
+test("routinePlainText is null when only technical lines are left", () => {
+  assert.equal(routinePlainText(run("Lance `python3 /home/node/x.py`.\nRéponds [SILENT].")), null);
 });

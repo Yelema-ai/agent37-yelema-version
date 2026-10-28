@@ -91,6 +91,25 @@ export function routineRunText(content: string): string {
   return end < 0 ? content : content.slice(end + 3).trim();
 }
 
+// What a run was asked, for the member to read: the routine's task in plain words. Commands, paths,
+// file names and Hermes's markers stay out (Leslie, 28/10: « évite les trucs genre python »); null
+// when nothing plain is left.
+const TECHNICAL = /`|\bpython|\.(py|json|sh|md|ya?ml)\b|\/home\/|~\/|\[?\b(SILENT|NO_REPLY|CRON_FAILURE)\b\]?|https?:\/\/|\{|\}/i;
+// One sentence: the routine's own line, not the steps it goes through.
+const MAX_SENTENCES = 1;
+
+export function routinePlainText(content: string): string | null {
+  const { task } = splitPrompt(routineRunText(content));
+  const sentences = task
+    .replace(/^Tu es [^.\n]+\.\s*/, "")
+    .replace(/\*\*/g, "")
+    .split(/\n+/)
+    .flatMap((line) => line.replace(/^[-*\d.)\s]+/, "").split(/(?<=[.!?])\s+/))
+    .map((s) => s.trim())
+    .filter((s) => s.length > 2 && !TECHNICAL.test(s));
+  return sentences.length ? sentences.slice(0, MAX_SENTENCES).join(" ") : null;
+}
+
 // A run with nothing to report answers [SILENT] (or SILENT / NO_REPLY), alone or on its first or last
 // line: Hermes's own rule (gateway/response_filters.py), which then sends nothing.
 const SILENT_LINE = /^\[?(SILENT|NO[_ ]REPLY)\]?[.!]?$/i;

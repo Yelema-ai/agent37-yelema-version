@@ -26,6 +26,8 @@ export interface Note extends Unread {
   text: string;
   /** The routine's name, for a routine run. */
   routine: string | null;
+  /** A run with nothing to report. */
+  silent?: boolean;
 }
 
 export interface ActivityState {
@@ -147,8 +149,8 @@ export function pruneUnread(s: ActivityState, agentId: string, profile: string |
 const MAX_NOTES = 30;
 
 /** Keeps what a notice said, for the bell: the newest event of each conversation, 30 at most. */
-export function remember(s: ActivityState, n: Pick<Notice, "key" | "kind">, text: string, routine: string | null, at: number): ActivityState {
-  const notes = { ...s.notes, [n.key]: { at, kind: n.kind, text: n.kind === "routine" ? "" : excerpt(text), routine } };
+export function remember(s: ActivityState, n: Pick<Notice, "key" | "kind">, text: string, routine: string | null, at: number, silent = false): ActivityState {
+  const notes = { ...s.notes, [n.key]: { at, kind: n.kind, text: n.kind === "routine" ? "" : excerpt(text), routine, ...(silent ? { silent } : {}) } };
   const kept = Object.entries(notes)
     .sort((a, b) => b[1].at - a[1].at)
     .slice(0, MAX_NOTES);
@@ -197,7 +199,8 @@ export function conversationStatus(s: ActivityState, key: string): ConversationS
 export function expertActivity(s: ActivityState, agentId: string, profile: string | null): { running: boolean; unread: number } {
   const prefix = `${expertKey(agentId, profile)}|`;
   const running = Object.values(s.turns).some((t) => expertKey(t.agentId, t.profile) === expertKey(agentId, profile));
-  const unread = Object.keys(s.unread).filter((k) => k.startsWith(prefix)).length;
+  // A run with nothing to report is in the bell only: no conversation to point the Expert's badge at.
+  const unread = Object.keys(s.unread).filter((k) => k.startsWith(prefix) && !s.notes[k]?.silent).length;
   return { running, unread };
 }
 
@@ -208,6 +211,8 @@ export interface RoutineSession {
   routine: string;
   last_active: number;
   message_count?: number | null;
+  /** Nothing to report: a line in the bell, no conversation. */
+  silent?: boolean;
 }
 
 /** Hermes reports seconds or milliseconds depending on the build. */
@@ -267,6 +272,7 @@ export function parsePersisted(raw: string | null, agentId: string, now: number)
           kind: v.kind as Unread["kind"],
           text: typeof v.text === "string" ? v.text.slice(0, 200) : "",
           routine: typeof v.routine === "string" ? v.routine.slice(0, 120) : null,
+          ...(v.silent === true ? { silent: true } : {}),
         };
       }
     }
@@ -345,8 +351,8 @@ export function splitSSE(buffer: string): { events: { event: string; data: Recor
 }
 
 /** « Routine « … » terminée », without saying « routine » twice when the routine's own name starts with it. */
-export function routineDoneTitle(name: string | null | undefined): string {
+export function routineDoneTitle(name: string | null | undefined, silent = false): string {
   const n = name?.trim();
-  if (!n) return "Routine terminée";
-  return /^routines?\b/i.test(n) ? `« ${n} » terminée` : `Routine « ${n} » terminée`;
+  const what = !n ? "Routine" : /^routines?\b/i.test(n) ? `« ${n} »` : `Routine « ${n} »`;
+  return silent ? `${what} : rien à signaler` : !n ? "Routine terminée" : `${what} terminée`;
 }
