@@ -21,12 +21,10 @@ export async function GET(request: Request, { params }: Ctx) {
 
     const query = profileQuery(profile);
     const { data } = await agent37.listSessions(id, query);
-    // A routine run shows once it has something to say (Leslie, 28/10): still running, or with nothing to
-    // report, it is no conversation (the bell has the latter).
+    // A finished routine run with nothing to report is no conversation: the bell has it.
     const silent = await silentRunIds(id, query, data);
-    const running = (s: (typeof data)[number]) => s.message_count != null && s.message_count < 2 && routineOfSession(s) !== null;
     const sessions = data
-      .filter((s) => !isVoiceSession(s.preview) && !silent.has(s.id) && !running(s))
+      .filter((s) => !isVoiceSession(s.preview) && !silent.has(s.id))
       .map((s) => ({
         session_id: s.id,
         title: s.title?.trim() || s.preview?.trim() || null,

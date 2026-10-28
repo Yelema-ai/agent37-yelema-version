@@ -4,6 +4,7 @@ import { ApiError, handleError, json } from "@/lib/http";
 import { profileQuery, resolveProfile } from "@/lib/profiles";
 import { routineOfSession } from "@/lib/routines";
 import type { RoutineSession } from "@/lib/activity";
+import { DIRECT_READS } from "@/lib/run-outcomes";
 import { silentRunIds } from "@/lib/silent-runs";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -20,13 +21,15 @@ export async function GET(request: Request, { params }: Ctx) {
     const asked = [...new Set((new URL(request.url).searchParams.get("profiles") ?? "").split(",").filter(Boolean))];
     if (asked.length > MAX_PROFILES) throw new ApiError(400, "invalid_request", "Trop d’experts demandés.");
 
+    // Without a gateway, the few direct reads allowed are shared by every profile asked.
+    const budget = { left: DIRECT_READS };
     const entries = await Promise.all(
       asked.map(async (raw): Promise<[string, RoutineSession[]] | null> => {
         try {
           const profile = await resolveProfile(row, raw);
           const query = profileQuery(profile);
           const { data } = await agent37.listSessions(id, query);
-          const silent = await silentRunIds(id, query, data);
+          const silent = await silentRunIds(id, query, data, budget);
           const runs = data
             .map((s) => ({ s, routine: routineOfSession(s) }))
             .filter((x): x is { s: (typeof data)[number]; routine: string } => x.routine !== null)
