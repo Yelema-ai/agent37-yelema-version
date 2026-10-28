@@ -3,7 +3,9 @@ import { getSession } from "@/lib/auth";
 import { listConnections } from "@/lib/composio";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hashAppsToken } from "@/lib/composio";
+import { withTimeout } from "@/lib/fetch-timeout";
 import { profileQuery } from "@/lib/profile-id";
+import { pinnedWorkspaceId } from "@/lib/tenant";
 import { answerRpc } from "@/lib/yele-mcp";
 import {
   createYeleSupervisionBackend,
@@ -14,6 +16,7 @@ import {
 
 export const maxDuration = 120;
 const MAX_BODY_BYTES = 32_768;
+const TIMEOUT_MS = 15_000;
 
 function errorJson(status: number, error: string): Response {
   return Response.json({ error }, { status });
@@ -25,15 +28,27 @@ export async function POST(request: Request): Promise<Response> {
   let agentId: string | null = null;
   let userId: string | null = null;
 
+  // Verrouillage multi-tenant : vérifier le workspace épinglé s'il est configuré
+  let pinnedWorkspace: string | undefined = undefined;
+  try {
+    pinnedWorkspace = await pinnedWorkspaceId();
+  } catch {}
+
+  const db = createAdminClient();
+
   if (token) {
     // Authentification par jeton d'instance (Hermes / yelema-hermes)
     const tokenHash = hashAppsToken(token);
-    const db = createAdminClient();
-    const { data: agent } = await db
+    let q = db
       .from("agents")
-      .select("agent37_id, user_id")
-      .eq("apps_token_hash", tokenHash)
-      .maybeSingle();
+      .select("agent37_id, user_id, workspace_id")
+      .eq("apps_token_hash", tokenHash);
+
+    if (pinnedWorkspace) {
+      q = q.eq("workspace_id", pinnedWorkspace);
+    }
+
+    const { data: agent } = await q.maybeSingle();
 
     if (agent?.agent37_id) {
       agentId = agent.agent37_id;
@@ -46,11 +61,16 @@ export async function POST(request: Request): Promise<Response> {
     const { user } = await getSession();
     if (user) {
       userId = user.id;
-      const db = createAdminClient();
-      const { data: agent } = await db
+      let q = db
         .from("agents")
-        .select("agent37_id")
-        .eq("user_id", user.id)
+        .select("agent37_id, workspace_id")
+        .eq("user_id", user.id);
+
+      if (pinnedWorkspace) {
+        q = q.eq("workspace_id", pinnedWorkspace);
+      }
+
+      const { data: agent } = await q
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -80,7 +100,7 @@ export async function POST(request: Request): Promise<Response> {
   const resolvedAgentId = agentId;
   const resolvedUserId = userId;
 
-  // Création du backend réel avec les dépendances injectées
+  // Création du backend réel avec les dépendances injectées et protégées par timeout
   const backend = createYeleSupervisionBackend({
     listSessions: async (): Promise<RawSessionInfo[]> => {
       const results: RawSessionInfo[] = [];
@@ -103,7 +123,11 @@ export async function POST(request: Request): Promise<Response> {
     },
     fetchFileContent: async (path: string): Promise<string | null> => {
       try {
-        const res = await instanceFetch(resolvedAgentId, `/v1/files/content?path=${encodeURIComponent(path)}`);
+        const res = await instanceFetch(
+          resolvedAgentId,
+          `/v1/files/content?path=${encodeURIComponent(path)}`,
+          withTimeout(undefined, TIMEOUT_MS)
+        );
         return res.ok ? await res.text() : null;
       } catch {
         return null;
@@ -124,7 +148,11 @@ export async function POST(request: Request): Promise<Response> {
     },
     listDeliverableFiles: async (): Promise<RawFileInfo[]> => {
       try {
-        const res = await instanceFetch(resolvedAgentId, `/v1/files/list?path=${encodeURIComponent("~/Livrables")}`);
+        const res = await instanceFetch(
+          resolvedAgentId,
+          `/v1/files/list?path=${encodeURIComponent("~/Livrables")}`,
+          withTimeout(undefined, TIMEOUT_MS)
+        );
         if (!res.ok) return [];
         const data = (await res.json()) as { files?: RawFileInfo[]; entries?: RawFileInfo[] };
         return data.files ?? data.entries ?? [];

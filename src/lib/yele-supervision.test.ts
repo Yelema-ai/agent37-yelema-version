@@ -32,6 +32,16 @@ test("masquerSecrets: hides API keys, tokens, and passwords without leaking", ()
   assert.match(masked, /\[TOKEN_MASQUÉ\]/);
 });
 
+test("masquerSecrets: hides JWTs and Postgres connection strings", () => {
+  const text =
+    "postgres://myuser:secretPassword123@db.example.com:5432/mydb and eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.doNotLeakThisSignatureValue123";
+  const masked = masquerSecrets(text);
+  assert.doesNotMatch(masked, /secretPassword123/);
+  assert.doesNotMatch(masked, /doNotLeakThisSignatureValue123/);
+  assert.match(masked, /\[MOT_DE_PASSE_MASQUÉ\]/);
+  assert.match(masked, /\[JWT_MASQUÉ\]/);
+});
+
 test("formatActiviteExperts: separates active and inactive experts", () => {
   const now = 1730000000000;
   const sessions: RawSessionInfo[] = [
@@ -101,4 +111,22 @@ test("createYeleSupervisionBackend: connects supervision deps to YeleBackend int
 
   const diag = await b.diagnostiquerConfiguration();
   assert.match(diag, /Hermes/);
+});
+
+test("lireRapportJournalier: rejects path traversal attempts", async () => {
+  const b = createYeleSupervisionBackend({
+    listSessions: async () => [],
+    fetchFileContent: async () => "FICHIER_SECRET",
+    listConnections: async () => [],
+    listDeliverableFiles: async () => [],
+  });
+
+  const res1 = await b.lireRapportJournalier("../../../etc/passwd");
+  assert.match(res1, /Format de date invalide/);
+
+  const res2 = await b.lireRapportJournalier("2026-10-28/../../etc");
+  assert.match(res2, /Format de date invalide/);
+
+  const res3 = await b.lireRapportJournalier("2026-10-28; rm -rf");
+  assert.match(res3, /Format de date invalide/);
 });

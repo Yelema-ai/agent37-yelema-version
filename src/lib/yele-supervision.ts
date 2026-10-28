@@ -30,14 +30,21 @@ export const EXPERT_NAMES: Record<string, string> = {
   salif: "Salif (Opérations)",
 };
 
+/** Format strict de date : AAAA-MM-JJ */
+const STRICT_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
 /**
  * Masque strictement toutes les clés d'API, tokens et secrets dans un texte brut.
+ * Couvre les clés d'IA (Anthropic, OpenAI, etc.), bots Telegram, Bearer tokens,
+ * chaînes de connexion de bases de données, JWT et champs sensibles.
  */
 export function masquerSecrets(raw: string): string {
   return raw
     .replace(/\b(?:sk-(?:ant|proj|live|test)?-[a-zA-Z0-9_-]{12,})/gi, "[CLÉ_API_MASQUÉE]")
     .replace(/\b\d{9,11}:[a-zA-Z0-9_-]{35}\b/g, "[TOKEN_BOT_TELEGRAM_MASQUÉ]")
     .replace(/(?:Bearer\s+)[a-zA-Z0-9_.-]{16,}/gi, "Bearer [TOKEN_MASQUÉ]")
+    .replace(/\b(?:ey[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})\b/g, "[JWT_MASQUÉ]")
+    .replace(/(postgres(?:ql)?:\/\/[^:]+:)[^@]+(@)/gi, "$1[MOT_DE_PASSE_MASQUÉ]$2")
     .replace(/(?:password|secret|token|api[_-]?key)["']?\s*[:=]\s*["']?[^"'\s\n]{6,}["']?/gi, (match) => {
       const parts = match.split(/[:=]/);
       return `${parts[0]}: "[MASQUÉ]"`;
@@ -224,13 +231,19 @@ export function createYeleSupervisionBackend(deps: SupervisionDeps): YeleBackend
     },
 
     async lireRapportJournalier(dateStr?: string): Promise<string> {
-      let targetDate = dateStr?.trim();
+      let targetDate = (dateStr ?? "").trim().toLowerCase();
       const today = new Date().toISOString().slice(0, 10);
-      if (!targetDate || targetDate.toLowerCase() === "aujourdhui" || targetDate.toLowerCase() === "today") {
+
+      if (!targetDate || targetDate === "aujourdhui" || targetDate === "today") {
         targetDate = today;
-      } else if (targetDate.toLowerCase() === "hier" || targetDate.toLowerCase() === "yesterday") {
+      } else if (targetDate === "hier" || targetDate === "yesterday") {
         const y = new Date(Date.now() - 24 * 3600 * 1000);
         targetDate = y.toISOString().slice(0, 10);
+      }
+
+      // SÉCURITÉ ANTI-PATH TRAVERSAL : rejet strict si le format n'est pas AAAA-MM-JJ
+      if (!STRICT_DATE_REGEX.test(targetDate)) {
+        return "Format de date invalide. Veuillez indiquer une date au format AAAA-MM-JJ (ex: 2026-10-28) ou 'aujourdhui' / 'hier'.";
       }
 
       const candidatePaths = [
