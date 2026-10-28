@@ -575,6 +575,8 @@ export const backoffice = {
   testUnipile: (token: string, draft: UnipileDraft) => call<{ accounts: UnipileAccount[] }>("/app/unipile/test", { method: "POST", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   setUnipile: (token: string, draft: UnipileDraft) => call<UnipileStatus>("/app/unipile", { method: "PUT", token, body: draft, timeoutMs: 60_000 }),
   clearUnipile: (token: string) => call<{ ok: true }>("/app/unipile", { method: "DELETE", token, timeoutMs: 60_000 }),
+  // A one-click Unipile link, made by the instance (it alone holds the key), to link a broken account again.
+  reconnectUnipile: (token: string, accountId: string) => call<{ url: string }>("/app/unipile/reconnect", { method: "POST", token, body: { accountId }, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   mcp: (token: string) => call<McpOverview>("/app/mcp", { token }),
   addMcpServer: (token: string, scope: SettingScope, draft: McpServerDraft) => {
     const path = mcpScopePath(scope);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { accountBroken, accountName, accountType, normalizeDsn, parseUnipileDraft } from "./unipile.ts";
+import { accountBroken, accountName, accountType, hostedLink, normalizeDsn, parseAccountId, parseUnipileDraft } from "./unipile.ts";
 
 const KEY = "Kx7pQ2.abcdefghijklmnop=";
 
@@ -25,4 +25,12 @@ test("an account reads as people say it, and a lost session asks to be linked ag
   assert.equal(accountBroken({ status: "CREDENTIALS" }), true);
   assert.equal(accountBroken({ status: "OK" }), false);
   assert.equal(accountBroken({ status: null }), false);
+});
+
+test("reconnection: a plain account id goes out, only a link Unipile hosts comes back", () => {
+  assert.equal(parseAccountId({ accountId: " acc_7Hq2mP " }), "acc_7Hq2mP");
+  for (const accountId of ["../x", "a b", "$(id)", "", 7]) assert.equal(parseAccountId({ accountId }), null, String(accountId));
+  assert.equal(parseAccountId(null), null);
+  assert.equal(hostedLink("https://account.unipile.com/pnn3ZR3q"), "https://account.unipile.com/pnn3ZR3q");
+  for (const url of ["https://evil.example/x", "http://account.unipile.com/x", "https://account.unipile.com.evil.io/x", "javascript:alert(1)", "https://u:p@account.unipile.com/x", null]) assert.equal(hostedLink(url), null, String(url));
 });

@@ -37,18 +37,18 @@ type OauthProps = {
 // le brouillon part au back-office, qui contrôle le nom, l'adresse et le jeton ; son refus revient en une phrase.
 // Il s'ouvre sur une seule question, « Quel outil ? » (Leslie, 27/10) : un outil de l'annuaire vérifié
 // (lib/mcp-directory) arrive avec son nom de serveur et son adresse déjà remplis, modifiables, puis ce que
-// l'outil demande (clé, DSN) ; jamais de renvoi vers Connecteurs (Leslie, 27/10) ; tout autre serveur
+// l'outil demande (une clé, dans l'en-tête que l'outil nomme au besoin) ; jamais de renvoi vers Connecteurs (Leslie, 27/10) ; tout autre serveur
 // se saisit à la main, comme avant.
 export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth }: { open: boolean; onOpenChange: (open: boolean) => void; scopeLabel: string; onSave: (draft: McpServerDraft) => Promise<void>; oauth: OauthProps }) {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [auth, setAuth] = useState<Exclude<McpAuth, "stdio">>("none");
   const [token, setToken] = useState("");
+  const [header, setHeader] = useState("");
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState<"pick" | "form">("pick");
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<McpDirectoryEntry | null>(null);
-  const [extra, setExtra] = useState<Record<string, string>>({});
   const [alsoConnector, setAlsoConnector] = useState(false);
   const ownAgentId = useOwnAgentId();
 
@@ -59,10 +59,10 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth 
     setUrl("");
     setAuth("none");
     setToken("");
+    setHeader("");
     setStep("pick");
     setQuery("");
     setPicked(null);
-    setExtra({});
   }, [open]);
 
   const found = useMemo(() => searchDirectory(query), [query]);
@@ -84,29 +84,29 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth 
     setPicked(entry);
     setName(serverName(entry));
     setUrl(entry.url);
-    setAuth(entry.auth === "bearer" ? "bearer" : entry.auth === "oauth" ? "oauth" : "none");
+    setAuth(entry.auth === "oauth" ? "oauth" : "bearer");
+    setHeader(entry.auth === "header" ? (entry.header ?? "") : "");
     setToken("");
-    setExtra({});
   }
 
   function back() {
     setPicked(null);
-    setExtra({});
     setStep("pick");
     setName("");
     setUrl("");
     setAuth("none");
     setToken("");
+    setHeader("");
   }
 
-  const ready = Boolean(name.trim() && url.trim() && (auth !== "bearer" || token.trim())) && picked?.auth !== "header";
+  const ready = Boolean(name.trim() && url.trim() && (auth !== "bearer" || token.trim()));
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!ready || busy) return;
     setBusy(true);
     try {
-      await onSave({ name: name.trim(), url: url.trim(), auth, ...(auth === "bearer" ? { token: token.trim() } : {}) });
+      await onSave({ name: name.trim(), url: url.trim(), auth, ...(auth === "bearer" ? { token: token.trim(), ...(header.trim() ? { header: header.trim() } : {}) } : {}) });
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -176,12 +176,6 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth 
               <Label htmlFor="mcp-url">Adresse du serveur</Label>
               <Input id="mcp-url" type="url" value={url} onChange={(e) => setUrl(e.target.value)} disabled={busy} required autoComplete="off" spellCheck={false} className="font-mono text-[13px]" />
             </div>
-            {picked.fields?.map((f) => (
-              <div key={f.id} className="space-y-1.5">
-                <Label htmlFor={`mcp-${f.id}`}>{f.label}</Label>
-                <Input id={`mcp-${f.id}`} type="text" placeholder={f.placeholder} value={extra[f.id] ?? ""} onChange={(e) => setExtra((x) => ({ ...x, [f.id]: e.target.value }))} disabled={busy} autoComplete="off" spellCheck={false} className="font-mono text-[13px]" />
-              </div>
-            ))}
             {(picked.auth === "bearer" || picked.auth === "header") && (
               <div className="space-y-1.5">
                 <Label htmlFor="mcp-token">Clé {picked.name}</Label>
@@ -192,11 +186,6 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth 
             {picked.auth === "oauth" && (
               <p className="rounded-xl bg-soft px-4 py-3 text-sm leading-relaxed text-ink-2">
                 {oauth.chains ? `En cliquant sur « Connecter », la page de ${picked.name} s’ouvre : vous vous connectez et validez l’accès.` : `Rien à saisir. Ce membre se connectera ensuite à son propre compte ${picked.name}.`}
-              </p>
-            )}
-            {picked.auth === "header" && (
-              <p className="rounded-xl bg-soft px-4 py-3 text-sm leading-relaxed text-ink-2">
-                La connexion à {picked.name} arrive bientôt : Yelema prépare l’envoi de cette clé.
               </p>
             )}
             {alsoConnector && (
@@ -276,6 +265,9 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth 
                 </Label>
                 <Input id="mcp-token" type="password" placeholder="Jeton ou clé secrète" value={token} onChange={(e) => setToken(e.target.value)} disabled={busy} required autoComplete="off" spellCheck={false} />
                 <p className="text-xs text-ink-3">Chiffré et gardé par Yelema ; il ne sera plus affiché, seulement ses quatre derniers caractères.</p>
+                <Label htmlFor="mcp-header" className="pt-2">En-tête de la clé</Label>
+                <Input id="mcp-header" type="text" placeholder="Authorization: Bearer (par défaut)" value={header} onChange={(e) => setHeader(e.target.value)} disabled={busy} autoComplete="off" spellCheck={false} className="font-mono text-[13px]" />
+                <p className="text-xs text-ink-3">Seulement si le serveur attend sa clé dans un en-tête à lui, par exemple X-API-KEY.</p>
               </div>
             )}
 
