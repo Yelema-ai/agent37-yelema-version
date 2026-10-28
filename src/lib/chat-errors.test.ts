@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BUDGET_EXCEEDED, CREDIT_EXHAUSTED, attachedFiles, chatFailureMessage, cleanReply, cleanUserMessage, isAccountToTopUp } from "./chat-errors.ts";
+import { BUDGET_EXCEEDED, CREDIT_EXHAUSTED, OFFLINE, UNREACHABLE, attachedFiles, chatFailureMessage, cleanReply, cleanUserMessage, isAccountToTopUp } from "./chat-errors.ts";
 
 test("the gateway's budget refusal becomes the budget sentence", () => {
   assert.equal(chatFailureMessage('litellm.BudgetExceededError: {"error":{"type":"budget_exceeded"}}', "x"), BUDGET_EXCEEDED);
   assert.equal(chatFailureMessage("Error code: 400 - Budget has been exceeded! Current cost: 200.1", "x"), BUDGET_EXCEEDED);
+});
+
+test("a request that never got through says which side failed (Leslie, 28/10)", () => {
+  assert.equal(chatFailureMessage("Load failed", "x", false), OFFLINE);
+  assert.equal(chatFailureMessage("Failed to fetch", "x", false), OFFLINE);
+  assert.equal(chatFailureMessage("Load failed", "x", true), UNREACHABLE);
+  assert.equal(chatFailureMessage("NetworkError when attempting to fetch resource.", "x"), UNREACHABLE);
 });
 
 test("anything else keeps the caller's sentence", () => {

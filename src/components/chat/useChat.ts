@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, readApiError } from "@/lib/api";
 import { cached, remember } from "@/lib/client-cache";
 import { finishTiming, keepLast, mark, startTiming, type TurnTiming } from "@/lib/chat-timing";
-import { chatFailureMessage } from "@/lib/chat-errors";
+import { chatFailureMessage, OFFLINE } from "@/lib/chat-errors";
 import { batchQueued, insertBefore, isSteer, steerText, unreadSteerCount } from "@/lib/chat-queue";
 import { profileQuery } from "@/lib/profile-id";
 import { toolPhrase } from "@/lib/tool-steps";
@@ -85,6 +85,9 @@ async function readSSE(
     reader.cancel().catch(() => {});
   }
 }
+
+// The browser's word on the network, read when a request fails (true where it cannot tell).
+const isOnline = () => typeof navigator === "undefined" || navigator.onLine !== false;
 
 function str(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
@@ -202,6 +205,12 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
   const [isStreaming, setIsStreaming] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The connection back: the « no Internet » line goes, the member writes again.
+  useEffect(() => {
+    const back = () => setError((e) => (e === OFFLINE ? null : e));
+    window.addEventListener("online", back);
+    return () => window.removeEventListener("online", back);
+  }, []);
   // Tells the app-wide tracker when a turn starts and ends, for the notifications.
   const turns = useTurnReporter(agentId, profile);
 
@@ -370,7 +379,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
                 const err = data.error as { message?: string } | undefined;
                 // The instance's own reason is technical and in English: it stays in the browser console.
                 if (err?.message) console.error("[chat] response.failed:", err.message);
-                streamError = chatFailureMessage(err?.message, "Votre expert n’a pas pu répondre. Réessayez dans un instant.");
+                streamError = chatFailureMessage(err?.message, "Votre expert n’a pas pu répondre. Réessayez dans un instant.", isOnline());
                 break;
               }
             }
@@ -565,7 +574,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
         }
       })
       .catch((e) => {
-        if (!cancelled) setError((e as Error).message);
+        if (!cancelled) setError(chatFailureMessage((e as Error).message, (e as Error).message, isOnline()));
       })
       .finally(() => {
         if (!cancelled) setLoadingHistory(false);
@@ -643,7 +652,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
         forgetRun(run);
         const aborted = (e as Error).name === "AbortError";
         if (!aborted) {
-          turns.end(run, "failed", chatFailureMessage((e as Error).message, ""));
+          turns.end(run, "failed", chatFailureMessage((e as Error).message, "", isOnline()));
           reportTiming(run, profile, "failed");
         }
         const next = !aborted && run.sessionId ? run.queue.splice(0) : [];
@@ -651,7 +660,7 @@ export function useChat({ agentId, profile, sessionId, refreshToken = 0, onSessi
         const current = run.sessionId ? runsRef.current.get(run.sessionId) : newChatRunRef.current;
         if (viewed && !(current && current !== run && !current.done)) {
           if (!next.length) setIsStreaming(false);
-          if (!aborted) setError(chatFailureMessage((e as Error).message, (e as Error).message || "Une erreur est survenue. Réessayez dans un instant."));
+          if (!aborted) setError(chatFailureMessage((e as Error).message, (e as Error).message || "Une erreur est survenue. Réessayez dans un instant.", isOnline()));
         }
         if (next.length) void startTurnRef.current(run.sessionId, next);
       }

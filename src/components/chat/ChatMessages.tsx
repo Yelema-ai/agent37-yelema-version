@@ -2,9 +2,9 @@
 
 import { useSafeDashboard } from "@/components/experts/DashboardProvider";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, ChevronRight, ClipboardCheck, Copy, CornerDownLeft, FileText, Image as ImageIcon, Loader2, PhoneCall, Repeat } from "lucide-react";
-import { turnDocs } from "@/lib/drive-links";
+import { turnDocs, type TurnDoc } from "@/lib/drive-links";
 import { kanbanNotice } from "@/lib/kanban-notice";
 import { isRoutineRun, isSilentRun, routineRunText, SILENT_RUN_LABEL } from "@/lib/routines";
 import { isCallTranscript } from "@/lib/voice";
@@ -135,6 +135,7 @@ export function ChatMessages({
   driveFolder = null,
   onShowEarlier,
   onUnqueue,
+  onDocs,
 }: {
   messages: ChatMessage[];
   isStreaming: boolean;
@@ -145,6 +146,8 @@ export function ChatMessages({
   onShowEarlier?: () => void;
   /** Takes back a message still waiting for the reply in progress: it has not been sent. */
   onUnqueue?: (id: string) => void;
+  /** Every document of the finished replies, each once: the chat's « Livrables » button lists them. */
+  onDocs?: (docs: TurnDoc[]) => void;
 }) {
   // The instance whose drive the paths in a reply point into (they become download links).
   const { agentId, profile } = useChatContext();
@@ -164,6 +167,15 @@ export function ChatMessages({
   const start = Math.max(0, messages.length - shown);
   const since = oldest == null ? null : Math.floor((oldest - 60_000) / 60_000) * 60_000;
   const listing = useDriveListing(agentId, isStreaming ? null : driveFolder, since, String(messages.length));
+  const allDocs = useMemo(() => {
+    const seen = new Map<string, TurnDoc>();
+    messages.forEach((m, i) => {
+      if (m.role !== "assistant" || i === liveIndex || !m.content) return;
+      for (const d of turnDocs(cleanReply(m.content), listing, [...(m.files ?? []), ...mediaTags(m.content).paths])) seen.set(d.path, d);
+    });
+    return [...seen.values()];
+  }, [messages, liveIndex, listing]);
+  useEffect(() => onDocs?.(allDocs), [allDocs, onDocs]);
       const dashboard = useSafeDashboard();
 
   const handleContainerClick = (e: React.MouseEvent) => {

@@ -4,14 +4,17 @@
 import { isMemoryFolder } from "./drive-order.ts";
 
 const DRIVE_PATH = String.raw`(?:/home/node|~)/Livrables/[^\s)\]\x60]+\.[A-Za-z0-9]{1,6}`;
+// Experts also write the path from the drive itself (« Livrables/Djeneba/Reunions/cr.md », Leslie
+// 28/10): bare in the text or in backticks, it is a link too.
+const DRIVE_PATH_ANY = String.raw`(?:(?:/home/node|~)/)?Livrables/[^\s)\]\x60«»"]+\.[A-Za-z0-9]{1,6}`;
 // GPT models prefix the path with `sandbox:` (ChatGPT's own download links); it is dropped.
 // [label](file:///home/node/Livrables/…), [label](sandbox:/home/node/Livrables/…) or [label](~/Livrables/…)
 export const LINKED = new RegExp(String.raw`\]\((?:file://|sandbox:)?(${DRIVE_PATH})\)`, "g");
 // [label](<file:///home/node/Livrables/…>): the angle-bracket form, where the path may hold spaces
 export const ANGLED = new RegExp(String.raw`\]\(<(?:file://|sandbox:)?((?:/home/node|~)/Livrables/[^>\n]+\.[A-Za-z0-9]{1,6})>\)`, "g");
 // `~/Livrables/Fatima/post.docx` or a bare path in the text
-export const CODE = new RegExp("`(?:sandbox:)?((?:/home/node|~)/Livrables/[^`\\n]+\\.[A-Za-z0-9]{1,6})`", "g");
-export const BARE = new RegExp(String.raw`(^|[\s(«"])(?:sandbox:)?(${DRIVE_PATH})`, "gm");
+export const CODE = new RegExp("`(?:sandbox:)?((?:(?:/home/node|~)/)?Livrables/[^`\\n]+\\.[A-Za-z0-9]{1,6})`", "g");
+export const BARE = new RegExp(String.raw`(^|[\s(«"])(?:sandbox:)?(${DRIVE_PATH_ANY})`, "gm");
 
 // A drive FOLDER the Expert cites (« Dossier local : `Livrables/Fatima/tajplast/flyers-modernes/` »),
 // with or without `~/` or `/home/node/`: in backticks when its last part has no extension, bare in
@@ -39,7 +42,7 @@ export function safeDecode(s: string): string {
 
 /** One spelling per file: `~/Livrables/…`, decoded. */
 export function normDrivePath(path: string): string {
-  return safeDecode(path).replace(/^\/home\/node\/Livrables(?=\/|$)/, "~/Livrables");
+  return safeDecode(path).replace(/^(?:\/home\/node\/)?Livrables(?=\/|$)/, "~/Livrables");
 }
 
 /** The drive files a text names, in the order it names them, each once. */
@@ -103,6 +106,17 @@ export const isTechnicalFile = (name: string) => TECHNICAL.test(name);
 /** Never a card nor a link in the chat: working files, notes (.md, .txt: Leslie, 27/10) and anything in the memory folder. */
 export const isHiddenInChat = (path: string) =>
   isTechnicalFile(path) || /\.(md|markdown|txt)$/i.test(path) || path.split("/").slice(0, -1).some(isMemoryFolder);
+
+/**
+ * A note the Expert names (a meeting report in .md, Leslie 28/10: « dès qu'on clique dessus, on retrouve
+ * le livrable »): no card, but its name opens its folder in Livrables. `~/Livrables/…` of that folder,
+ * or null for anything else (a document has its download link, memory and working files stay unlinked).
+ */
+export function noteFolder(path: string): string | null {
+  const p = normDrivePath(path);
+  if (!/\.(md|markdown|txt)$/i.test(p) || isTechnicalFile(p) || p.split("/").slice(0, -1).some(isMemoryFolder)) return null;
+  return citedFolder(parentOf(p));
+}
 
 export function turnDocs(text: string, listing: readonly DriveFile[], written: readonly string[] = []): TurnDoc[] {
   const byPath = new Map(listing.map((f) => [normDrivePath(f.path), f]));

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, ChevronRight, ExternalLink, Loader2, MessagesSquare, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { cached, remember } from "@/lib/client-cache";
 import { expertDisplayName } from "@/lib/experts";
 import { UNIPILE_DASHBOARD, accountBroken, accountDomain, accountName, accountType, type UnipileAccount, type UnipileStatus } from "@/lib/unipile";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
@@ -20,7 +21,8 @@ import { cn } from "@/lib/utils";
 // (« 4 comptes » et les visages des Experts), un bandeau rouge seulement quand un compte a perdu sa
 // session, et tout le détail dans un panneau au clic (Leslie, 27/10, maquette A).
 export function UnipileCard() {
-  const [status, setStatus] = useState<UnipileStatus | null>(null);
+  // Read last time this visit: shown at once, read again behind it (Leslie, 28/10).
+  const [status, setStatus] = useState<UnipileStatus | null>(() => cached<UnipileStatus>("unipile") ?? null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [dsn, setDsn] = useState("");
@@ -35,7 +37,7 @@ export function UnipileCard() {
 
   const load = useCallback(async () => {
     try {
-      setStatus(await apiFetch<UnipileStatus>("/api/unipile"));
+      setStatus(remember("unipile", await apiFetch<UnipileStatus>("/api/unipile")));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -64,7 +66,7 @@ export function UnipileCard() {
   const test = () => act("test", async () => setTested((await apiFetch<{ accounts: UnipileAccount[] }>("/api/unipile/test", { method: "POST", body: draft() })).accounts));
   const save = () =>
     act("save", async () => {
-      setStatus(await apiFetch<UnipileStatus>("/api/unipile", { method: "PUT", body: draft() }));
+      setStatus(remember("unipile", await apiFetch<UnipileStatus>("/api/unipile", { method: "PUT", body: draft() })));
       setEditing(false);
       setApiKey("");
       toast.success("Messagerie branchée");
@@ -101,72 +103,69 @@ export function UnipileCard() {
   const brokenLabel = broken.length === 1 ? "1 compte à reconnecter" : `${broken.length} comptes à reconnecter`;
   const connected = Boolean(status?.connected) && !editing;
 
+  const count = status ? (status.accounts.length === 1 ? "1 compte" : `${status.accounts.length} comptes`) : "";
+
+  // One line, the height of a connector tile (Leslie, 28/10: « le bandeau est tellement gros inutilement,
+  // le connecté n'est pas centré »): the accounts in the subtitle, the faces and the state beside it.
   return (
-    <div className="rounded-[22px] border bg-card py-3 pl-4 pr-3">
-      <button
-        type="button"
-        onClick={() => connected && setDetails(true)}
-        disabled={!connected}
-        className="flex min-h-[52px] w-full items-center gap-3 text-left disabled:cursor-default"
-      >
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[12px] bg-soft text-ink-2">
-          <MessagesSquare className="h-5 w-5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-semibold text-ink">Vos messageries</span>
-          <span className="block text-[13px] text-ink-3">WhatsApp, LinkedIn, e-mails</span>
-        </span>
-        {status === null && !error ? (
-          <span className="h-8 w-24 shrink-0 animate-pulse rounded-[10px] bg-soft" />
-        ) : connected ? (
-          <>
-            {broken.length || status?.accountsError ? null : (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ok-pale px-2.5 py-1 text-xs font-semibold text-ok">
-                <Check className="h-3.5 w-3.5" />
-                Connecté
-              </span>
-            )}
-            <ChevronRight className="size-4 shrink-0 text-ink-3" />
-          </>
-        ) : null}
-      </button>
-      {status && !status.connected && !editing && (
-        <div className="mt-1 flex justify-end">
-          <Button size="sm" onClick={open}>
+    <div className="rounded-[22px] border bg-card">
+      <div className="flex min-h-[78px] items-center gap-3 py-3 pl-4 pr-3">
+        <button
+          type="button"
+          onClick={() => connected && setDetails(true)}
+          disabled={!connected}
+          className="flex min-w-0 flex-1 items-center gap-3 self-stretch text-left disabled:cursor-default"
+        >
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[12px] bg-soft text-ink-2">
+            <MessagesSquare className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-semibold text-ink">Vos messageries</span>
+            <span className="block truncate text-[13px] text-ink-3">WhatsApp, LinkedIn, e-mails{connected && count ? ` : ${count}` : ""}</span>
+          </span>
+          {connected && faces.length > 0 && (
+            <span className="flex shrink-0 items-center max-sm:hidden">
+              {faces.slice(0, 5).map((e, i) => (
+                <ExpertAvatar key={e.profileId} expert={e} size="xs" className={cn("rounded-full ring-2 ring-card", i && "-ml-2")} />
+              ))}
+              {faces.length > 5 && <span className="ml-1.5 text-[13px] font-semibold text-ink-2">+{faces.length - 5}</span>}
+            </span>
+          )}
+          {status === null && !error ? (
+            <span className="h-7 w-24 shrink-0 animate-pulse rounded-full bg-soft" />
+          ) : connected ? (
+            <>
+              {broken.length || status?.accountsError ? null : (
+                <span className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full bg-ok-pale px-2.5 text-xs font-semibold leading-none text-ok">
+                  <Check className="h-3.5 w-3.5" />
+                  Connecté
+                </span>
+              )}
+              <ChevronRight className="size-4 shrink-0 text-ink-3" />
+            </>
+          ) : null}
+        </button>
+        {status && !status.connected && !editing && (
+          <Button size="sm" onClick={open} className="shrink-0">
             Connecter
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {error && <p className="mt-2 border-t pt-2 text-[13px] text-ink-3">{error}</p>}
+      {error && <p className="border-t px-4 py-2 text-[13px] text-ink-3">{error}</p>}
 
-      {connected && status && (
-        <>
-          {(broken.length > 0 || status.accountsError) && (
-            <div className="mt-2 flex items-center gap-3 rounded-[14px] bg-ko-pale px-3 py-2 text-[13px] text-ko">
-              <span className="flex-1 font-semibold">{status.accountsError ? "Unipile ne reconnaît plus votre clé" : brokenLabel}</span>
-              {status.accountsError ? (
-                <Button size="sm" onClick={open}>Reconnecter</Button>
-              ) : (
-                <Button size="sm" disabled={linking !== null} onClick={() => (broken.length === 1 ? void reconnect(broken[0]) : setDetails(true))}>
-                  {linking ? <Loader2 className="animate-spin" /> : null}
-                  Reconnecter
-                </Button>
-              )}
-            </div>
+      {connected && status && (broken.length > 0 || status.accountsError) && (
+        <div className="mx-3 mb-3 flex items-center gap-3 rounded-[14px] bg-ko-pale px-3 py-2 text-[13px] text-ko">
+          <span className="flex-1 font-semibold">{status.accountsError ? "Unipile ne reconnaît plus votre clé" : brokenLabel}</span>
+          {status.accountsError ? (
+            <Button size="sm" onClick={open}>Reconnecter</Button>
+          ) : (
+            <Button size="sm" disabled={linking !== null} onClick={() => (broken.length === 1 ? void reconnect(broken[0]) : setDetails(true))}>
+              {linking ? <Loader2 className="animate-spin" /> : null}
+              Reconnecter
+            </Button>
           )}
-          <div className="mt-2 flex items-center gap-3 border-t pt-2 text-[13px] text-ink-2">
-            <span>{status.accounts.length === 1 ? "1 compte" : `${status.accounts.length} comptes`}</span>
-            {faces.length > 0 && (
-              <span className="flex items-center">
-                {faces.slice(0, 5).map((e, i) => (
-                  <ExpertAvatar key={e.profileId} expert={e} size="xs" className={cn("rounded-full ring-2 ring-card", i && "-ml-2")} />
-                ))}
-                {faces.length > 5 && <span className="ml-1.5 font-semibold">+{faces.length - 5}</span>}
-              </span>
-            )}
-          </div>
-        </>
+        </div>
       )}
 
       <Dialog open={details} onOpenChange={(v) => (setDetails(v), setConfirming(false))}>
@@ -233,7 +232,7 @@ export function UnipileCard() {
       </Dialog>
 
       {editing && status && (
-        <div className="mt-2 space-y-3 border-t pt-3 text-[13px]">
+        <div className="space-y-3 border-t px-4 pb-3 pt-3 text-[13px]">
           <p className="text-ink-3">
             Dans votre tableau de bord Unipile, reliez votre WhatsApp, puis copiez le DSN et créez une clé d’API.
           </p>

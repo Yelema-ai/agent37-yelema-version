@@ -12,8 +12,19 @@ const CREDIT = /insufficient[_ ]?(quota|credits?|balance|funds)|credit balance i
 
 export const CREDIT_EXHAUSTED = "Le compte d’IA de vos Experts n’a plus de crédit. Rechargez-le, ou branchez un autre compte dans Intégrations, Modèles.";
 
-/** The sentence for a failed answer whose raw reason is `raw`. */
-export function chatFailureMessage(raw: string | undefined | null, fallback: string): string {
+// The browser's own words when a request never reached the server: Safari « Load failed », Chrome
+// « Failed to fetch », Firefox « NetworkError… » (Leslie, 28/10: Wi-Fi cut, « Load failed » on top of the chat).
+const NETWORK = /^(load failed|failed to fetch|networkerror when attempting to fetch resource\.?|network ?error|the network connection was lost\.?|the internet connection appears to be offline\.?)$/i;
+
+export const OFFLINE = "Pas de connexion Internet. Vérifiez votre Wi-Fi ou vos données mobiles, puis réessayez.";
+export const UNREACHABLE = "Yelema ne répond pas pour le moment. Réessayez dans un instant.";
+
+/**
+ * The sentence for a failed answer whose raw reason is `raw`. `online` is the browser's word on the
+ * network at that moment (navigator.onLine): a request that never got through says which side failed.
+ */
+export function chatFailureMessage(raw: string | undefined | null, fallback: string, online = true): string {
+  if (raw && NETWORK.test(raw.trim())) return online ? UNREACHABLE : OFFLINE;
   if (raw && BUDGET.test(raw)) return BUDGET_EXCEEDED;
   if (raw && CREDIT.test(raw)) return CREDIT_EXHAUSTED;
   return fallback;

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { cached, remember } from "@/lib/client-cache";
 import {
   channelError,
   channelStateLabel,
@@ -51,10 +52,14 @@ export function ChannelsTab({
   // The channels below are the Hermes harness's own; a Claude Code instance has Telegram through its hub.
   const hermesTools = useRuntimeTools(agentId);
 
-  const [channels, setChannels] = useState<MessagingPlatform[] | null>(null);
+  // What this page read last time, kept for the visit (Leslie, 28/10: « la page Canaux s'affiche très
+  // lentement »): shown at once, the live state read again behind it.
+  const memoKey = `channels:${agentId}`;
+  const seen = cached<ChannelsResponse>(memoKey);
+  const [channels, setChannels] = useState<MessagingPlatform[] | null>(() => seen?.channels ?? null);
   // False while the rows come from the image's channel list and their state is still being read.
-  const [stateKnown, setStateKnown] = useState(false);
-  const [teamsEndpoint, setTeamsEndpoint] = useState<string | null>(null);
+  const [stateKnown, setStateKnown] = useState(Boolean(seen));
+  const [teamsEndpoint, setTeamsEndpoint] = useState<string | null>(() => seen?.teams_endpoint ?? null);
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -73,7 +78,9 @@ export function ChannelsTab({
     async (quiet = false) => {
       if (!quiet) setLoading(true);
       try {
-        const { channels: list, teams_endpoint } = await apiFetch<ChannelsResponse>(`/api/agents/${agentId}/channels`);
+        const res = await apiFetch<ChannelsResponse>(`/api/agents/${agentId}/channels`);
+        const { channels: list, teams_endpoint } = res;
+        remember(memoKey, res);
         setChannels(list);
         setTeamsEndpoint(teams_endpoint ?? null);
         setStateKnown(true);
@@ -83,7 +90,7 @@ export function ChannelsTab({
         setLoading(false);
       }
     },
-    [agentId]
+    [agentId, memoKey]
   );
 
   // Started at once: the route answers no channel for a runtime that has none. The image's channel
@@ -167,8 +174,11 @@ export function ChannelsTab({
       </div>
 
       {channels === null ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        // Before the image's list arrives, the four first channels are known: their rows show at once.
+        <div className="divide-y overflow-hidden rounded-[22px] border bg-card">
+          {PLACEHOLDERS.map((channel) => (
+            <ChannelRow key={channel.id} channel={channel} canManage={false} checking onOpen={() => undefined} />
+          ))}
         </div>
       ) : (
         <>
@@ -244,6 +254,23 @@ function Header() {
 }
 
 // A connected channel is one row to open (state, then a chevron); one to set up keeps its button.
+const placeholder = (id: string, name: string): MessagingPlatform => ({
+  id,
+  name,
+  description: null,
+  docs_url: null,
+  enabled: false,
+  configured: false,
+  gateway_running: false,
+  state: null,
+  error_code: null,
+  error_message: null,
+  home_channel: null,
+  env_vars: [],
+});
+// In the order of the page (Telegram, Slack, Teams, then WhatsApp).
+const PLACEHOLDERS = [placeholder("telegram", "Telegram"), placeholder("slack", "Slack"), placeholder("teams", "Microsoft Teams"), placeholder("whatsapp", "WhatsApp")];
+
 function ChannelRow({
   channel,
   canManage,

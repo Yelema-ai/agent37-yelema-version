@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Check, ChevronRight, Loader2, MoreHorizontal, Pencil, Plug, Plus, RotateCw, Search, Star, Trash2, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { cached, remember } from "@/lib/client-cache";
 import {
   ACCOUNT_STATE_LABELS,
   accountState,
@@ -82,7 +83,8 @@ function localized(t: IntegrationToolkit): IntegrationToolkit {
 export function ConnectorsView({ agentId }: { agentId: string }) {
   const [search, setSearch] = useState("");
   const [remote, setRemote] = useState<{ q: string; items: IntegrationToolkit[] } | null>(null);
-  const [connections, setConnections] = useState<IntegrationConnection[] | null>(null);
+  // The connections read last time this visit show at once (Leslie, 28/10); the live list follows.
+  const [connections, setConnections] = useState<IntegrationConnection[] | null>(() => cached<IntegrationConnection[]>(`conns:${agentId}`) ?? null);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
@@ -95,6 +97,7 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
     const { connections: list } = await apiFetch<IntegrationConnectionsResult>(
       `/api/agents/${agentId}/integrations/connections`
     );
+    remember(`conns:${agentId}`, list);
     setConnections(list);
     return list;
   }, [agentId]);

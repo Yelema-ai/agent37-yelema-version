@@ -4,7 +4,7 @@ import { memo, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
-import { ANGLED, BARE, citedFolder, CODE, FOLDER_BARE, FOLDER_CODE, isHiddenInChat, LINKED, safeDecode } from "@/lib/drive-links";
+import { ANGLED, BARE, citedFolder, CODE, FOLDER_BARE, FOLDER_CODE, isHiddenInChat, LINKED, normDrivePath, noteFolder, safeDecode } from "@/lib/drive-links";
 import { agentTabPath } from "@/lib/expert-tabs";
 
 const HIDDEN_LINK = /\[([^\]\n]*)\]\(<?(?:file:\/\/|sandbox:)?((?:\/home\/node|~)\/Livrables\/[^)>\n]+)>?\)/g;
@@ -15,9 +15,15 @@ const HIDDEN_LINK = /\[([^\]\n]*)\]\(<?(?:file:\/\/|sandbox:)?((?:\/home\/node|~
 // par défaut cliquables, sinon ça sert à rien »).
 function linkDriveFiles(content: string, agentId: string, profileId?: string | null): string {
   const url = (path: string) =>
-    `/api/agents/${agentId}/files/content?path=${encodeURIComponent(safeDecode(path))}&disposition=attachment`;
-  const name = (path: string) => safeDecode(path.split("/").pop() ?? path);
-  const link = (label: string, path: string) => (isHiddenInChat(path) ? label : `[${label}](${url(path)})`);
+    `/api/agents/${agentId}/files/content?path=${encodeURIComponent(normDrivePath(path))}&disposition=attachment`;
+  // A link's text is markdown: an underscore or a star in a file name must not turn into emphasis.
+  const md = (label: string) => label.replace(/([_*\[\]])/g, "\\$1");
+  const name = (path: string) => md(safeDecode(path.split("/").pop() ?? path));
+  const link = (label: string, path: string) => {
+    const note = noteFolder(path);
+    if (note) return `[${md(normDrivePath(path).replace(/^~\//, ""))}](${agentTabPath(agentId, "files", profileId)}?dossier=${encodeURIComponent(note)})`;
+    return isHiddenInChat(path) ? label : `[${label}](${url(path)})`;
+  };
   return content
     .replace(HIDDEN_LINK, (m, label: string, path: string) => (isHiddenInChat(path) ? label : m))
     .replace(ANGLED, (_m, path: string) => `](${url(path)})`)
@@ -34,7 +40,7 @@ function linkDriveFiles(content: string, agentId: string, profileId?: string | n
 function folderLink(path: string, agentId: string, profileId?: string | null): string | null {
   const folder = citedFolder(path);
   if (!folder) return null;
-  const label = folder.replace(/^~\//, "");
+  const label = folder.replace(/^~\//, "").replace(/([_*\[\]])/g, "\\$1");
   return `[${label}](${agentTabPath(agentId, "files", profileId)}?dossier=${encodeURIComponent(folder)})`;
 }
 
@@ -73,7 +79,7 @@ export const Markdown = memo(function Markdown({ content, agentId, profileId }: 
   const openFolder = (e: MouseEvent<HTMLDivElement>) => {
     const el = (e.target as Element).closest?.("[data-streamdown=link]");
     const label = el?.textContent?.trim() ?? "";
-    const folder = agentId && /^Livrables\//.test(label) ? citedFolder(label) : null;
+    const folder = agentId && /^Livrables\//.test(label) ? (citedFolder(label) ?? noteFolder(label)) : null;
     if (!folder || !agentId) return;
     e.preventDefault();
     e.stopPropagation();

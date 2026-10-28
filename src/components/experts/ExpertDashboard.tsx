@@ -26,12 +26,14 @@ function formatMajDate(dateStr?: string | null): string | null {
   return `Mis à jour : ${dateStr}`;
 }
 
-export function DashboardButton() {
+// `inHeader`: in the expert's own header (Leslie, 28/10, variante B), a short word on a computer, the
+// icon alone on a phone; the panel still opens beside the chat.
+export function DashboardButton({ inHeader = false }: { inHeader?: boolean }) {
   const { profile, panelOpen, setPanelOpen, dialogOpen, setDialogOpen, activeUrl, triggerGeneration, isGenerating } = useDashboard();
   const comp = useComputer();
   if (!profile) return null;
 
-  const label = "Tableau de bord";
+  const label = inHeader ? "Tableau" : "Tableau de bord";
   const isAnyPanelOpen = panelOpen || Boolean(comp?.panelOpen);
 
   const handleClick = () => {
@@ -54,7 +56,8 @@ export function DashboardButton() {
   return (
     <button
       type="button"
-      title={label}
+      title="Tableau de bord"
+      aria-label="Tableau de bord"
       onClick={handleClick}
       // Same size and weight as « Son ordinateur » and « Nouvelle conversation » beside it.
       className={cn(
@@ -63,7 +66,7 @@ export function DashboardButton() {
       )}
     >
       {isGenerating ? <Loader2 className="h-4 w-4 animate-spin text-brand" /> : <BarChart3 className="h-4 w-4" />}
-      <span className={cn("hidden sm:inline", isAnyPanelOpen && "wide:hidden")}>
+      <span className={cn(inHeader ? "max-lg:hidden" : "hidden sm:inline", !inHeader && isAnyPanelOpen && "wide:hidden")}>
         {isGenerating ? "Génération…" : label}
       </span>
     </button>
