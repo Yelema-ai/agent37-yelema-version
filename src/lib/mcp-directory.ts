@@ -7,8 +7,7 @@
 
 /**
  * `oauth`: the member signs in on the vendor's page. `bearer`: a key sent as `Authorization: Bearer`.
- * `header`: a key the vendor wants in a header of its own (`header`); the back office cannot send
- * one yet, so the entry is shown but cannot be connected.
+ * `header`: a key the vendor wants as is in a header of its own (`header`), sent as a `bearer` server with that header.
  */
 export interface McpDirectoryEntry {
   key: string;
@@ -19,12 +18,10 @@ export interface McpDirectoryEntry {
   url: string;
   auth: "oauth" | "bearer" | "header";
   header?: string;
-  /** What the vendor asks besides the key, in its own words (Unipile's DSN). */
-  fields?: { id: string; label: string; placeholder: string }[];
 }
 
 export const MCP_DIRECTORY: McpDirectoryEntry[] = [
-  { key: "unipile", name: "Unipile", domain: "unipile.com", category: "Messagerie", url: "https://developer.unipile.com/mcp?branch=v2.0", auth: "header", header: "X-API-KEY", fields: [{ id: "dsn", label: "DSN", placeholder: "api12.unipile.com:14222" }] },
+  { key: "unipile", name: "Unipile", domain: "unipile.com", category: "Messagerie", url: "https://developer.unipile.com/mcp?branch=v2.0", auth: "header", header: "X-API-KEY" },
   { key: "notion", name: "Notion", domain: "notion.com", category: "Docs", url: "https://mcp.notion.com/mcp", auth: "oauth" },
   { key: "linear", name: "Linear", domain: "linear.app", category: "Projets", url: "https://mcp.linear.app/mcp", auth: "oauth" },
   { key: "stripe", name: "Stripe", domain: "stripe.com", category: "Paiements", url: "https://mcp.stripe.com", auth: "oauth" },

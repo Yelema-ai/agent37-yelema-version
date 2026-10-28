@@ -30,6 +30,7 @@ export function UnipileCard() {
   const [busy, setBusy] = useState<"test" | "save" | "clear" | null>(null);
   const [details, setDetails] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [linking, setLinking] = useState<string | null>(null);
   const { experts: team } = useExpertsContext();
 
   const load = useCallback(async () => {
@@ -74,6 +75,24 @@ export function UnipileCard() {
       toast.success("Messagerie débranchée");
       await load();
     });
+  // The tab opens within the click (no popup blocker), then goes to the link the instance asked Unipile for;
+  // without one, to the dashboard as before. Coming back to this tab reads the accounts once.
+  const reconnect = async (a: UnipileAccount) => {
+    const tab = window.open("", "_blank");
+    if (tab) tab.opener = null;
+    setLinking(a.id);
+    let url = UNIPILE_DASHBOARD;
+    try {
+      url = (await apiFetch<{ url: string }>("/api/unipile/reconnect", { method: "POST", body: JSON.stringify({ accountId: a.id }) })).url;
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLinking(null);
+    }
+    if (tab) tab.location.href = url;
+    else window.location.assign(url);
+    window.addEventListener("focus", () => void load(), { once: true });
+  };
   const toggle = (p: string) => setExperts((list) => (list.includes(p) ? list.filter((x) => x !== p) : [...list, p]));
   const ready = dsn.trim() && apiKey.trim() && experts.length > 0;
 
@@ -129,8 +148,9 @@ export function UnipileCard() {
               {status.accountsError ? (
                 <Button size="sm" onClick={open}>Reconnecter</Button>
               ) : (
-                <Button size="sm" asChild>
-                  <a href={UNIPILE_DASHBOARD} target="_blank" rel="noopener noreferrer">Reconnecter</a>
+                <Button size="sm" disabled={linking !== null} onClick={() => (broken.length === 1 ? void reconnect(broken[0]) : setDetails(true))}>
+                  {linking ? <Loader2 className="animate-spin" /> : null}
+                  Reconnecter
                 </Button>
               )}
             </div>
@@ -167,10 +187,9 @@ export function UnipileCard() {
                       <span className="block text-xs text-ink-3">{accountType(a.type)}</span>
                     </span>
                     {accountBroken(a) ? (
-                      <Button size="sm" asChild>
-                        <a href={UNIPILE_DASHBOARD} target="_blank" rel="noopener noreferrer">
-                          Reconnecter <ExternalLink />
-                        </a>
+                      <Button size="sm" disabled={linking !== null} onClick={() => void reconnect(a)}>
+                        {linking === a.id ? <Loader2 className="animate-spin" /> : null}
+                        Reconnecter <ExternalLink />
                       </Button>
                     ) : (
                       <Check className="size-4 text-ok" aria-label="Fonctionne" />

@@ -50,11 +50,28 @@ const MESSAGES: Record<string, string> = {
   unipile_unreachable: "Unipile ne répond pas à cette adresse. Vérifiez le DSN.",
   unipile_unavailable: "La messagerie n’est pas encore disponible sur votre instance : elle arrive avec sa prochaine mise à jour.",
   instance_error: "Votre instance n’a pas pu traiter la demande. Réessayez dans un instant.",
+  bad_account: "Ce compte de messagerie n’est pas valide.",
+  unipile_not_found: "Unipile ne connaît plus ce compte : reliez-le de nouveau depuis votre tableau de bord Unipile.",
+  unipile_not_configured: "La messagerie n’est pas branchée sur votre instance.",
 };
 
 export const unipileRefusalMessage = (code: string): string | null => MESSAGES[code] ?? null;
 
-/** Where an account that lost its session is linked again: the person's own Unipile dashboard. */
+const ACCOUNT_ID = /^[A-Za-z0-9_-]{2,128}$/;
+/** The account id a reconnection asks for, from a request body; null when it is not one. */
+export function parseAccountId(body: unknown): string | null {
+  const v = body && typeof body === "object" ? (body as Record<string, unknown>).accountId : null;
+  return typeof v === "string" && ACCOUNT_ID.test(v.trim()) ? v.trim() : null;
+}
+
+/** A link Unipile hosts (`account.unipile.com/…`); null for anything else, so nothing else is ever opened. */
+export function hostedLink(v: unknown): string | null {
+  if (typeof v !== "string" || v.length > 2048 || !URL.canParse(v)) return null;
+  const u = new URL(v);
+  return u.protocol === "https:" && !u.username && !u.password && (u.hostname === "unipile.com" || u.hostname.endsWith(".unipile.com")) ? u.href : null;
+}
+
+/** Where an account that lost its session is linked again when no reconnection link can be had: the person's own Unipile dashboard. */
 export const UNIPILE_DASHBOARD = "https://dashboard.unipile.com";
 
 // Unipile's own states for an account that no longer works: its owner must link it again.
