@@ -9,7 +9,7 @@ import { pinnedWorkspaceId } from "@/lib/tenant";
 import { answerRpc } from "@/lib/yele-mcp";
 import {
   createYeleSupervisionBackend,
-  KNOWN_EXPERTS,
+  type DiscoveredExpert,
   type RawFileInfo,
   type RawSessionInfo,
 } from "@/lib/yele-supervision";
@@ -17,6 +17,50 @@ import {
 export const maxDuration = 120;
 const MAX_BODY_BYTES = 32_768;
 const TIMEOUT_MS = 15_000;
+
+// Script sécurisé d'interrogation de la sandbox (Node.js natif, lecture seule, pas d'injection shell)
+// Extrait dynamiquement tous les experts installés dans ~/.hermes/profiles ainsi que leur nom et description SOUL.md.
+const DISCOVERY_SCRIPT = `
+const fs = require('fs');
+const path = require('path');
+const root = path.join(process.env.HOME || '/home/node', '.hermes/profiles');
+const out = [];
+if (fs.existsSync(root)) {
+  for (const d of fs.readdirSync(root)) {
+    if (d.startsWith('.') || d === 'default' || d === 'yele') continue;
+    const p = path.join(root, d, 'SOUL.md');
+    let name = d;
+    let desc = '';
+    if (fs.existsSync(p)) {
+      try {
+        const txt = fs.readFileSync(p, 'utf8');
+        const mName = txt.match(/^name:\\s*["']?(.*?)["']?\\s*$/m);
+        if (mName) name = mName[1].trim();
+        const mDesc = txt.match(/^description:\\s*["']?(.*?)["']?\\s*$/m);
+        if (mDesc) desc = mDesc[1].trim();
+      } catch {}
+    }
+    out.push({ id: d, name, description: desc });
+  }
+}
+console.log(JSON.stringify(out));
+`.trim();
+
+const DISCOVERY_B64 = Buffer.from(DISCOVERY_SCRIPT).toString("base64");
+export const DISCOVER_EXPERTS_COMMAND = `node -e "$(echo '${DISCOVERY_B64}' | base64 -d)"`;
+
+async function discoverInstalledExperts(agentId: string): Promise<DiscoveredExpert[]> {
+  try {
+    const res = await agent37.exec(agentId, DISCOVER_EXPERTS_COMMAND);
+    if (res.exit_code === 0 && res.stdout.trim()) {
+      const list = JSON.parse(res.stdout.trim()) as DiscoveredExpert[];
+      if (Array.isArray(list) && list.length > 0) return list;
+    }
+  } catch (e) {
+    console.warn("[yele-mcp] Échec découverte sandbox des experts:", e);
+  }
+  return [];
+}
 
 function errorJson(status: number, error: string): Response {
   return Response.json({ error }, { status });
@@ -100,12 +144,39 @@ export async function POST(request: Request): Promise<Response> {
   const resolvedAgentId = agentId;
   const resolvedUserId = userId;
 
+  // Cache mémoire par requête pour éviter les appels redondants vers l'instance
+  let cachedExperts: DiscoveredExpert[] | null = null;
+  const getExperts = async (): Promise<DiscoveredExpert[]> => {
+    if (cachedExperts === null) {
+      cachedExperts = await discoverInstalledExperts(resolvedAgentId);
+    }
+    return cachedExperts;
+  };
+
   // Création du backend réel avec les dépendances injectées et protégées par timeout
   const backend = createYeleSupervisionBackend({
+    listInstalledExperts: getExperts,
     listSessions: async (): Promise<RawSessionInfo[]> => {
+      const experts = await getExperts();
+      const expertIds = experts.length > 0 ? experts.map((e) => e.id) : [];
+
+      if (expertIds.length === 0) {
+        try {
+          const { data } = await agent37.listSessions(resolvedAgentId);
+          return data.map((s) => ({
+            id: s.id,
+            profile: (s as { profile?: string | null }).profile ?? null,
+            last_active: s.last_active,
+            started_at: s.started_at,
+          }));
+        } catch {
+          return [];
+        }
+      }
+
       const results: RawSessionInfo[] = [];
       await Promise.all(
-        KNOWN_EXPERTS.map(async (exp) => {
+        expertIds.map(async (exp) => {
           try {
             const { data } = await agent37.listSessions(resolvedAgentId, profileQuery(exp));
             for (const s of data) {

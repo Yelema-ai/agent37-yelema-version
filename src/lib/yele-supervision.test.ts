@@ -8,8 +8,7 @@ import {
   formatStatistiquesAnalytique,
   formatDiagnosticConfiguration,
   createYeleSupervisionBackend,
-  EXPERT_NAMES,
-  KNOWN_EXPERTS,
+  type DiscoveredExpert,
   type RawSessionInfo,
 } from "./yele-supervision.ts";
 
@@ -42,18 +41,34 @@ test("masquerSecrets: hides JWTs and Postgres connection strings", () => {
   assert.match(masked, /\[JWT_MASQUÉ\]/);
 });
 
-test("formatActiviteExperts: separates active and inactive experts", () => {
+test("formatActiviteExperts: dynamiquement avec liste d'experts découverts", () => {
   const now = 1730000000000;
+  const experts: DiscoveredExpert[] = [
+    { id: "fatima", name: "Fatima", description: "Marketing et contenu : campagnes, création de contenu..." },
+    { id: "kouassi", name: "Kouassi", description: "Commercial et ventes : pipeline, prospection..." },
+    { id: "adjoua", name: "Adjoua", description: "Recrutement : sourcing, tri de candidatures..." },
+  ];
   const sessions: RawSessionInfo[] = [
     { id: "s1", profile: "fatima", last_active: now - 3600000 },
     { id: "s2", profile: "kouassi", last_active: now - 7200000 },
   ];
 
-  const out = formatActiviteExperts(sessions, "aujourdhui", now);
-  assert.match(out, /Fatima \(Marketing\)/);
-  assert.match(out, /Kouassi \(Commercial & Ventes\)/);
-  assert.match(out, /Experts inactifs/);
-  assert.match(out, /Salif/);
+  const out = formatActiviteExperts(sessions, "aujourdhui", experts, now);
+  assert.match(out, /Fatima \(Marketing et contenu\)/);
+  assert.match(out, /Kouassi \(Commercial et ventes\)/);
+  assert.match(out, /Experts inactifs \(1\)/);
+  assert.match(out, /Adjoua \(Recrutement\)/);
+});
+
+test("formatActiviteExperts: repli dynamique si experts non fournis (découverte par sessions)", () => {
+  const now = 1730000000000;
+  const sessions: RawSessionInfo[] = [
+    { id: "s1", profile: "djeneba", last_active: now - 1000 },
+  ];
+
+  const out = formatActiviteExperts(sessions, "aujourdhui", undefined, now);
+  assert.match(out, /Djeneba/);
+  assert.match(out, /Experts actifs \(1\)/);
 });
 
 test("formatAuditOutils: lists active and inactive connectors", () => {
@@ -78,19 +93,27 @@ test("formatLivrablesRecents: formats list of files ignoring hidden ones", () =>
   assert.doesNotMatch(out, /_memoire\.md/);
 });
 
-test("formatStatistiquesAnalytique: shows total sessions and top experts", () => {
+test("formatStatistiquesAnalytique: shows total sessions and top experts with dynamic roles", () => {
+  const experts: DiscoveredExpert[] = [
+    { id: "fatima", name: "Fatima", description: "Marketing : campagnes..." },
+    { id: "kouassi", name: "Kouassi", description: "Commercial : ventes..." },
+  ];
   const sessions: RawSessionInfo[] = [
     { id: "1", profile: "fatima" },
     { id: "2", profile: "fatima" },
     { id: "3", profile: "kouassi" },
   ];
-  const out = formatStatistiquesAnalytique(sessions, "synthese");
+  const out = formatStatistiquesAnalytique(sessions, "synthese", experts);
   assert.match(out, /3 session\(s\)/);
   assert.match(out, /\*\*Fatima \(Marketing\)\*\* : 2 tâches \(67%\)/);
+  assert.match(out, /\*\*Kouassi \(Commercial\)\*\* : 1 tâches \(33%\)/);
 });
 
 test("createYeleSupervisionBackend: connects supervision deps to YeleBackend interface", async () => {
   const b = createYeleSupervisionBackend({
+    listInstalledExperts: async () => [
+      { id: "fatima", name: "Fatima", description: "Marketing : création..." },
+    ],
     listSessions: async () => [{ id: "1", profile: "fatima", last_active: Date.now() }],
     fetchFileContent: async (path) => (path.includes("daily") ? "Rapport du jour" : "model: claude-3-5"),
     listConnections: async () => [{ toolkitSlug: "gmail", status: "ACTIVE", isDisabled: false }],

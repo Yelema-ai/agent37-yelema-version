@@ -1,34 +1,20 @@
 import type { YeleBackend } from "@/lib/yele-mcp";
 
-export const KNOWN_EXPERTS = [
-  "adjoua",
-  "alioune",
-  "awa",
-  "djeneba",
-  "fatima",
-  "fatou",
-  "ibrahim",
-  "koffi",
-  "kouassi",
-  "mamadou",
-  "nadia",
-  "salif",
-] as const;
+/** Expert découvert dynamiquement dans la sandbox (~/.hermes/profiles) */
+export interface DiscoveredExpert {
+  id: string;
+  name: string;
+  description: string;
+}
 
-export const EXPERT_NAMES: Record<string, string> = {
-  adjoua: "Adjoua (Recrutement)",
-  alioune: "Alioune (Investissement)",
-  awa: "Awa (Support Client)",
-  djeneba: "Djénéba (Assistanat de Direction)",
-  fatima: "Fatima (Marketing)",
-  fatou: "Fatou (RH & Paie)",
-  ibrahim: "Ibrahim (Juridique)",
-  koffi: "Koffi (Design de Marque)",
-  kouassi: "Kouassi (Commercial & Ventes)",
-  mamadou: "Mamadou (Finance & Compta)",
-  nadia: "Nadia (Data & Données)",
-  salif: "Salif (Opérations)",
-};
+/** Formate le nom et le rôle d'un expert pour l'affichage */
+export function formatExpertDisplayName(exp: DiscoveredExpert | string): string {
+  if (typeof exp === "string") {
+    return exp.charAt(0).toUpperCase() + exp.slice(1);
+  }
+  const role = exp.description ? exp.description.split(/[:;]/)[0].trim() : "";
+  return role ? `${exp.name} (${role})` : exp.name;
+}
 
 /** Format strict de date : AAAA-MM-JJ */
 const STRICT_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -93,25 +79,66 @@ export interface SupervisionDeps {
   fetchFileContent: (path: string) => Promise<string | null>;
   listConnections: () => Promise<RawConnectionInfo[]>;
   listDeliverableFiles: () => Promise<RawFileInfo[]>;
+  listInstalledExperts?: () => Promise<DiscoveredExpert[]>;
 }
 
-export function formatActiviteExperts(sessions: RawSessionInfo[], periode?: string, now = Date.now()): string {
+export function formatActiviteExperts(
+  sessions: RawSessionInfo[],
+  periode?: string,
+  experts?: DiscoveredExpert[],
+  now = Date.now()
+): string {
   const cutoff = getPeriodCutoff(periode, now);
-  const periodeLabel = periode === "7_jours" ? "ces 7 derniers jours" : periode === "30_jours" ? "ces 30 derniers jours" : "aujourd'hui";
+  const periodeLabel =
+    periode === "7_jours" ? "ces 7 derniers jours" : periode === "30_jours" ? "ces 30 derniers jours" : "aujourd'hui";
 
-  const activeByExpert: Record<string, { count: number; lastActive: number }> = {};
-  const inactifs: string[] = [];
+  // Construction de la liste des experts à superviser
+  const expertMap = new Map<string, DiscoveredExpert>();
+  if (experts && experts.length > 0) {
+    for (const exp of experts) {
+      expertMap.set(exp.id.toLowerCase(), exp);
+    }
+  }
 
-  for (const exp of KNOWN_EXPERTS) {
+  // Si des sessions concernent un expert non présent dans le catalogue, l'ajouter dynamiquement
+  for (const s of sessions) {
+    const p = (s.profile || "").toLowerCase();
+    if (p && !expertMap.has(p)) {
+      expertMap.set(p, { id: p, name: p.charAt(0).toUpperCase() + p.slice(1), description: "" });
+    }
+  }
+
+  const allExperts = Array.from(expertMap.values());
+  const activeByExpert: Record<string, { count: number; lastActive: number; expert: DiscoveredExpert }> = {};
+  const inactifs: DiscoveredExpert[] = [];
+
+  for (const exp of allExperts) {
     const matching = sessions.filter((s) => {
       const profile = (s.profile || "").toLowerCase();
-      const time = typeof s.last_active === "number" ? (s.last_active < 1e11 ? s.last_active * 1000 : s.last_active) : typeof s.started_at === "number" ? (s.started_at < 1e11 ? s.started_at * 1000 : s.started_at) : 0;
-      return (profile === exp || s.id.includes(`_${exp}_`)) && time >= cutoff;
+      const time =
+        typeof s.last_active === "number"
+          ? s.last_active < 1e11
+            ? s.last_active * 1000
+            : s.last_active
+          : typeof s.started_at === "number"
+          ? s.started_at < 1e11
+            ? s.started_at * 1000
+            : s.started_at
+          : 0;
+      return (profile === exp.id || s.id.includes(`_${exp.id}_`)) && time >= cutoff;
     });
 
     if (matching.length > 0) {
-      const maxActive = Math.max(...matching.map((s) => (typeof s.last_active === "number" ? (s.last_active < 1e11 ? s.last_active * 1000 : s.last_active) : (s.started_at ?? 0))));
-      activeByExpert[exp] = { count: matching.length, lastActive: maxActive };
+      const maxActive = Math.max(
+        ...matching.map((s) =>
+          typeof s.last_active === "number"
+            ? s.last_active < 1e11
+              ? s.last_active * 1000
+              : s.last_active
+            : s.started_at ?? 0
+        )
+      );
+      activeByExpert[exp.id] = { count: matching.length, lastActive: maxActive, expert: exp };
     } else {
       inactifs.push(exp);
     }
@@ -122,8 +149,8 @@ export function formatActiviteExperts(sessions: RawSessionInfo[], periode?: stri
 
   if (actifs.length > 0) {
     out += `**Experts actifs (${actifs.length}) :**\n`;
-    for (const [exp, stats] of actifs) {
-      const name = EXPERT_NAMES[exp] || exp;
+    for (const [, stats] of actifs) {
+      const name = formatExpertDisplayName(stats.expert);
       out += `- **${name}** : ${stats.count} tâche(s) / session(s), dernière activité le ${formatDateFr(stats.lastActive)}\n`;
     }
   } else {
@@ -132,7 +159,7 @@ export function formatActiviteExperts(sessions: RawSessionInfo[], periode?: stri
 
   if (inactifs.length > 0) {
     out += `\n**Experts inactifs (${inactifs.length}) :**\n`;
-    out += inactifs.map((exp) => EXPERT_NAMES[exp] || exp).join(", ") + ".\n";
+    out += inactifs.map((exp) => formatExpertDisplayName(exp)).join(", ") + ".\n";
   }
 
   return out;
@@ -172,13 +199,17 @@ export function formatLivrablesRecents(files: RawFileInfo[], limite = 10): strin
   let out = `### 📁 Derniers Livrables Produits (${validFiles.length})\n\n`;
   for (const f of validFiles) {
     const dateStr = f.modified ? formatDateFr(f.modified < 1e11 ? f.modified * 1000 : f.modified) : "Date inconnue";
-    const sizeKb = f.size ? `${Math.round(f.size / 1024)} Ko` : "";
-    out += `- 📄 **${f.name}** ${sizeKb ? `(${sizeKb})` : ""} — modifié le ${dateStr}\n`;
+    const sizeKb = f.size ? `(${Math.round(f.size / 1024)} Ko)` : "";
+    out += `- 📄 **${f.name}** ${sizeKb} — modifié le ${dateStr}\n`;
   }
   return out;
 }
 
-export function formatStatistiquesAnalytique(sessions: RawSessionInfo[], vue?: string): string {
+export function formatStatistiquesAnalytique(
+  sessions: RawSessionInfo[],
+  vue?: string,
+  experts?: DiscoveredExpert[]
+): string {
   const total = sessions.length;
   const counts: Record<string, number> = {};
   for (const s of sessions) {
@@ -187,12 +218,20 @@ export function formatStatistiquesAnalytique(sessions: RawSessionInfo[], vue?: s
   }
   const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
 
+  const expertMap = new Map<string, DiscoveredExpert>();
+  if (experts) {
+    for (const exp of experts) {
+      expertMap.set(exp.id.toLowerCase(), exp);
+    }
+  }
+
   let out = `### 📈 Synthèse Analytique de l'Instance\n\n`;
   out += `- **Volume total d'interactions** : ${total} session(s) enregistrée(s)\n`;
   out += `- **Experts les plus sollicités** :\n`;
   for (const [exp, n] of sorted.slice(0, 5)) {
     const pct = total > 0 ? Math.round((n / total) * 100) : 0;
-    const name = EXPERT_NAMES[exp] || exp;
+    const found = expertMap.get(exp);
+    const name = found ? formatExpertDisplayName(found) : exp.charAt(0).toUpperCase() + exp.slice(1);
     out += `  - **${name}** : ${n} tâches (${pct}%)\n`;
   }
   if (vue === "routines") {
@@ -223,8 +262,11 @@ export function createYeleSupervisionBackend(deps: SupervisionDeps): YeleBackend
   return {
     async analyserActivite(periode?: string): Promise<string> {
       try {
-        const sessions = await deps.listSessions();
-        return formatActiviteExperts(sessions, periode);
+        const [sessions, experts] = await Promise.all([
+          deps.listSessions(),
+          deps.listInstalledExperts ? deps.listInstalledExperts() : Promise.resolve([]),
+        ]);
+        return formatActiviteExperts(sessions, periode, experts.length > 0 ? experts : undefined);
       } catch (e) {
         return `Impossible de récupérer les sessions d'activité : ${e instanceof Error ? e.message : String(e)}`;
       }
@@ -285,8 +327,11 @@ export function createYeleSupervisionBackend(deps: SupervisionDeps): YeleBackend
 
     async statistiquesAnalytique(vue?: string): Promise<string> {
       try {
-        const sessions = await deps.listSessions();
-        return formatStatistiquesAnalytique(sessions, vue);
+        const [sessions, experts] = await Promise.all([
+          deps.listSessions(),
+          deps.listInstalledExperts ? deps.listInstalledExperts() : Promise.resolve([]),
+        ]);
+        return formatStatistiquesAnalytique(sessions, vue, experts.length > 0 ? experts : undefined);
       } catch (e) {
         return `Impossible de calculer les statistiques analytiques : ${e instanceof Error ? e.message : String(e)}`;
       }
