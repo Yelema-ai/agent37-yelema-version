@@ -6,7 +6,7 @@ import type { ComposioCall } from "@/lib/composio-usage";
 import { voiceKeyPath, type VoiceKeysOverview } from "@/lib/voice-keys";
 import { isServerId, mcpScopePath, mcpServerPath, type McpOauthQuery, type McpOauthServer, type McpOverview, type McpToolsOverview, type McpToolsReport, type McpServerDraft, type McpWritten } from "@/lib/mcp-servers";
 import type { UnipileAccount, UnipileDraft, UnipileStatus } from "@/lib/unipile";
-import { vaultPath, type VaultDraft, type VaultItem, type VaultList, type VaultOverview, type VaultScope } from "@/lib/vault";
+import { vaultPath, type VaultDraft, type VaultEntry, type VaultItem, type VaultList, type VaultOverview, type VaultRef, type VaultScope } from "@/lib/vault";
 import { scopePath, type LlmModelChoice, type LlmOverview, type LlmWritten, type SettingScope } from "@/lib/llm";
 import { mailPath, type MailDetail, type MailDraft, type MailInbox, type MailRights, type MailRightsPatch, type MailSummary } from "@/lib/mail";
 import { isPublicId, type MemoryList, type MemoryNote, type MemoryPatch, type OrgAssignmentDraft, type OrgChart, type OrgGrantDraft, type OrgMember, type OrgRole } from "@/lib/memory";
@@ -30,6 +30,7 @@ const TIMEOUT_MS = process.env.NODE_ENV === "development" ? 60_000 : 15_000;
 const MAIL_SEND_TIMEOUT_MS = 90_000;
 // Saving a model key waits for the provider to say whether it accepts it.
 const SETTING_WRITE_TIMEOUT_MS = 30_000;
+const VAULT_BATCH_TIMEOUT_MS = 130_000;
 // Le code de connexion attend la réponse de Claude sur l'instance (jusqu'à ~25 s).
 const CLAUDE_LOGIN_TIMEOUT_MS = 60_000;
 const memberQuery = (member: string | null): string => (member ? `?member=${encodeURIComponent(member)}` : "");
@@ -559,6 +560,11 @@ export const backoffice = {
     if (!path) throw new BackofficeError(404, "not_found", "Profil introuvable.");
     return call<{ ok: true; item: VaultItem }>(path, { method: "POST", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS });
   },
+  // Several Experts in one command on the instance (bounded at 120 s by the back office).
+  addVaultItems: (token: string, profiles: string[], draft: VaultDraft) =>
+    call<{ ok: true; items: VaultEntry[] }>("/app/vault/own", { method: "POST", token, body: { ...draft, profiles }, timeoutMs: VAULT_BATCH_TIMEOUT_MS }),
+  removeVaultItems: (token: string, entries: VaultRef[]) =>
+    call<{ ok: true; removed: number }>("/app/vault/own", { method: "DELETE", token, body: { entries }, timeoutMs: VAULT_BATCH_TIMEOUT_MS }),
   removeVaultItem: (token: string, scope: VaultScope, profile: string, handle: string) => {
     const path = vaultPath(scope, profile, handle);
     if (!path) throw new BackofficeError(404, "not_found", "Connexion introuvable.");
