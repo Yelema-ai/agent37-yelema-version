@@ -16,3 +16,5 @@ const outcomes = runOutcomes({
 export const silentRunIds = outcomes.silent;
 /** The routine runs that are no conversation yet: only a run that delivered is one. */
 export const undeliveredRunIds = outcomes.undelivered;
+/** What the routine runs are known to have come to; a run missing is not read yet. */
+export const runOutcomeOf = outcomes.outcomes;

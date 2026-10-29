@@ -213,13 +213,16 @@ export interface RoutineSession {
   message_count?: number | null;
   /** Nothing to report: a line in the bell, no conversation. */
   silent?: boolean;
+  /** Its outcome is not read yet: neither announced nor passed over, asked again next look. */
+  pending?: boolean;
 }
 
 /** Hermes reports seconds or milliseconds depending on the build. */
 export const toMs = (t: number) => (t < 1e12 ? t * 1000 : t);
 
-// A run's conversation is written as it goes: it is over once it holds the answer.
-const finished = (r: RoutineSession) => r.message_count == null || r.message_count >= 2;
+// A run's conversation is written as it goes: it is over once it holds the answer and what it came
+// to is read.
+const finished = (r: RoutineSession) => !r.pending && (r.message_count == null || r.message_count >= 2);
 
 // The routine runs that finished since `since` (ms). With no `since` yet (first look at this
 // expert), nothing is new: the mark is set to now's latest so the history does not flood in.
