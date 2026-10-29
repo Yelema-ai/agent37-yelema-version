@@ -54,3 +54,9 @@ test("routinePlainText keeps the plain words of the task, never a command, a pat
 test("routinePlainText is null when only technical lines are left", () => {
   assert.equal(routinePlainText(run("Lance `python3 /home/node/x.py`.\nRéponds [SILENT].")), null);
 });
+
+test("a run titled with Hermes's own preamble is a routine run, named plainly", () => {
+  const preamble = "[IMPORTANT: You are running as a scheduled cron job. DELIVERY: your final response is sent";
+  assert.equal(routineOfSession({ id: "20261029_191500_ab", title: preamble, preview: "---\nname: memoire\n" }), "Routine");
+  assert.equal(routineOfSession({ id: "s_1", title: "Relance des devis", preview: "Relance" }), null);
+});

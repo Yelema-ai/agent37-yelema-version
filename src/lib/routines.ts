@@ -135,10 +135,11 @@ export interface SessionHint {
 // The routine a conversation is a run of, by name, or null for a conversation a person started.
 export function routineOfSession({ id, title, preview }: SessionHint): string | null {
   const t = (title ?? "").trim();
-  if (!id.startsWith("cron_") && !isRoutineRun(preview ?? "") && !(RUN_TITLE_DATE.test(t) && (preview ?? "").startsWith("[IMPORTANT:"))) {
+  // Hermes may also title a run with its own preamble, the preview then starting with a skill it loaded.
+  if (!id.startsWith("cron_") && !isRoutineRun(preview ?? "") && !t.startsWith("[IMPORTANT: You are running as a scheduled cron job") && !(RUN_TITLE_DATE.test(t) && (preview ?? "").startsWith("[IMPORTANT:"))) {
     return null;
   }
-  return t.replace(RUN_TITLE_DATE, "").trim() || "Routine";
+  return (t.startsWith("[IMPORTANT:") ? "" : t.replace(RUN_TITLE_DATE, "").trim()) || "Routine";
 }
 
 // Whether a conversation is one of THIS routine's runs: its id, else its title (name cut as Hermes does).
