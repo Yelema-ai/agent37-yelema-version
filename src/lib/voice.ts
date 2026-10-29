@@ -123,9 +123,15 @@ export function voiceFacets(voices: VoiceOption[], f: VoiceFilter): { genders: (
   const countries = new Set(filterVoices(voices, { ...f, country: null }).map((v) => v.country));
   return {
     genders: (["female", "male"] as const).filter((g) => genders.has(g)),
-    countries: [...countries].sort((a, b) => countryName(a).localeCompare(countryName(b), "fr")),
+    countries: [...countries].sort(byCountry),
   };
 }
+
+// France first, then the other countries in French order (Leslie, 29/10).
+const byCountry = (a: string, b: string): number => Number(a.toUpperCase() !== "FR") - Number(b.toUpperCase() !== "FR") || countryName(a).localeCompare(countryName(b), "fr");
+
+/** The voices by country, France first, then by first name. */
+export const sortVoices = (voices: VoiceOption[]): VoiceOption[] => [...voices].sort((a, b) => byCountry(a.country, b.country) || a.label.localeCompare(b.label, "fr"));
 
 const REGIONS = new Intl.DisplayNames(["fr"], { type: "region" });
 export const countryName = (code: string): string => REGIONS.of(code) ?? code;
