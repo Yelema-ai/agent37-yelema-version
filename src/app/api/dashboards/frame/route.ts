@@ -3,6 +3,10 @@ import { requireAgentAccess } from "@/lib/auth";
 import { resolveDashboardAccess } from "@/lib/dashboard-access";
 import { fetchCachedDashboardState, fetchCachedFrameHtml } from "@/lib/dashboard-cache";
 import { getDashboardMeta, isTrustedDashboardUrl } from "@/lib/dashboards";
+import { instanceFetch } from "@/lib/agent37";
+import { assertInDrive } from "@/lib/drive";
+import { expertDriveFolders } from "@/lib/expert-folders";
+import { withTimeout } from "@/lib/fetch-timeout";
 
 const CSP = [
   "sandbox allow-scripts allow-popups;",
@@ -16,7 +20,9 @@ const CSP = [
 ].join(" ");
 
 // The owner's own preview (agentId + profile, behind their session), or a shared reader's (`s`).
-async function targetOf(request: NextRequest): Promise<{ url: string } | { status: number; error: string }> {
+// Without a published link, the owner's preview is the page the expert left in its drive (`path`):
+// with no host plugged in, the pack sends its dashboard as an HTML file (Leslie, 29/10).
+async function targetOf(request: NextRequest): Promise<{ url: string } | { html: string } | { status: number; error: string }> {
   const token = request.nextUrl.searchParams.get("s");
   if (token) {
     const resolved = await resolveDashboardAccess(token);
@@ -30,15 +36,24 @@ async function targetOf(request: NextRequest): Promise<{ url: string } | { statu
   } catch {
     return { status: 404, error: "Tableau de bord introuvable." };
   }
-  const state = await fetchCachedDashboardState(agentId, profile);
-  return state && isTrustedDashboardUrl(state.lien) ? { url: state.lien } : { status: 404, error: "Tableau de bord introuvable." };
+  const state = await fetchCachedDashboardState(agentId, profile, await expertDriveFolders(profile));
+  if (state && isTrustedDashboardUrl(state.lien)) return { url: state.lien };
+  const raw = request.nextUrl.searchParams.get("path");
+  if (!raw || !raw.toLowerCase().endsWith(".html")) return { status: 404, error: "Tableau de bord introuvable." };
+  try {
+    const res = await instanceFetch(agentId, `/v1/files/content?path=${encodeURIComponent(assertInDrive(raw))}`, withTimeout(undefined, 20_000));
+    if (!res.ok) return { status: 404, error: "Tableau de bord introuvable." };
+    return { html: await res.text() };
+  } catch {
+    return { status: 404, error: "Tableau de bord introuvable." };
+  }
 }
 
 export async function GET(request: NextRequest) {
   try {
     const target = await targetOf(request);
-    if (!("url" in target)) return new NextResponse(target.error, { status: target.status });
-    const html = await fetchCachedFrameHtml(target.url);
+    if ("status" in target) return new NextResponse(target.error, { status: target.status });
+    const html = "html" in target ? target.html : await fetchCachedFrameHtml(target.url);
     return new NextResponse(html, {
       status: 200,
       headers: {

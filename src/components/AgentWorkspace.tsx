@@ -224,7 +224,9 @@ export function AgentWorkspace({
           <div className="shrink-0 border-b border-line bg-surface">
             <div className="flex flex-wrap items-center lg:h-16 lg:flex-nowrap lg:gap-5 lg:px-6">
             {expert && (
-              <div className="order-1 flex min-w-0 flex-1 items-center gap-2.5 px-4 pb-1 pt-2.5 lg:flex-none lg:p-0">
+              // On a computer the tabs start past the conversations' line, level with the chat's own bar
+              // (Leslie, 29/10): 288px column + the bar's 28px padding, less the header's 24px padding and 20px gap.
+              <div className="order-1 flex min-w-0 flex-1 items-center gap-2.5 px-4 pb-1 pt-2.5 lg:w-[272px] lg:flex-none lg:p-0">
                 <span className="relative shrink-0">
                   <ExpertAvatar expert={expert} size="sm" className="lg:hidden" />
                   <ExpertAvatar expert={expert} size="md" className="max-lg:hidden" />
