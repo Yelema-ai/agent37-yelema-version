@@ -10,6 +10,7 @@ import { HALO_COLOR, haloOf, tint } from "@/lib/call-turns";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { chosenVoice, type VoiceOption } from "@/lib/voice";
 import { useVoiceExpert } from "./useVoiceExpert";
+import { useConnectionTone } from "./useConnectionTone";
 import { loadVoicePrefs } from "@/lib/voice-prefs";
 import { cn } from "@/lib/utils";
 import { CallView, inCallPhase } from "./CallDialog";
@@ -79,6 +80,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const voiceExpert = useVoiceExpert();
   const inCall = inCallPhase(live.phase);
   useRingback(view !== null && live.phase === "connecting");
+  useConnectionTone(live.phase, inCall);
 
   const dial = useCallback(
     async (who: Callee) => {
