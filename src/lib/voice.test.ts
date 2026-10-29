@@ -80,7 +80,7 @@ test("gender × country: each row narrows the other; neutral voices only under a
   assert.deepEqual(keys({ gender: "female", country: "FR" }), ["claire"]);
   assert.deepEqual(keys({ gender: "male", country: null }), ["nicolas", "mamadou"]);
   assert.deepEqual(voiceFacets(voices, { gender: null, country: null }), { genders: ["female", "male"], countries: ["FR", "CI", "SN"] });
-  assert.deepEqual(voiceFacets(voices, { gender: "female", country: null }).countries, ["CI", "FR"]);
+  assert.deepEqual(voiceFacets(voices, { gender: "female", country: null }).countries, ["FR", "CI"]);
   assert.deepEqual(voiceFacets(voices, { gender: null, country: "SN" }).genders, ["male"]);
   assert.equal(countryName("CI"), "Côte d’Ivoire");
   assert.equal(countryFlag("fr"), "🇫🇷");
