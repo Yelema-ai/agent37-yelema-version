@@ -142,6 +142,17 @@ export function routineOfSession({ id, title, preview }: SessionHint): string | 
   return (t.startsWith("[IMPORTANT:") ? "" : t.replace(RUN_TITLE_DATE, "").trim()) || "Routine";
 }
 
+// A memory routine works for the expert alone (« Routine de mémoire, silencieuse »): its runs are never
+// a conversation nor a notification, whatever they answer (Leslie, 29/10).
+const MEMORY_NAME = /^m[ée]moire\b/i;
+const MEMORY_TASK = /routine de m[ée]moire/i;
+
+export function isMemoryRun(session: SessionHint): boolean {
+  const routine = routineOfSession(session);
+  if (routine === null) return false;
+  return MEMORY_NAME.test(routine) || MEMORY_TASK.test(session.preview ?? "") || MEMORY_TASK.test(session.title ?? "");
+}
+
 // Whether a conversation is one of THIS routine's runs: its id, else its title (name cut as Hermes does).
 export function isRunOf(session: SessionHint, routine: { id: string; hermesName: string }): boolean {
   if (session.id.startsWith(`cron_${routine.id}_`)) return true;
