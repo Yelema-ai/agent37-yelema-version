@@ -4,7 +4,7 @@ import { runOutcomes } from "@/lib/run-outcomes";
 
 // A routine run with nothing to report is a notification, not a conversation. The gateway knows each
 // run's outcome; direct to Agent37, a few runs are read per request (lib/run-outcomes).
-export const silentRunIds = runOutcomes({
+const outcomes = runOutcomes({
   batch: (agentId, profileQuery, ids) => agent37.routineOutcomes(agentId, ids, profileQuery),
   one: async (agentId, sessionId, profileQuery) => {
     const { history, active_response_id } = await agent37.getSession(agentId, sessionId, profileQuery);
@@ -12,3 +12,7 @@ export const silentRunIds = runOutcomes({
     return runOutcome(history.findLast((m) => m.role === "assistant")?.content ?? null);
   },
 });
+
+export const silentRunIds = outcomes.silent;
+/** The routine runs that are no conversation yet: only a run that delivered is one. */
+export const undeliveredRunIds = outcomes.undelivered;
