@@ -355,6 +355,7 @@ export function AgentWorkspace({
               <div className="mx-auto w-full max-w-4xl p-6 md:px-10 md:py-8">
                 <ExpertRoutines
                   agentId={agentId}
+                  active={currentTab === "routines"}
                   expert={{
                     profileId,
                     name: expertName,
