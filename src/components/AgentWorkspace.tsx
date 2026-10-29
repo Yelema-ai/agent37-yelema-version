@@ -224,7 +224,9 @@ export function AgentWorkspace({
           <div className="shrink-0 border-b border-line bg-surface">
             <div className="flex flex-wrap items-center lg:h-16 lg:flex-nowrap lg:gap-5 lg:px-6">
             {expert && (
-              <div className="order-1 flex min-w-0 flex-1 items-center gap-2.5 px-4 pb-1 pt-2.5 lg:flex-none lg:p-0">
+              // On a computer the tabs start past the conversations' line, level with the chat's own bar
+              // (Leslie, 29/10): 288px column + the bar's 28px padding, less the header's 24px padding and 20px gap.
+              <div className="order-1 flex min-w-0 flex-1 items-center gap-2.5 px-4 pb-1 pt-2.5 lg:w-[272px] lg:flex-none lg:p-0">
                 <span className="relative shrink-0">
                   <ExpertAvatar expert={expert} size="sm" className="lg:hidden" />
                   <ExpertAvatar expert={expert} size="md" className="max-lg:hidden" />
@@ -264,7 +266,7 @@ export function AgentWorkspace({
                 </span>
               </div>
             )}
-            <nav ref={pillsRef} className="order-3 flex w-full items-center gap-0.5 overflow-x-auto px-2.5 py-2 max-[389px]:[mask-image:linear-gradient(to_right,black_82%,transparent)] sm:gap-1 sm:px-4 [scrollbar-width:none] lg:order-2 lg:h-full lg:w-auto lg:min-w-0 lg:flex-1 lg:gap-5 lg:p-0 [&::-webkit-scrollbar]:hidden">
+            <nav ref={pillsRef} className="order-3 flex w-full items-center gap-0.5 overflow-x-auto px-2.5 py-2 max-[389px]:[mask-image:linear-gradient(to_right,black_82%,transparent)] sm:gap-1 sm:px-4 [scrollbar-width:none] lg:order-2 lg:h-full lg:w-auto lg:min-w-0 lg:flex-1 lg:gap-3 lg:p-0 min-[1440px]:gap-5 [&::-webkit-scrollbar]:hidden">
               {tabs.map((t) => {
                 const on = currentTab === t.id || (t.id === "chat" && isChat);
                 return (
@@ -353,6 +355,7 @@ export function AgentWorkspace({
               <div className="mx-auto w-full max-w-4xl p-6 md:px-10 md:py-8">
                 <ExpertRoutines
                   agentId={agentId}
+                  active={currentTab === "routines"}
                   expert={{
                     profileId,
                     name: expertName,
@@ -382,6 +385,7 @@ export function AgentWorkspace({
       {canEdit && expert?.catalogueKey && (
         <ExpertEditModal
           expertKey={expert.catalogueKey}
+          photoUrl={expert.photoUrl}
           open={editOpen}
           onOpenChange={setEditOpen}
           onVoice={callee && voiceOn ? () => setVoiceOpen(true) : undefined}

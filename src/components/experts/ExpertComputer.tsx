@@ -61,7 +61,7 @@ export function ComputerButton({ inHeader = false }: { inHeader?: boolean }) {
       <Monitor className="h-4 w-4" />
       {/* Beside the open panel the chat is narrow, and the highlighted icon says enough. */}
       {inHeader ? (
-        <span className="max-lg:hidden">Ordinateur</span>
+        <span className="max-[1439px]:hidden">Ordinateur</span>
       ) : (
         <span className={cn("hidden sm:inline", (panelOpen || sidePanel) && "wide:hidden")}>Son ordinateur</span>
       )}
