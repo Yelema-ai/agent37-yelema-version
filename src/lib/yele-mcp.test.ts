@@ -11,6 +11,9 @@ const mockBackend = (over: Partial<YeleBackend> = {}): YeleBackend => ({
   consulterCanauxTelegram: async (e) => `Telegram (${e ?? "tous"}): Bot @yelema_bot, Forum Yelema - Icone.`,
   analyserConsommationTokens: async (e) => `Tokens (${e ?? "tous"}): 34M tokens, Djénéba top consommateur.`,
   consulterAlertesIncidents: async (e) => `Alertes (${e ?? "tous"}): 0 incident critique, crons 100% sains.`,
+  consulterAppelsEtVoix: async (e) => `Voix (${e ?? "tous"}): 12 briefs d'appel prêts.`,
+  rechercherDansLaMemoire: async (q, e) => `Recherche '${q}' (${e ?? "tous"}): 3 correspondances.`,
+  consulterSkillsExperts: async (e) => `Skills (${e ?? "tous"}): 8 modules métiers.`,
   diagnostiquerConfiguration: async () => "Configuration saine: Telegram OK, mémoire OK, secrets masqués.",
   ...over,
 });
@@ -26,7 +29,7 @@ test("yele-mcp: handshake initialize and ping", async () => {
   assert.deepEqual(ping?.result, {});
 });
 
-test("yele-mcp: lists the 9 super-power tools", async () => {
+test("yele-mcp: lists the 12 super-power tools", async () => {
   const list = await answerRpc(rpc("tools/list"), mockBackend());
   const names = (list?.result as { tools: { name: string }[] }).tools.map((t) => t.name);
   assert.deepEqual(names, [
@@ -38,6 +41,9 @@ test("yele-mcp: lists the 9 super-power tools", async () => {
     "consulter_canaux_et_telegram",
     "analyser_consommation_tokens_et_couts",
     "consulter_alertes_et_incidents",
+    "consulter_appels_et_voix",
+    "rechercher_dans_la_memoire",
+    "consulter_skills_experts",
     "diagnostiquer_configuration",
   ]);
 });
@@ -69,6 +75,16 @@ test("yele-mcp: tool calls execute backend methods correctly", async () => {
 
   const al = textOf(await answerRpc(rpc("tools/call", { name: "consulter_alertes_et_incidents", arguments: {} }), b));
   assert.match(al.content[0].text, /Alertes \(tous\)/);
+
+
+  const vx = textOf(await answerRpc(rpc("tools/call", { name: "consulter_appels_et_voix", arguments: { expert: "djeneba" } }), b));
+  assert.match(vx.content[0].text, /Voix \(djeneba\)/);
+
+  const mem = textOf(await answerRpc(rpc("tools/call", { name: "rechercher_dans_la_memoire", arguments: { requete: "réunion" } }), b));
+  assert.match(mem.content[0].text, /Recherche 'réunion'/);
+
+  const sk = textOf(await answerRpc(rpc("tools/call", { name: "consulter_skills_experts", arguments: { expert: "djeneba" } }), b));
+  assert.match(sk.content[0].text, /Skills \(djeneba\)/);
 
   const diag = textOf(await answerRpc(rpc("tools/call", { name: "diagnostiquer_configuration", arguments: {} }), b));
   assert.match(diag.content[0].text, /Configuration saine/);

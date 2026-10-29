@@ -119,6 +119,53 @@ export const YELE_TOOLS = [
     },
   },
   {
+    name: "consulter_appels_et_voix",
+    description:
+      "Consulte la configuration du canal vocal, le statut des appels et les derniers briefs d'avant-appel préparés automatiquement pour les experts (contexte récent, dernières tâches et historique).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        expert: {
+          type: "string",
+          description: "Optionnel : nom ou identifiant de l'expert pour son brief d'appel, ou laisser vide pour toute l'équipe.",
+        },
+      },
+    },
+  },
+  {
+    name: "rechercher_dans_la_memoire",
+    description:
+      "Recherche un terme, un sujet ou une information clé dans les mémoires durables d'entreprise et les historiques de tous les experts (ou d'un expert précis). Idéal pour retrouver des décisions, des consignes ou des faits sans chercher date par date.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        requete: {
+          type: "string",
+          description: "Le mot-clé ou la phrase à rechercher (ex: 'réunion', 'budget', 'client', 'partenariat').",
+        },
+        expert: {
+          type: "string",
+          description: "Optionnel : limiter la recherche à un expert précis.",
+        },
+      },
+      required: ["requete"],
+    },
+  },
+  {
+    name: "consulter_skills_experts",
+    description:
+      "Consulte le référentiel des compétences métiers (skills), méthodologies et modes opératoires déclarés pour chaque expert (ou pour un expert précis).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        expert: {
+          type: "string",
+          description: "Optionnel : nom ou identifiant de l'expert pour détailler ses compétences métiers.",
+        },
+      },
+    },
+  },
+  {
     name: "diagnostiquer_configuration",
     description:
       "Diagnostique la configuration générale de l'instance Hermes en toute sécurité (clés d'API et secrets automatiquement masqués). Vérifie les passerelles actives, les modèles configurés et la mémoire.",
@@ -139,6 +186,9 @@ export interface YeleBackend {
   consulterCanauxTelegram(expert?: string): Promise<string>;
   analyserConsommationTokens(expert?: string): Promise<string>;
   consulterAlertesIncidents(expert?: string): Promise<string>;
+  consulterAppelsEtVoix(expert?: string): Promise<string>;
+  rechercherDansLaMemoire(requete: string, expert?: string): Promise<string>;
+  consulterSkillsExperts(expert?: string): Promise<string>;
 }
 
 type Rpc = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Record<string, unknown> };
@@ -182,6 +232,19 @@ async function callTool(backend: YeleBackend, name: unknown, args: Record<string
     case "consulter_alertes_et_incidents": {
       const e = typeof args.expert === "string" ? args.expert : undefined;
       return text(await backend.consulterAlertesIncidents(e));
+    }
+    case "consulter_appels_et_voix": {
+      const e = typeof args.expert === "string" ? args.expert : undefined;
+      return text(await backend.consulterAppelsEtVoix(e));
+    }
+    case "rechercher_dans_la_memoire": {
+      const q = typeof args.requete === "string" ? args.requete : "";
+      const e = typeof args.expert === "string" ? args.expert : undefined;
+      return text(await backend.rechercherDansLaMemoire(q, e));
+    }
+    case "consulter_skills_experts": {
+      const e = typeof args.expert === "string" ? args.expert : undefined;
+      return text(await backend.consulterSkillsExperts(e));
     }
     case "diagnostiquer_configuration": {
       return text(await backend.diagnostiquerConfiguration());

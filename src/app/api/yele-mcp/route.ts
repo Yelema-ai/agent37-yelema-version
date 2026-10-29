@@ -16,6 +16,9 @@ import {
   type MailConfig,
   type ExpertUsageData,
   type IncidentAlertData,
+  type VoiceBriefInfo,
+  type MemorySearchResult,
+  type ExpertSkillInfo,
 } from "@/lib/yele-supervision";
 
 export const maxDuration = 120;
@@ -127,10 +130,48 @@ if (fs.existsSync(hermesDir)) {
   }
 }
 
+
+const voiceBriefs = [];
+const voixDir = path.join(yelemaDir, 'voix');
+if (fs.existsSync(voixDir)) {
+  for (const ent of fs.readdirSync(voixDir)) {
+    if (ent.startsWith('brief-') && ent.endsWith('.json')) {
+      const expId = ent.replace('brief-', '').replace('.json', '');
+      try {
+        const b = JSON.parse(fs.readFileSync(path.join(voixDir, ent), 'utf8'));
+        voiceBriefs.push({ expId, at: b.at, text: b.text || '' });
+      } catch {}
+    }
+  }
+}
+
+const skills = [];
+if (fs.existsSync(hermesDir)) {
+  for (const exp of fs.readdirSync(hermesDir)) {
+    if (exp.startsWith('.') || exp === 'default' || exp === 'yele') continue;
+    const sDir = path.join(hermesDir, exp, 'skills');
+    let specific = [];
+    let shared = [];
+    if (fs.existsSync(sDir)) {
+      try {
+        const entries = fs.readdirSync(sDir, { withFileTypes: true }).filter(e => !e.name.startsWith('.'));
+        const expFolder = entries.find(e => e.isDirectory() && e.name.toLowerCase() === exp);
+        if (expFolder) {
+          specific = fs.readdirSync(path.join(sDir, expFolder.name)).filter(f => !f.startsWith('.'));
+        }
+        shared = entries.filter(e => e.isDirectory() && e.name.toLowerCase() !== exp).map(e => e.name);
+      } catch {}
+    }
+    skills.push({ expId: exp, specific, shared });
+  }
+}
+
 console.log(JSON.stringify({
   telegram,
   mail,
   usage,
+  voiceBriefs,
+  skills,
   alerts: {
     incidents,
     avertissements,
@@ -148,6 +189,8 @@ interface SandboxDiagPayload {
   mail: MailConfig | null;
   usage: Record<string, ExpertUsageData>;
   alerts: IncidentAlertData;
+  voiceBriefs: VoiceBriefInfo[];
+  skills: ExpertSkillInfo[];
 }
 
 async function fetchSandboxDiagnostics(agentId: string): Promise<SandboxDiagPayload | null> {
@@ -160,6 +203,56 @@ async function fetchSandboxDiagnostics(agentId: string): Promise<SandboxDiagPayl
     console.warn("[yele-mcp] Échec diagnostics sandbox:", e);
   }
   return null;
+}
+
+
+async function searchMemoriesInSandbox(
+  agentId: string,
+  query: string,
+  targetExpert?: string
+): Promise<MemorySearchResult[]> {
+  try {
+    const qB64 = Buffer.from(query).toString("base64");
+    const expB64 = targetExpert ? Buffer.from(targetExpert).toString("base64") : "";
+    const script = `
+const fs = require('fs');
+const path = require('path');
+const q = Buffer.from('${qB64}', 'base64').toString('utf8').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+const target = '${expB64}' ? Buffer.from('${expB64}', 'base64').toString('utf8').trim().toLowerCase() : null;
+const root = '/home/node/.hermes/profiles';
+const results = [];
+if (fs.existsSync(root)) {
+  const dirs = target ? [target] : fs.readdirSync(root);
+  for (const exp of dirs) {
+    if (exp.startsWith('.') || exp === 'default' || exp === 'yele') continue;
+    const f = path.join(root, exp, 'memories', 'MEMORY.md');
+    if (fs.existsSync(f)) {
+      try {
+        const txt = fs.readFileSync(f, 'utf8');
+        const paras = txt.split(/\\n\\s*\\n/);
+        const matches = [];
+        for (const p of paras) {
+          if (p.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').includes(q)) {
+            matches.push(p.trim());
+            if (matches.length >= 3) break;
+          }
+        }
+        if (matches.length > 0) results.push({ expId: exp, matches });
+      } catch {}
+    }
+  }
+}
+console.log(JSON.stringify(results));
+    `.trim();
+    const cmd = `node -e "$(echo '${Buffer.from(script).toString("base64")}' | base64 -d)"`;
+    const res = await agent37.exec(agentId, cmd);
+    if (res.exit_code === 0 && res.stdout.trim()) {
+      return JSON.parse(res.stdout.trim()) as MemorySearchResult[];
+    }
+  } catch (e) {
+    console.warn("[yele-mcp] Échec recherche mémoire sandbox:", e);
+  }
+  return [];
 }
 
 function errorJson(status: number, error: string): Response {
@@ -268,6 +361,9 @@ export async function POST(request: Request): Promise<Response> {
     fetchMailConfig: async () => (await getDiag())?.mail ?? null,
     fetchUsageStats: async () => (await getDiag())?.usage ?? null,
     fetchIncidentAlerts: async () => (await getDiag())?.alerts ?? null,
+    fetchVoiceBriefs: async () => (await getDiag())?.voiceBriefs ?? null,
+    searchMemories: async (q: string, exp?: string) => searchMemoriesInSandbox(resolvedAgentId, q, exp),
+    fetchSkillsCatalog: async () => (await getDiag())?.skills ?? null,
     listSessions: async (): Promise<RawSessionInfo[]> => {
       const experts = await getExperts();
       const expertIds = experts.length > 0 ? experts.map((e) => e.id) : [];

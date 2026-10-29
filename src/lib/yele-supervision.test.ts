@@ -10,6 +10,9 @@ import {
   formatCanauxEtTelegram,
   formatConsommationTokens,
   formatAlertesEtIncidents,
+  formatAppelsEtVoix,
+  formatRechercheMemoire,
+  formatSkillsExperts,
   createYeleSupervisionBackend,
   type DiscoveredExpert,
   type RawSessionInfo,
@@ -238,4 +241,68 @@ test("formatAlertesEtIncidents: rapporte 0 incident en état sain et liste les a
   assert.match(out, /TOUS LES SYSTÈMES SONT OPÉRATIONNELS/);
   assert.match(out, /0 incident détecté/);
   assert.match(out, /Transcription vocale/);
+});
+
+test("formatAppelsEtVoix: affiche les briefs d'avant-appel et statut vocal", () => {
+  const briefs = [
+    { expId: "djeneba", at: "2026-10-29T08:54:00Z", text: "Relevé des 5 dernières sessions de Djénéba." },
+    { expId: "adjoua", at: "2026-10-29T08:54:00Z", text: "Relevé des sessions d'Adjoua." },
+  ];
+  const experts = [
+    { id: "djeneba", name: "Djénéba", description: "Chief of staff" },
+    { id: "adjoua", name: "Adjoua", description: "Recrutement" },
+  ];
+
+  // Test global
+  const globalOut = formatAppelsEtVoix(briefs, experts);
+  assert.match(globalOut, /Supervision des Appels Vocaux/);
+  assert.match(globalOut, /Djénéba/);
+  assert.match(globalOut, /Adjoua/);
+
+  // Test ciblé expert
+  const singleOut = formatAppelsEtVoix(briefs, experts, "djeneba");
+  assert.match(singleOut, /Brief d'Appel : Djénéba/);
+  assert.match(singleOut, /Relevé des 5 dernières sessions/);
+});
+
+test("formatRechercheMemoire: extrait les passages pertinents avec auteur", () => {
+  const results = [
+    { expId: "djeneba", matches: ["Préparer les réunions et ordres du jour.", "Suivi des comptes rendus."] },
+  ];
+  const experts = [
+    { id: "djeneba", name: "Djénéba", description: "Chief of staff" },
+  ];
+
+  const out = formatRechercheMemoire("réunion", results, experts);
+  assert.match(out, /Résultats de Recherche dans la Mémoire : "réunion"/);
+  assert.match(out, /Djénéba/);
+  assert.match(out, /Préparer les réunions/);
+
+  // Test sans résultat
+  const emptyOut = formatRechercheMemoire("inconnu", [], experts);
+  assert.match(emptyOut, /Aucune mention trouvée/);
+});
+
+test("formatSkillsExperts: affiche les modes opératoires spécifiques et transverses", () => {
+  const skills = [
+    {
+      expId: "djeneba",
+      specific: ["1-a-chaque-demande", "2-mon-metier", "4-livrables"],
+      shared: ["research", "productivity", "email"],
+    },
+  ];
+  const experts = [
+    { id: "djeneba", name: "Djénéba", description: "Chief of staff" },
+  ];
+
+  // Test global
+  const globalOut = formatSkillsExperts(skills, experts);
+  assert.match(globalOut, /Cartographie des Compétences Métiers/);
+  assert.match(globalOut, /\*\*3\*\* fiches/);
+
+  // Test ciblé expert
+  const singleOut = formatSkillsExperts(skills, experts, "djeneba");
+  assert.match(singleOut, /Compétences & Méthodologies Métiers : Djénéba/);
+  assert.match(singleOut, /1-a-chaque-demande/);
+  assert.match(singleOut, /research/);
 });

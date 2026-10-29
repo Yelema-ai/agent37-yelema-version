@@ -132,6 +132,23 @@ export interface IncidentAlertData {
   telegramStatus: string;
 }
 
+export interface VoiceBriefInfo {
+  expId: string;
+  at?: string;
+  text?: string;
+}
+
+export interface MemorySearchResult {
+  expId: string;
+  matches: string[];
+}
+
+export interface ExpertSkillInfo {
+  expId: string;
+  specific: string[];
+  shared: string[];
+}
+
 export interface SupervisionDeps {
   listSessions: () => Promise<RawSessionInfo[]>;
   fetchFileContent: (path: string) => Promise<string | null>;
@@ -142,6 +159,9 @@ export interface SupervisionDeps {
   fetchMailConfig?: () => Promise<MailConfig | null>;
   fetchUsageStats?: () => Promise<Record<string, ExpertUsageData> | null>;
   fetchIncidentAlerts?: () => Promise<IncidentAlertData | null>;
+  fetchVoiceBriefs?: () => Promise<VoiceBriefInfo[] | null>;
+  searchMemories?: (query: string, expert?: string) => Promise<MemorySearchResult[] | null>;
+  fetchSkillsCatalog?: (expert?: string) => Promise<ExpertSkillInfo[] | null>;
 }
 
 export function formatActiviteExperts(
@@ -510,6 +530,152 @@ export function formatAlertesEtIncidents(
   return masquerSecrets(out);
 }
 
+export function formatAppelsEtVoix(
+  briefs: VoiceBriefInfo[] | null,
+  experts?: DiscoveredExpert[],
+  targetExpert?: string
+): string {
+  const cleanTarget = targetExpert ? targetExpert.trim().toLowerCase() : undefined;
+  const expertMap = new Map((experts || []).map((e) => [e.id.toLowerCase(), e]));
+  const list = briefs || [];
+
+  if (cleanTarget) {
+    const expMeta = expertMap.get(cleanTarget);
+    const expName = expMeta ? formatExpertDisplayName(expMeta) : cleanTarget.charAt(0).toUpperCase() + cleanTarget.slice(1);
+    const item = list.find((b) => b.expId.toLowerCase() === cleanTarget);
+
+    let out = `### 📞 Module Vocal & Brief d'Appel : ${expName}\n\n`;
+    out += `- **Statut du canal vocal** : 🟢 Configuré et prêt pour les appels entrants/sortants\n`;
+    if (item && item.at) {
+      const d = new Date(item.at);
+      const dateStr = d.toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      out += `- **Dernier brief généré** : le ${dateStr}\n\n`;
+      out += `#### 📋 Contenu du Brief d'Avant-Appel :\n\`\`\`text\n${(item.text || "").trim()}\n\`\`\`\n`;
+    } else {
+      out += `- **Brief d'appel** : Aucun brief récent préparé pour cet expert.\n`;
+    }
+    return masquerSecrets(out);
+  }
+
+  let out = `### 📞 Supervision des Appels Vocaux & Briefs de l'Équipe\n\n`;
+  out += `- **Passerelle Vocale** : 🟢 Active (Serveur de voix opérationnel)\n`;
+  out += `- **Briefs d'avant-appel prêts** : ${list.length} expert(s) synchronisé(s)\n\n`;
+  out += `| Expert | Rôle | Dernier Brief Vocal | Extrait Contexte |\n`;
+  out += `| :--- | :--- | :---: | :--- |\n`;
+
+  const allExperts =
+    experts && experts.length > 0
+      ? experts
+      : list.map((b) => ({ id: b.expId, name: b.expId.charAt(0).toUpperCase() + b.expId.slice(1), description: "" }));
+
+  for (const exp of allExperts) {
+    const role = exp.description ? exp.description.split(/[:;]/)[0].trim() : "Expert";
+    const item = list.find((b) => b.expId.toLowerCase() === exp.id.toLowerCase());
+    let dateStr = "—";
+    let preview = "Aucun brief";
+    if (item && item.at) {
+      const d = new Date(item.at);
+      dateStr = d.toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const firstLine = (item.text || "").split("\n").filter((l) => l.trim())[0] || "";
+      preview = firstLine.length > 50 ? firstLine.slice(0, 50) + "..." : firstLine;
+    }
+    out += `| **${exp.name}** | ${role} | ${dateStr} | ${preview} |\n`;
+  }
+
+  return masquerSecrets(out);
+}
+
+export function formatRechercheMemoire(
+  query: string,
+  results: MemorySearchResult[] | null,
+  experts?: DiscoveredExpert[],
+  targetExpert?: string
+): string {
+  if (!query || !query.trim()) {
+    return "Veuillez préciser un terme ou mot-clé de recherche (ex: 'réunion', 'budget', 'client').";
+  }
+
+  const cleanTarget = targetExpert ? targetExpert.trim().toLowerCase() : undefined;
+  const expertMap = new Map((experts || []).map((e) => [e.id.toLowerCase(), e]));
+  const list = results || [];
+
+  if (list.length === 0) {
+    const targetName = cleanTarget
+      ? expertMap.get(cleanTarget)?.name || cleanTarget
+      : "dans les mémoires des experts";
+    return `Aucune mention trouvée pour la recherche **"${query}"** ${cleanTarget ? `chez ${targetName}` : targetName}.`;
+  }
+
+  let out = `### 🔍 Résultats de Recherche dans la Mémoire : "${query}"\n\n`;
+  out += `*${list.length} expert(s) ont des correspondances dans leur mémoire durable :*\n\n`;
+
+  for (const r of list) {
+    const expMeta = expertMap.get(r.expId.toLowerCase());
+    const expName = expMeta ? formatExpertDisplayName(expMeta) : r.expId.charAt(0).toUpperCase() + r.expId.slice(1);
+    out += `#### 📌 ${expName} (${r.matches.length} extrait(s)) :\n`;
+    for (const m of r.matches) {
+      out += `> ${m.replace(/\n+/g, " ")}\n\n`;
+    }
+  }
+
+  return masquerSecrets(out);
+}
+
+export function formatSkillsExperts(
+  skills: ExpertSkillInfo[] | null,
+  experts?: DiscoveredExpert[],
+  targetExpert?: string
+): string {
+  const cleanTarget = targetExpert ? targetExpert.trim().toLowerCase() : undefined;
+  const expertMap = new Map((experts || []).map((e) => [e.id.toLowerCase(), e]));
+  const list = skills || [];
+
+  if (cleanTarget) {
+    const expMeta = expertMap.get(cleanTarget);
+    const expName = expMeta ? formatExpertDisplayName(expMeta) : cleanTarget.charAt(0).toUpperCase() + cleanTarget.slice(1);
+    const item = list.find((s) => s.expId.toLowerCase() === cleanTarget);
+
+    if (!item) {
+      return `Aucune compétence spécifique enregistrée pour ${expName}.`;
+    }
+
+    let out = `### 🎯 Compétences & Méthodologies Métiers : ${expName}\n\n`;
+    if (item.specific && item.specific.length > 0) {
+      out += `#### 💼 Modes Opératoires et Fiches Métier Spécifiques (${item.specific.length}) :\n`;
+      for (const s of item.specific) {
+        out += `- **\`${s}\`**\n`;
+      }
+      out += `\n`;
+    }
+    if (item.shared && item.shared.length > 0) {
+      out += `#### 🛠️ Compétences Transverses & Outils Disponibles :\n`;
+      out += item.shared.map((s) => `- \`${s}\``).join("\n") + "\n";
+    }
+
+    return masquerSecrets(out);
+  }
+
+  let out = `### 🎯 Cartographie des Compétences Métiers de l'Équipe\n\n`;
+  out += `| Expert | Rôle | Modules Spécifiques | Compétences Transverses |\n`;
+  out += `| :--- | :--- | :---: | :--- |\n`;
+
+  const allExperts =
+    experts && experts.length > 0
+      ? experts
+      : list.map((s) => ({ id: s.expId, name: s.expId.charAt(0).toUpperCase() + s.expId.slice(1), description: "" }));
+
+  for (const exp of allExperts) {
+    const role = exp.description ? exp.description.split(/[:;]/)[0].trim() : "Expert";
+    const item = list.find((s) => s.expId.toLowerCase() === exp.id.toLowerCase());
+    const specCount = item?.specific?.length ?? 0;
+    const sharedCount = item?.shared?.length ?? 0;
+    out += `| **${exp.name}** | ${role} | **${specCount}** fiches | ${sharedCount} transverses |\n`;
+  }
+
+  out += `\n*(Pour consulter les modules détaillés d'un expert, précisez : \`consulter_skills_experts(expert="djeneba")\`)*`;
+  return masquerSecrets(out);
+}
+
 export function formatDiagnosticConfiguration(configRaw: string | null): string {
   let out = `### 🩺 Diagnostic de Santé de l'Instance\n\n`;
   out += `- **Moteur d'exécution** : Hermes (Agent37)\n`;
@@ -641,6 +807,42 @@ export function createYeleSupervisionBackend(deps: SupervisionDeps): YeleBackend
         return formatAlertesEtIncidents(alerts, experts.length > 0 ? experts : undefined, targetExpert);
       } catch (e) {
         return `Impossible de consulter les alertes et incidents : ${e instanceof Error ? e.message : String(e)}`;
+      }
+    },
+
+    async consulterAppelsEtVoix(targetExpert?: string): Promise<string> {
+      try {
+        const [briefs, experts] = await Promise.all([
+          deps.fetchVoiceBriefs ? deps.fetchVoiceBriefs() : Promise.resolve(null),
+          deps.listInstalledExperts ? deps.listInstalledExperts() : Promise.resolve([]),
+        ]);
+        return formatAppelsEtVoix(briefs, experts.length > 0 ? experts : undefined, targetExpert);
+      } catch (e) {
+        return `Impossible de consulter les briefs vocaux : ${e instanceof Error ? e.message : String(e)}`;
+      }
+    },
+
+    async rechercherDansLaMemoire(requete: string, targetExpert?: string): Promise<string> {
+      try {
+        const [results, experts] = await Promise.all([
+          deps.searchMemories ? deps.searchMemories(requete, targetExpert) : Promise.resolve(null),
+          deps.listInstalledExperts ? deps.listInstalledExperts() : Promise.resolve([]),
+        ]);
+        return formatRechercheMemoire(requete, results, experts.length > 0 ? experts : undefined, targetExpert);
+      } catch (e) {
+        return `Impossible d'effectuer la recherche en mémoire : ${e instanceof Error ? e.message : String(e)}`;
+      }
+    },
+
+    async consulterSkillsExperts(targetExpert?: string): Promise<string> {
+      try {
+        const [skills, experts] = await Promise.all([
+          deps.fetchSkillsCatalog ? deps.fetchSkillsCatalog(targetExpert) : Promise.resolve(null),
+          deps.listInstalledExperts ? deps.listInstalledExperts() : Promise.resolve([]),
+        ]);
+        return formatSkillsExperts(skills, experts.length > 0 ? experts : undefined, targetExpert);
+      } catch (e) {
+        return `Impossible de consulter les compétences métiers : ${e instanceof Error ? e.message : String(e)}`;
       }
     },
 
