@@ -244,7 +244,8 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
       items: notifications(state),
       open: (item) => {
         commit(markRead(stateRef.current, [item.key]));
-        openConversation(item.agentId, item.profile, item.sessionId);
+        // A run with nothing to report is no conversation (Leslie, 29/10): its line has nothing to open.
+        if (!item.silent) openConversation(item.agentId, item.profile, item.sessionId);
       },
       markAllRead: () => commit(markRead(stateRef.current, null)),
       markRead: (keys) => commit(markRead(stateRef.current, keys)),

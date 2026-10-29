@@ -85,3 +85,9 @@ test("a run the gateway does not know is read directly", async () => {
   assert.deepEqual([...(await silent("a", "", runs(2)))], ["cron_2"]);
   assert.deepEqual(reads, ["cron_2"]);
 });
+
+test("outcomes: only what is known, a run not read yet is missing", async () => {
+  const { r } = readers((id) => (id === "cron_1" ? "sent" : id === "cron_2" ? "silent" : undefined));
+  const known = await runOutcomes(r).outcomes("a", "", runs(3));
+  assert.deepEqual([...known].sort(), [["cron_1", "sent"], ["cron_2", "silent"]]);
+});
