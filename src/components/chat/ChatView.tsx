@@ -150,7 +150,11 @@ export function ChatView({
   const showWelcome = !loadingHistory && messages.length === 0;
   // Memoized so the per-token re-renders during streaming don't re-scan the thread list.
   const activeTitle = useMemo(
-    () => sessions.find((s) => s.session_id === activeSessionId)?.title?.trim(),
+    () => {
+      // A routine's run is titled by the routine, as in the list, never by Hermes's instructions.
+      const s = sessions.find((x) => x.session_id === activeSessionId);
+      return (s?.routine ?? s?.title)?.trim();
+    },
     [sessions, activeSessionId]
   );
   const headerTitle = activeTitle || (activeSessionId ? "Discussion" : "Nouvelle discussion");

@@ -46,24 +46,43 @@ export function runOutcomes(readers: OutcomeReaders, { memoMax = MEMO_MAX, now =
     );
   }
 
-  /** The ids of the finished routine runs among `sessions` that answered [SILENT]. */
-  return async function silentRunIds(agentId: string, profileQuery: string, sessions: SessionSummary[], budget: ReadBudget = { left: DIRECT_READS }): Promise<Set<string>> {
-    const runs = sessions
-      .filter((s) => finished(s) && routineOfSession(s) !== null)
+  /** Reads what the finished routine runs among `sessions` came to; the routine runs, newest first. */
+  async function learn(agentId: string, profileQuery: string, sessions: SessionSummary[], budget: ReadBudget): Promise<SessionSummary[]> {
+    const all = sessions
+      .filter((s) => routineOfSession(s) !== null)
       .sort((a, b) => (b.last_active ?? b.started_at ?? 0) - (a.last_active ?? a.started_at ?? 0));
+    const runs = all.filter(finished);
     const unknown = runs.filter((s) => !known.has(`${agentId}|${s.id}`)).map((s) => s.id).slice(0, BATCH_MAX);
     if (unknown.length) {
       try {
         const got = await readers.batch(agentId, profileQuery, unknown);
         if (got === null) await direct(agentId, profileQuery, unknown, budget);
-        else for (const id of unknown) {
-          const o = got[id];
-          if (o === "sent" || o === "silent" || o === "failed") remember(known, `${agentId}|${id}`, o, memoMax);
+        else {
+          for (const id of unknown) {
+            const o = got[id];
+            if (o === "sent" || o === "silent" || o === "failed") remember(known, `${agentId}|${id}`, o, memoMax);
+          }
+          // A run the gateway does not know is read directly, within the same budget.
+          await direct(agentId, profileQuery, unknown.filter((id) => !known.has(`${agentId}|${id}`)), budget);
         }
       } catch {
-        // Gateway unreachable: shown as conversations, asked again next time.
+        // Gateway unreachable: unread, so not a conversation yet; asked again next time.
       }
     }
-    return new Set(runs.filter((s) => known.get(`${agentId}|${s.id}`) === "silent").map((s) => s.id));
+    return all;
+  }
+
+  return {
+    /** The ids of the finished routine runs among `sessions` that answered [SILENT]. */
+    async silent(agentId: string, profileQuery: string, sessions: SessionSummary[], budget: ReadBudget = { left: DIRECT_READS }): Promise<Set<string>> {
+      const all = await learn(agentId, profileQuery, sessions, budget);
+      return new Set(all.filter((s) => known.get(`${agentId}|${s.id}`) === "silent").map((s) => s.id));
+    },
+    /** The ids of the routine runs among `sessions` not known to have delivered: running, silent,
+     *  failed or unread. A routine is a conversation only once it has sent something (Leslie, 29/10). */
+    async undelivered(agentId: string, profileQuery: string, sessions: SessionSummary[], budget: ReadBudget = { left: DIRECT_READS }): Promise<Set<string>> {
+      const all = await learn(agentId, profileQuery, sessions, budget);
+      return new Set(all.filter((s) => known.get(`${agentId}|${s.id}`) !== "sent").map((s) => s.id));
+    },
   };
 }
