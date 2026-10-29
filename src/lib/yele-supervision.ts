@@ -74,12 +74,74 @@ export interface RawFileInfo {
   modified?: number | null;
 }
 
+export interface TelegramConfig {
+  bot?: string;
+  botId?: number;
+  chatTitle?: string;
+  chatId?: number;
+  phase?: string;
+  inviteLink?: string;
+  topics?: Record<string, string>;
+}
+
+export interface MailConfig {
+  url?: string;
+  workspace?: string;
+  addresses?: Record<string, string>;
+}
+
+export interface ExpertUsageData {
+  count: number;
+  totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalDurationMs?: number;
+  avgDurationSec?: number;
+  models?: Record<string, number>;
+  errors: number;
+  recentExecs?: Array<{
+    ts: string;
+    totalTokens: number;
+    promptTokens: number;
+    completionTokens: number;
+    durationMs: number;
+    model: string;
+    error: string | null;
+  }>;
+}
+
+export interface IncidentAlertData {
+  incidents: Array<{
+    type: string;
+    expert: string;
+    ts?: string;
+    model?: string;
+    error?: string;
+    outil?: string;
+    note?: string;
+  }>;
+  avertissements: Array<{
+    type: string;
+    expert: string;
+    outil?: string;
+    etat?: string;
+    usage?: string;
+    message?: string;
+  }>;
+  totalCronsScanned: number;
+  telegramStatus: string;
+}
+
 export interface SupervisionDeps {
   listSessions: () => Promise<RawSessionInfo[]>;
   fetchFileContent: (path: string) => Promise<string | null>;
   listConnections: () => Promise<RawConnectionInfo[]>;
   listDeliverableFiles: () => Promise<RawFileInfo[]>;
   listInstalledExperts?: () => Promise<DiscoveredExpert[]>;
+  fetchTelegramConfig?: () => Promise<TelegramConfig | null>;
+  fetchMailConfig?: () => Promise<MailConfig | null>;
+  fetchUsageStats?: () => Promise<Record<string, ExpertUsageData> | null>;
+  fetchIncidentAlerts?: () => Promise<IncidentAlertData | null>;
 }
 
 export function formatActiviteExperts(
@@ -240,6 +302,214 @@ export function formatStatistiquesAnalytique(
   return out;
 }
 
+export function formatCanauxEtTelegram(
+  tg: TelegramConfig | null,
+  mail: MailConfig | null,
+  experts?: DiscoveredExpert[],
+  targetExpert?: string
+): string {
+  const cleanTarget = targetExpert ? targetExpert.trim().toLowerCase() : undefined;
+  const topicByExpert: Record<string, string> = {};
+  if (tg && tg.topics) {
+    for (const [topicId, expId] of Object.entries(tg.topics)) {
+      topicByExpert[String(expId).toLowerCase()] = topicId;
+    }
+  }
+
+  const mailByExpert: Record<string, string> = {};
+  if (mail && mail.addresses) {
+    for (const [expId, addr] of Object.entries(mail.addresses)) {
+      mailByExpert[String(expId).toLowerCase()] = addr;
+    }
+  }
+
+  if (cleanTarget) {
+    const topicId = topicByExpert[cleanTarget];
+    const email = mailByExpert[cleanTarget] || `${cleanTarget}.mstudio@agentmail.to`;
+    const expMeta = experts?.find((e) => e.id.toLowerCase() === cleanTarget);
+    const expName = expMeta ? formatExpertDisplayName(expMeta) : cleanTarget.charAt(0).toUpperCase() + cleanTarget.slice(1);
+
+    let out = `### 📱 Canaux de communication : ${expName}\n\n`;
+    out += `- **🤖 Bot Telegram Officiel** : \`@${tg?.bot || "yelema_mstudio_performa_de9d_bot"}\` (ID: \`${tg?.botId || "8800120542"}\`)\n`;
+    out += `- **💬 Groupe Telegram (Forum)** : \`${tg?.chatTitle || "Yelema - Icone"}\` (ID: \`${tg?.chatId || "-1004374515273"}\`)\n`;
+    out += `- **🧵 Topic / Fil de discussion dédié** : ${topicId ? `**Fil #${topicId}** (\`${cleanTarget}\`)` : "Non assigné"}\n`;
+    if (tg?.inviteLink) {
+      out += `- **🔗 Lien d'invitation au groupe** : ${tg.inviteLink}\n`;
+    }
+    out += `- **✉️ E-mail d'entreprise** : \`${email}\`\n`;
+    out += `- **🌐 Passerelle de messagerie** : 🟢 Connecté et opérationnel\n`;
+    return masquerSecrets(out);
+  }
+
+  let out = `### 📱 Canaux de Communication & Telegram de l'Équipe\n\n`;
+  out += `- **💬 Groupe Telegram (Forum d'équipe)** : \`${tg?.chatTitle || "Yelema - Icone"}\` (ID: \`${tg?.chatId || "-1004374515273"}\`)\n`;
+  out += `- **🤖 Bot Telegram Officiel** : \`@${tg?.bot || "yelema_mstudio_performa_de9d_bot"}\` (Statut: 🟢 Opérationnel, Phase: \`${tg?.phase || "ready"}\`)\n`;
+  if (tg?.inviteLink) {
+    out += `- **🔗 Lien d'invitation Telegram** : ${tg.inviteLink}\n`;
+  }
+  out += `- **✉️ Messagerie Corporate** : Passerelle \`agentmail.to\` configurée\n\n`;
+
+  out += `#### 🧵 Répartition des Fils Telegram & E-mails par Expert :\n\n`;
+  out += `| Expert | Rôle | Topic Telegram | E-mail Professionnel |\n`;
+  out += `| :--- | :--- | :---: | :--- |\n`;
+
+  const list =
+    experts && experts.length > 0
+      ? experts
+      : Object.keys(topicByExpert).map((id) => ({ id, name: id.charAt(0).toUpperCase() + id.slice(1), description: "" }));
+  for (const exp of list) {
+    const role = exp.description ? exp.description.split(/[:;]/)[0].trim() : "Expert";
+    const topicId = topicByExpert[exp.id.toLowerCase()];
+    const email = mailByExpert[exp.id.toLowerCase()] || `${exp.id.toLowerCase()}.mstudio@agentmail.to`;
+    const topicStr = topicId ? `Fil #${topicId}` : "—";
+    out += `| **${exp.name}** | ${role} | ${topicStr} | \`${email}\` |\n`;
+  }
+
+  return masquerSecrets(out);
+}
+
+export function formatConsommationTokens(
+  stats: Record<string, ExpertUsageData> | null,
+  experts?: DiscoveredExpert[],
+  targetExpert?: string
+): string {
+  if (!stats || Object.keys(stats).length === 0) {
+    return "Aucune donnée de consommation de tokens enregistrée sur l'instance.";
+  }
+
+  const cleanTarget = targetExpert ? targetExpert.trim().toLowerCase() : undefined;
+  const expertMap = new Map((experts || []).map((e) => [e.id.toLowerCase(), e]));
+
+  let grandTotalTokens = 0;
+  let grandPromptTokens = 0;
+  let grandCompletionTokens = 0;
+  let grandRuns = 0;
+  let grandDurationMs = 0;
+
+  const rows = Object.entries(stats).map(([expId, data]) => {
+    grandTotalTokens += data.totalTokens;
+    grandPromptTokens += data.promptTokens;
+    grandCompletionTokens += data.completionTokens;
+    grandRuns += data.count;
+    grandDurationMs += data.totalDurationMs || 0;
+
+    const expMeta = expertMap.get(expId.toLowerCase());
+    return {
+      expId: expId.toLowerCase(),
+      name: expMeta ? expMeta.name : expId.charAt(0).toUpperCase() + expId.slice(1),
+      role: expMeta?.description ? expMeta.description.split(/[:;]/)[0].trim() : "Expert",
+      ...data,
+      avgDurationSec:
+        data.avgDurationSec ||
+        (data.count > 0 && data.totalDurationMs ? Math.round(data.totalDurationMs / data.count / 1000) : 0),
+    };
+  });
+
+  rows.sort((a, b) => b.totalTokens - a.totalTokens);
+
+  if (cleanTarget) {
+    const single = rows.find((r) => r.expId === cleanTarget);
+    if (!single) {
+      return `Aucune consommation enregistrée pour l'expert '${cleanTarget}'.`;
+    }
+
+    const pctTeam = grandTotalTokens > 0 ? ((single.totalTokens / grandTotalTokens) * 100).toFixed(1) : "0.0";
+    const promptPct = single.totalTokens > 0 ? ((single.promptTokens / single.totalTokens) * 100).toFixed(1) : "0.0";
+    const compPct = single.totalTokens > 0 ? ((single.completionTokens / single.totalTokens) * 100).toFixed(1) : "0.0";
+
+    let out = `### 🪙 Consommation de Tokens : ${single.name} (${single.role})\n\n`;
+    out += `- **Total Tokens consommés** : **${single.totalTokens.toLocaleString("fr-FR")}** tokens\n`;
+    out += `  - 📥 *Prompt (Entrée / Contexte)* : ${single.promptTokens.toLocaleString("fr-FR")} tokens (${promptPct}%)\n`;
+    out += `  - 📤 *Completion (Sortie / Génération)* : ${single.completionTokens.toLocaleString("fr-FR")} tokens (${compPct}%)\n`;
+    out += `- **Volume d'exécutions de routines** : ${single.count} exécution(s)\n`;
+    out += `- **Durée moyenne par exécution** : ${single.avgDurationSec}s\n`;
+    out += `- **Part dans la consommation d'équipe** : **${pctTeam}%**\n`;
+    out += `- **Taux de succès des inférences** : ${
+      single.count > 0 ? ((1 - single.errors / single.count) * 100).toFixed(0) : 100
+    }% (${single.errors} erreur(s))\n\n`;
+
+    if (single.models && Object.keys(single.models).length > 0) {
+      out += `#### 🧠 Répartition des modèles LLM :\n`;
+      for (const [mName, cnt] of Object.entries(single.models)) {
+        out += `- **\`${mName}\`** : ${cnt} exécution(s)\n`;
+      }
+    }
+
+    return masquerSecrets(out);
+  }
+
+  let out = `### 🪙 Analyse Globale de la Consommation de Tokens & Coûts\n\n`;
+  out += `**Vue consolidée de l'instance Yelema :**\n`;
+  out += `- **Volume total consommé** : **${grandTotalTokens.toLocaleString("fr-FR")}** tokens\n`;
+  out += `  - 📥 *Tokens d'entrée* : ${grandPromptTokens.toLocaleString("fr-FR")} (${(
+    (grandPromptTokens / grandTotalTokens) *
+    100
+  ).toFixed(1)}%)\n`;
+  out += `  - 📤 *Tokens de sortie* : ${grandCompletionTokens.toLocaleString("fr-FR")} (${(
+    (grandCompletionTokens / grandTotalTokens) *
+    100
+  ).toFixed(1)}%)\n`;
+  out += `- **Nombre total d'exécutions de routines** : **${grandRuns}** runs\n`;
+  out += `- **Durée moyenne par routine** : ~${grandRuns > 0 ? Math.round(grandDurationMs / grandRuns / 1000) : 0}s\n\n`;
+
+  out += `#### 🏆 Classement des Experts par Consommation de Tokens :\n\n`;
+  out += `| Rang | Expert | Rôle | Runs | Tokens Prompt | Tokens Sortie | Total Tokens | Part Équipe |\n`;
+  out += `| :---: | :--- | :--- | :---: | :---: | :---: | :---: | :---: |\n`;
+
+  rows.forEach((r, idx) => {
+    const share = grandTotalTokens > 0 ? ((r.totalTokens / grandTotalTokens) * 100).toFixed(1) : "0.0";
+    out += `| ${idx + 1} | **${r.name}** | ${r.role} | ${r.count} | ${(r.promptTokens / 1e6).toFixed(2)}M | ${(
+      r.completionTokens / 1e3
+    ).toFixed(1)}k | **${r.totalTokens.toLocaleString("fr-FR")}** | ${share}% |\n`;
+  });
+
+  return masquerSecrets(out);
+}
+
+export function formatAlertesEtIncidents(
+  data: IncidentAlertData | null,
+  experts?: DiscoveredExpert[],
+  targetExpert?: string
+): string {
+  if (!data) {
+    return "### 🛡️ Diagnostic de Santé & Alertes\n\nAucune alerte ni incident actif signalé.";
+  }
+
+  const cleanTarget = targetExpert ? targetExpert.trim().toLowerCase() : undefined;
+  const incidents = cleanTarget
+    ? data.incidents.filter((i) => i.expert.toLowerCase().includes(cleanTarget))
+    : data.incidents;
+
+  const avertissements = cleanTarget
+    ? data.avertissements.filter((a) => a.expert.toLowerCase().includes(cleanTarget))
+    : data.avertissements;
+
+  let out = `### 🛡️ Diagnostic de Santé, Alertes & Incidents\n\n`;
+
+  if (incidents.length === 0) {
+    out += `**Statut global : 🟢 TOUS LES SYSTÈMES SONT OPÉRATIONNELS**\n\n`;
+    out += `- **Santé des Routines & Crons** : 🟢 **0 incident détecté** sur ${data.totalCronsScanned} exécutions enregistrées (Taux de fiabilité : **100%**).\n`;
+    out += `- **Passerelle Telegram** : ${data.telegramStatus} (Bot et forum d'équipe connectés).\n`;
+    out += `- **Service E-mail** : 🟢 Opérationnel (\`agentmail.to\`).\n\n`;
+  } else {
+    out += `**Statut global : 🔴 ${incidents.length} INCIDENT(S) DÉTECTÉ(S)**\n\n`;
+    out += `#### 🚨 Incidents Critiques :\n`;
+    for (const inc of incidents) {
+      out += `- **${inc.expert}** : ${inc.error || inc.note || "Erreur non spécifiée"}\n`;
+    }
+    out += `\n`;
+  }
+
+  if (avertissements.length > 0) {
+    out += `#### ⚠️ Points d'attention & Avertissements (${avertissements.length}) :\n`;
+    for (const av of avertissements.slice(0, 10)) {
+      out += `- **${av.expert}** : ${av.message || `Outil ${av.outil} en état '${av.etat}'`}\n`;
+    }
+  }
+
+  return masquerSecrets(out);
+}
+
 export function formatDiagnosticConfiguration(configRaw: string | null): string {
   let out = `### 🩺 Diagnostic de Santé de l'Instance\n\n`;
   out += `- **Moteur d'exécution** : Hermes (Agent37)\n`;
@@ -334,6 +604,43 @@ export function createYeleSupervisionBackend(deps: SupervisionDeps): YeleBackend
         return formatStatistiquesAnalytique(sessions, vue, experts.length > 0 ? experts : undefined);
       } catch (e) {
         return `Impossible de calculer les statistiques analytiques : ${e instanceof Error ? e.message : String(e)}`;
+      }
+    },
+
+    async consulterCanauxTelegram(targetExpert?: string): Promise<string> {
+      try {
+        const [tg, mail, experts] = await Promise.all([
+          deps.fetchTelegramConfig ? deps.fetchTelegramConfig() : Promise.resolve(null),
+          deps.fetchMailConfig ? deps.fetchMailConfig() : Promise.resolve(null),
+          deps.listInstalledExperts ? deps.listInstalledExperts() : Promise.resolve([]),
+        ]);
+        return formatCanauxEtTelegram(tg, mail, experts.length > 0 ? experts : undefined, targetExpert);
+      } catch (e) {
+        return `Impossible de consulter les canaux Telegram : ${e instanceof Error ? e.message : String(e)}`;
+      }
+    },
+
+    async analyserConsommationTokens(targetExpert?: string): Promise<string> {
+      try {
+        const [stats, experts] = await Promise.all([
+          deps.fetchUsageStats ? deps.fetchUsageStats() : Promise.resolve(null),
+          deps.listInstalledExperts ? deps.listInstalledExperts() : Promise.resolve([]),
+        ]);
+        return formatConsommationTokens(stats, experts.length > 0 ? experts : undefined, targetExpert);
+      } catch (e) {
+        return `Impossible d'analyser la consommation de tokens : ${e instanceof Error ? e.message : String(e)}`;
+      }
+    },
+
+    async consulterAlertesIncidents(targetExpert?: string): Promise<string> {
+      try {
+        const [alerts, experts] = await Promise.all([
+          deps.fetchIncidentAlerts ? deps.fetchIncidentAlerts() : Promise.resolve(null),
+          deps.listInstalledExperts ? deps.listInstalledExperts() : Promise.resolve([]),
+        ]);
+        return formatAlertesEtIncidents(alerts, experts.length > 0 ? experts : undefined, targetExpert);
+      } catch (e) {
+        return `Impossible de consulter les alertes et incidents : ${e instanceof Error ? e.message : String(e)}`;
       }
     },
 

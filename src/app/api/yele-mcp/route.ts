@@ -12,6 +12,10 @@ import {
   type DiscoveredExpert,
   type RawFileInfo,
   type RawSessionInfo,
+  type TelegramConfig,
+  type MailConfig,
+  type ExpertUsageData,
+  type IncidentAlertData,
 } from "@/lib/yele-supervision";
 
 export const maxDuration = 120;
@@ -60,6 +64,102 @@ async function discoverInstalledExperts(agentId: string): Promise<DiscoveredExpe
     console.warn("[yele-mcp] Échec découverte sandbox des experts:", e);
   }
   return [];
+}
+
+
+const DIAG_SCRIPT = `
+const fs = require('fs');
+const path = require('path');
+const yelemaDir = '/home/node/.yelema';
+const hermesDir = '/home/node/.hermes/profiles';
+
+let telegram = null;
+let mail = null;
+try { telegram = JSON.parse(fs.readFileSync(path.join(yelemaDir, 'telegram.json'), 'utf8')); } catch {}
+try { mail = JSON.parse(fs.readFileSync(path.join(yelemaDir, 'mail.json'), 'utf8')); } catch {}
+
+const usage = {};
+const incidents = [];
+const avertissements = [];
+let totalCrons = 0;
+
+if (fs.existsSync(hermesDir)) {
+  for (const exp of fs.readdirSync(hermesDir)) {
+    if (exp.startsWith('.') || exp === 'default' || exp === 'yele') continue;
+    const f = path.join(hermesDir, exp, 'cron', 'usage_audit.jsonl');
+    let totalTokens = 0, promptTokens = 0, completionTokens = 0, totalDurationMs = 0, errors = 0, runs = 0;
+    const models = {};
+    if (fs.existsSync(f)) {
+      try {
+        const lines = fs.readFileSync(f, 'utf8').trim().split('\\\\n').filter(Boolean);
+        for (const l of lines) {
+          totalCrons++;
+          try {
+            const row = JSON.parse(l);
+            totalTokens += row.total_tokens || 0;
+            promptTokens += row.prompt_tokens || 0;
+            completionTokens += row.completion_tokens || 0;
+            totalDurationMs += row.duration_ms || 0;
+            runs++;
+            if (row.error) {
+              errors++;
+              incidents.push({ type: 'CRON_ERROR', expert: exp, ts: row.ts, model: row.model, error: row.error });
+            }
+            if (row.model) models[row.model] = (models[row.model] || 0) + 1;
+          } catch {}
+        }
+      } catch {}
+    }
+    usage[exp] = { count: runs, totalTokens, promptTokens, completionTokens, totalDurationMs, errors, models };
+
+    const cFile = path.join(yelemaDir, 'profiles', exp, 'connecteurs.json');
+    if (fs.existsSync(cFile)) {
+      try {
+        const cData = JSON.parse(fs.readFileSync(cFile, 'utf8'));
+        if (cData.outils && Array.isArray(cData.outils)) {
+          for (const o of cData.outils) {
+            if (o.etat === 'erreur') incidents.push({ type: 'CONNECTOR_ERROR', expert: exp, outil: o.nom, note: o.note });
+            else if (o.etat !== 'ok') avertissements.push({ type: 'CONNECTOR_WARNING', expert: exp, outil: o.nom, etat: o.etat });
+          }
+        }
+      } catch {}
+    }
+  }
+}
+
+console.log(JSON.stringify({
+  telegram,
+  mail,
+  usage,
+  alerts: {
+    incidents,
+    avertissements,
+    totalCronsScanned: totalCrons,
+    telegramStatus: telegram?.phase === 'ready' ? '🟢 Opérationnel' : '⚠️ En attente'
+  }
+}));
+`.trim();
+
+const DIAG_B64 = Buffer.from(DIAG_SCRIPT).toString("base64");
+const DIAG_COMMAND = `node -e "$(echo '${DIAG_B64}' | base64 -d)"`;
+
+interface SandboxDiagPayload {
+  telegram: TelegramConfig | null;
+  mail: MailConfig | null;
+  usage: Record<string, ExpertUsageData>;
+  alerts: IncidentAlertData;
+}
+
+async function fetchSandboxDiagnostics(agentId: string): Promise<SandboxDiagPayload | null> {
+  try {
+    const res = await agent37.exec(agentId, DIAG_COMMAND);
+    if (res.exit_code === 0 && res.stdout.trim()) {
+      return JSON.parse(res.stdout.trim()) as SandboxDiagPayload;
+    }
+  } catch (e) {
+    console.warn("[yele-mcp] Échec diagnostics sandbox:", e);
+  }
+  return null;
 }
 
 function errorJson(status: number, error: string): Response {
@@ -145,6 +245,14 @@ export async function POST(request: Request): Promise<Response> {
   const resolvedUserId = userId;
 
   // Cache mémoire par requête pour éviter les appels redondants vers l'instance
+  let cachedDiag: SandboxDiagPayload | null = null;
+  const getDiag = async (): Promise<SandboxDiagPayload | null> => {
+    if (cachedDiag === null) {
+      cachedDiag = await fetchSandboxDiagnostics(resolvedAgentId);
+    }
+    return cachedDiag;
+  };
+
   let cachedExperts: DiscoveredExpert[] | null = null;
   const getExperts = async (): Promise<DiscoveredExpert[]> => {
     if (cachedExperts === null) {
@@ -156,6 +264,10 @@ export async function POST(request: Request): Promise<Response> {
   // Création du backend réel avec les dépendances injectées et protégées par timeout
   const backend = createYeleSupervisionBackend({
     listInstalledExperts: getExperts,
+    fetchTelegramConfig: async () => (await getDiag())?.telegram ?? null,
+    fetchMailConfig: async () => (await getDiag())?.mail ?? null,
+    fetchUsageStats: async () => (await getDiag())?.usage ?? null,
+    fetchIncidentAlerts: async () => (await getDiag())?.alerts ?? null,
     listSessions: async (): Promise<RawSessionInfo[]> => {
       const experts = await getExperts();
       const expertIds = experts.length > 0 ? experts.map((e) => e.id) : [];

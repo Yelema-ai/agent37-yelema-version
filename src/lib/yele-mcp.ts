@@ -77,6 +77,48 @@ export const YELE_TOOLS = [
     },
   },
   {
+    name: "consulter_canaux_et_telegram",
+    description:
+      "Consulte la configuration et l'état des canaux de communication de l'équipe : groupe Telegram du forum Yelema, bot Telegram officiel, association des topics/fils par expert, lien d'invitation et adresses e-mail d'entreprise (@agentmail.to).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        expert: {
+          type: "string",
+          description: "Optionnel : nom ou identifiant de l'expert (ex: 'djeneba', 'koffi') pour son topic et e-mail dédié.",
+        },
+      },
+    },
+  },
+  {
+    name: "analyser_consommation_tokens_et_couts",
+    description:
+      "Analyse la consommation de tokens d'IA, les volumes d'inférence et la distribution des modèles (Claude Opus 5.5, default) pour chaque expert ou pour toute l'instance. Permet de savoir qui consomme le plus/moins, les moyennes par routine et la durée des exécutions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        expert: {
+          type: "string",
+          description: "Optionnel : nom ou identifiant de l'expert pour un audit détaillé de sa consommation.",
+        },
+      },
+    },
+  },
+  {
+    name: "consulter_alertes_et_incidents",
+    description:
+      "Supervise la santé du système, surveille les alertes opérationnelles et détecte les incidents : échecs de crons ou routines, connecteurs non connectés ou défaillants, et statut des passerelles de messagerie.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        expert: {
+          type: "string",
+          description: "Optionnel : filtrer les alertes et l'état de santé pour un expert précis.",
+        },
+      },
+    },
+  },
+  {
     name: "diagnostiquer_configuration",
     description:
       "Diagnostique la configuration générale de l'instance Hermes en toute sécurité (clés d'API et secrets automatiquement masqués). Vérifie les passerelles actives, les modèles configurés et la mémoire.",
@@ -94,6 +136,9 @@ export interface YeleBackend {
   consulterLivrables(limite?: number): Promise<string>;
   statistiquesAnalytique(vue?: string): Promise<string>;
   diagnostiquerConfiguration(): Promise<string>;
+  consulterCanauxTelegram(expert?: string): Promise<string>;
+  analyserConsommationTokens(expert?: string): Promise<string>;
+  consulterAlertesIncidents(expert?: string): Promise<string>;
 }
 
 type Rpc = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Record<string, unknown> };
@@ -125,6 +170,18 @@ async function callTool(backend: YeleBackend, name: unknown, args: Record<string
     case "statistiques_et_analytique": {
       const v = typeof args.vue === "string" ? args.vue : undefined;
       return text(await backend.statistiquesAnalytique(v));
+    }
+    case "consulter_canaux_et_telegram": {
+      const e = typeof args.expert === "string" ? args.expert : undefined;
+      return text(await backend.consulterCanauxTelegram(e));
+    }
+    case "analyser_consommation_tokens_et_couts": {
+      const e = typeof args.expert === "string" ? args.expert : undefined;
+      return text(await backend.analyserConsommationTokens(e));
+    }
+    case "consulter_alertes_et_incidents": {
+      const e = typeof args.expert === "string" ? args.expert : undefined;
+      return text(await backend.consulterAlertesIncidents(e));
     }
     case "diagnostiquer_configuration": {
       return text(await backend.diagnostiquerConfiguration());

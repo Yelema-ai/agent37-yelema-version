@@ -8,6 +8,9 @@ const mockBackend = (over: Partial<YeleBackend> = {}): YeleBackend => ({
   auditerOutils: async (e) => `Outils (${e ?? "tous"}): Gmail (Actif), LinkedIn (Actif).`,
   consulterLivrables: async (l) => `Derniers livrables (${l ?? 10}): rapport_q3.xlsx, pitch.pptx.`,
   statistiquesAnalytique: async (v) => `Stats (${v ?? "synthese"}): 95% succès routines, 18 documents.`,
+  consulterCanauxTelegram: async (e) => `Telegram (${e ?? "tous"}): Bot @yelema_bot, Forum Yelema - Icone.`,
+  analyserConsommationTokens: async (e) => `Tokens (${e ?? "tous"}): 34M tokens, Djénéba top consommateur.`,
+  consulterAlertesIncidents: async (e) => `Alertes (${e ?? "tous"}): 0 incident critique, crons 100% sains.`,
   diagnostiquerConfiguration: async () => "Configuration saine: Telegram OK, mémoire OK, secrets masqués.",
   ...over,
 });
@@ -23,7 +26,7 @@ test("yele-mcp: handshake initialize and ping", async () => {
   assert.deepEqual(ping?.result, {});
 });
 
-test("yele-mcp: lists the 6 super-power tools", async () => {
+test("yele-mcp: lists the 9 super-power tools", async () => {
   const list = await answerRpc(rpc("tools/list"), mockBackend());
   const names = (list?.result as { tools: { name: string }[] }).tools.map((t) => t.name);
   assert.deepEqual(names, [
@@ -32,6 +35,9 @@ test("yele-mcp: lists the 6 super-power tools", async () => {
     "auditer_outils_connecteurs",
     "consulter_livrables_recents",
     "statistiques_et_analytique",
+    "consulter_canaux_et_telegram",
+    "analyser_consommation_tokens_et_couts",
+    "consulter_alertes_et_incidents",
     "diagnostiquer_configuration",
   ]);
 });
@@ -53,6 +59,16 @@ test("yele-mcp: tool calls execute backend methods correctly", async () => {
 
   const stats = textOf(await answerRpc(rpc("tools/call", { name: "statistiques_et_analytique", arguments: { vue: "routines" } }), b));
   assert.match(stats.content[0].text, /Stats \(routines\)/);
+
+
+  const tg = textOf(await answerRpc(rpc("tools/call", { name: "consulter_canaux_et_telegram", arguments: { expert: "djeneba" } }), b));
+  assert.match(tg.content[0].text, /Telegram \(djeneba\)/);
+
+  const tok = textOf(await answerRpc(rpc("tools/call", { name: "analyser_consommation_tokens_et_couts", arguments: {} }), b));
+  assert.match(tok.content[0].text, /Tokens \(tous\)/);
+
+  const al = textOf(await answerRpc(rpc("tools/call", { name: "consulter_alertes_et_incidents", arguments: {} }), b));
+  assert.match(al.content[0].text, /Alertes \(tous\)/);
 
   const diag = textOf(await answerRpc(rpc("tools/call", { name: "diagnostiquer_configuration", arguments: {} }), b));
   assert.match(diag.content[0].text, /Configuration saine/);

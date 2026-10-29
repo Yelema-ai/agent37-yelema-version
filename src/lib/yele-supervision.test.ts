@@ -7,6 +7,9 @@ import {
   formatLivrablesRecents,
   formatStatistiquesAnalytique,
   formatDiagnosticConfiguration,
+  formatCanauxEtTelegram,
+  formatConsommationTokens,
+  formatAlertesEtIncidents,
   createYeleSupervisionBackend,
   type DiscoveredExpert,
   type RawSessionInfo,
@@ -152,4 +155,87 @@ test("lireRapportJournalier: rejects path traversal attempts", async () => {
 
   const res3 = await b.lireRapportJournalier("2026-10-28; rm -rf");
   assert.match(res3, /Format de date invalide/);
+});
+
+test("formatCanauxEtTelegram: affiche forum Telegram, bot et fils par expert", () => {
+  const tg = {
+    bot: "yelema_bot",
+    botId: 8800120542,
+    chatTitle: "Yelema - Icone",
+    chatId: -1004374515273,
+    phase: "ready",
+    inviteLink: "https://t.me/+invite",
+    topics: { "12": "djeneba", "6": "adjoua" },
+  };
+  const mail = {
+    addresses: { djeneba: "djeneba.mstudio@agentmail.to" },
+  };
+  const experts = [
+    { id: "djeneba", name: "Djénéba", description: "Données : veille..." },
+    { id: "adjoua", name: "Adjoua", description: "Recrutement : sourcing..." },
+  ];
+
+  // Test vue globale
+  const globalOut = formatCanauxEtTelegram(tg, mail, experts);
+  assert.match(globalOut, /Yelema - Icone/);
+  assert.match(globalOut, /Fil #12/);
+  assert.match(globalOut, /djeneba.mstudio@agentmail.to/);
+
+  // Test filtré djénéba
+  const singleOut = formatCanauxEtTelegram(tg, mail, experts, "djeneba");
+  assert.match(singleOut, /Djénéba/);
+  assert.match(singleOut, /Fil #12/);
+  assert.match(singleOut, /yelema_bot/);
+});
+
+test("formatConsommationTokens: consolide le volume total, classement et zoom expert", () => {
+  const stats = {
+    djeneba: {
+      count: 15,
+      totalTokens: 3000000,
+      promptTokens: 2980000,
+      completionTokens: 20000,
+      errors: 0,
+      models: { "claude-opus-5-5": 8, default: 7 },
+    },
+    koffi: {
+      count: 10,
+      totalTokens: 1000000,
+      promptTokens: 990000,
+      completionTokens: 10000,
+      errors: 0,
+      models: { default: 10 },
+    },
+  };
+  const experts = [
+    { id: "djeneba", name: "Djénéba", description: "Données : analyse..." },
+    { id: "koffi", name: "Koffi", description: "Design : création..." },
+  ];
+
+  // Test global
+  const globalOut = formatConsommationTokens(stats, experts);
+  assert.match(globalOut, /4 000 000/);
+  assert.match(globalOut, /Djénéba/);
+  assert.match(globalOut, /Koffi/);
+
+  // Test ciblé
+  const djenebaOut = formatConsommationTokens(stats, experts, "djeneba");
+  assert.match(djenebaOut, /3 000 000/);
+  assert.match(djenebaOut, /claude-opus-5-5/);
+});
+
+test("formatAlertesEtIncidents: rapporte 0 incident en état sain et liste les alertes", () => {
+  const data = {
+    incidents: [],
+    avertissements: [
+      { type: "CONNECTOR_WARNING", expert: "Djénéba", outil: "Transcription vocale", etat: "non-verifie" },
+    ],
+    totalCronsScanned: 195,
+    telegramStatus: "🟢 Opérationnel",
+  };
+
+  const out = formatAlertesEtIncidents(data);
+  assert.match(out, /TOUS LES SYSTÈMES SONT OPÉRATIONNELS/);
+  assert.match(out, /0 incident détecté/);
+  assert.match(out, /Transcription vocale/);
 });
