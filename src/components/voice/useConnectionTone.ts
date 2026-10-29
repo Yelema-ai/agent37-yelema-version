@@ -1,26 +1,19 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { newAudioContext } from "@/lib/mic-tap";
 import type { CallPhase } from "@/lib/call-turns";
 import { BACK_HZ, beepTimes, LOST_HZ, lostConnection, reconnected, TONE_EVERY_MS, TONE_VOLUME } from "@/lib/connection-tone";
+import { callAudioContext, releaseCallAudio } from "./useRingback";
 
 // Two soft beeps every few seconds while the call's connection is lost, a chime when it is back
-// (src/lib/connection-tone.ts). One context per call, closed when the call ends.
+// (src/lib/connection-tone.ts). Played on the call's context, opened at the click (Safari).
 export function useConnectionTone(phase: CallPhase, inCall: boolean): void {
-  const ctx = useRef<AudioContext | null>(null);
   const sounding = useRef<GainNode | null>(null);
   const prev = useRef(phase);
 
   const play = (hz: number, count: number) => {
-    let c = ctx.current;
-    if (!c || c.state === "closed") {
-      try {
-        c = ctx.current = newAudioContext();
-      } catch {
-        return;
-      }
-    }
+    const c = callAudioContext();
+    if (!c) return;
     if (c.state === "suspended") void c.resume().catch(() => {});
     const gain = c.createGain();
     gain.gain.value = 0;
@@ -61,18 +54,9 @@ export function useConnectionTone(phase: CallPhase, inCall: boolean): void {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
+  // An answered call's end tone has already taken the context; any other end releases it here.
   useEffect(() => {
-    if (inCall) return;
-    const c = ctx.current;
-    ctx.current = null;
-    void c?.close().catch(() => {});
+    if (!inCall) releaseCallAudio();
   }, [inCall]);
-
-  useEffect(
-    () => () => {
-      void ctx.current?.close().catch(() => {});
-      ctx.current = null;
-    },
-    []
-  );
+  useEffect(() => releaseCallAudio, []);
 }
