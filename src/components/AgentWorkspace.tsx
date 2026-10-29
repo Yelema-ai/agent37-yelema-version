@@ -382,6 +382,7 @@ export function AgentWorkspace({
       {canEdit && expert?.catalogueKey && (
         <ExpertEditModal
           expertKey={expert.catalogueKey}
+          photoUrl={expert.photoUrl}
           open={editOpen}
           onOpenChange={setEditOpen}
           onVoice={callee && voiceOn ? () => setVoiceOpen(true) : undefined}

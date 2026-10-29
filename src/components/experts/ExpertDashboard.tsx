@@ -3,7 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { setChatSidePanel } from "@/components/chat/chat-layout";
 import Image from "next/image";
-import { BarChart3, ExternalLink, FileCode, FileText, Loader2, Maximize2, Minimize2, MoreHorizontal, Presentation, RefreshCw, Share2, Sparkles, X } from "lucide-react";
+import { BarChart3, Download, ExternalLink, FileCode, FileText, Loader2, Maximize2, Minimize2, Presentation, RefreshCw, Share2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -148,7 +148,7 @@ function DashboardHeaderControls({
         </div>
       )}
 
-      {/* Four gestures in the bar: reload, share, the rest under « … », enlarge, close. */}
+      {/* Reload, share, download (Leslie, 29/10: a Download button rather than « … »), enlarge, close. */}
       <Button variant="ghost" size="icon" className={icon} onClick={() => void refresh()} disabled={loading} title="Actualiser" aria-label="Actualiser">
         <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
       </Button>
@@ -159,8 +159,8 @@ function DashboardHeaderControls({
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className={icon} title="Télécharger et plus" aria-label="Télécharger et plus">
-            <MoreHorizontal className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className={icon} title="Télécharger" aria-label="Télécharger">
+            <Download className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60 p-1.5">
