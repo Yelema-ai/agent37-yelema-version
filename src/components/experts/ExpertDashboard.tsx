@@ -86,7 +86,7 @@ export function DashboardButtonFace({ inHeader = false, highlighted = false, gen
       )}
     >
       {generating ? <Loader2 className="h-4 w-4 animate-spin text-brand" /> : <BarChart3 className="h-4 w-4" />}
-      <span className={cn(inHeader ? "max-lg:hidden" : "hidden sm:inline", labelHidden && "wide:hidden")}>
+      <span className={cn(inHeader ? "max-[1439px]:hidden" : "hidden sm:inline", labelHidden && "wide:hidden")}>
         {generating ? "Génération…" : inHeader ? "Tableau" : "Tableau de bord"}
       </span>
     </button>

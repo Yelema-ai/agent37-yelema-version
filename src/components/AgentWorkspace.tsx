@@ -266,7 +266,7 @@ export function AgentWorkspace({
                 </span>
               </div>
             )}
-            <nav ref={pillsRef} className="order-3 flex w-full items-center gap-0.5 overflow-x-auto px-2.5 py-2 max-[389px]:[mask-image:linear-gradient(to_right,black_82%,transparent)] sm:gap-1 sm:px-4 [scrollbar-width:none] lg:order-2 lg:h-full lg:w-auto lg:min-w-0 lg:flex-1 lg:gap-5 lg:p-0 [&::-webkit-scrollbar]:hidden">
+            <nav ref={pillsRef} className="order-3 flex w-full items-center gap-0.5 overflow-x-auto px-2.5 py-2 max-[389px]:[mask-image:linear-gradient(to_right,black_82%,transparent)] sm:gap-1 sm:px-4 [scrollbar-width:none] lg:order-2 lg:h-full lg:w-auto lg:min-w-0 lg:flex-1 lg:gap-3 lg:p-0 min-[1440px]:gap-5 [&::-webkit-scrollbar]:hidden">
               {tabs.map((t) => {
                 const on = currentTab === t.id || (t.id === "chat" && isChat);
                 return (
