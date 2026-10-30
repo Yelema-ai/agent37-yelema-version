@@ -16,7 +16,7 @@ const BLOCK = /^\s*(#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||(-{3,}|={3,})\s*$)/;
 // « 🔗 [Ouvrir le manuel](url) »: the emoji goes, the link becomes an action.
 const ACTION_LINK = /(?:🔗\s*)?\[((?:Ouvrir|Télécharger|Voir|Consulter|Lire|Écouter|Valider|Répondre)\b[^\]\n]*)\]\(([^)\s]+)\)/g;
 
-export function chatLayout(text: string): string {
+export function replyLines(text: string): string {
   const out: string[] = [];
   let fenced = false;
   const lines = text.split("\n");

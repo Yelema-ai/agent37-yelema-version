@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chatLayout } from "./chat-layout.ts";
+import { replyLines } from "./reply-lines.ts";
 
 test("a report written one idea per line keeps its lines and its rules", () => {
   const report = [
@@ -14,7 +14,7 @@ test("a report written one idea per line keeps its lines and its rules", () => {
     "────────────── 💬 Une tâche pour la nuit ?",
   ].join("\n");
   assert.equal(
-    chatLayout(report),
+    replyLines(report),
     [
       "🌙 POINT DE FIN DE JOURNÉE · vendredi 30 octobre",
       "",
@@ -34,10 +34,10 @@ test("a report written one idea per line keeps its lines and its rules", () => {
 
 test("code, tables, lists and links in a sentence are left as they are", () => {
   const code = "```\nligne 1\nligne 2\n```";
-  assert.equal(chatLayout(code), code);
+  assert.equal(replyLines(code), code);
   const table = "| a | b |\n| - | - |\n| 1 | 2 |";
-  assert.equal(chatLayout(table), table);
-  assert.equal(chatLayout("Voici :\n- un\n- deux"), "Voici :\n- un\n- deux");
-  assert.equal(chatLayout("Le [rapport](https://x.org) est prêt."), "Le [rapport](https://x.org) est prêt.");
-  assert.equal(chatLayout("Titre\n---"), "Titre\n---");
+  assert.equal(replyLines(table), table);
+  assert.equal(replyLines("Voici :\n- un\n- deux"), "Voici :\n- un\n- deux");
+  assert.equal(replyLines("Le [rapport](https://x.org) est prêt."), "Le [rapport](https://x.org) est prêt.");
+  assert.equal(replyLines("Titre\n---"), "Titre\n---");
 });
