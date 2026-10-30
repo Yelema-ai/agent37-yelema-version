@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isRoutineRun, isRunOf, isSilentRun, routineOfSession, routinePlainText, routineRunText, runOutcome } from "./routines.ts";
+import { isRoutineRun, isUpkeep, isRunOf, isSilentRun, routineOfSession, routinePlainText, routineRunText, runOutcome } from "./routines.ts";
 
 const HINT = "[IMPORTANT: You are running as a scheduled cron job. DELIVERY: … [SILENT] … context for this run, not as a request to schedule another job.]\n\n";
 
@@ -53,4 +53,19 @@ test("routinePlainText keeps the plain words of the task, never a command, a pat
 
 test("routinePlainText is null when only technical lines are left", () => {
   assert.equal(routinePlainText(run("Lance `python3 /home/node/x.py`.\nRéponds [SILENT].")), null);
+});
+
+test("upkeep routines are told apart from the work", () => {
+  const r = (name: string, task: string) => ({ name, task });
+  assert.equal(isUpkeep(r("Mémoire : regrouper les conversations", "Routine de mémoire, silencieuse : personne n'attend de réponse.")), true);
+  assert.equal(isUpkeep(r("Rangement du soir", "Tu es Fatima. Il est 19 h 30 : range ta journée sans écrire.")), true);
+  assert.equal(isUpkeep(r("Révision de la mémoire", "Tu es Djénéba. C'est le 1er du mois : révise ta mémoire.")), true);
+  assert.equal(isUpkeep(r("Revision Memoire", "Note Yelema : les outils cités…")), true);
+  assert.equal(isUpkeep(r("Relecture De Moi", "Note Yelema : les outils cités…")), true);
+  assert.equal(isUpkeep(r("Balayage des connexions", "Tu es Mamadou. Il est 7 h : balaie tes connexions.")), true);
+  assert.equal(isUpkeep(r("Origin7 - synchro inscriptions", "Synchronise les inscriptions du formulaire vers le Google Sheet.")), true);
+  assert.equal(isUpkeep(r("Bilan du mois", "Tu es Djénéba. Regarde d'abord la date : si … réponds exactement `[SILENT]`.")), false);
+  assert.equal(isUpkeep(r("Point de fin de journée", "Tu es Djénéba. Il est 17 h : rends ton point de fin de journée.")), false);
+  assert.equal(isUpkeep(r("Novotel – demandes de devis vers le tableur", "Range les nouvelles demandes de devis dans le tableur et signale-les.")), false);
+  assert.equal(isUpkeep(r("Tri Boite Mail", "Note Yelema : les outils cités…")), false);
 });
