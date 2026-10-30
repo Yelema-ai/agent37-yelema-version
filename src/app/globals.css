@@ -340,6 +340,18 @@ html [data-sonner-toast][data-styled="true"] [data-button] {
 html [data-sonner-toast][data-styled="true"] [data-button]:hover {
   opacity: 0.9;
 }
+/* The deliveries pop-up: its list takes the whole width, the buttons go under it, on the right. */
+html [data-sonner-toast].toast-stack {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+html [data-sonner-toast].toast-stack [data-content] {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+html [data-sonner-toast].toast-stack [data-cancel] {
+  margin-left: auto;
+}
 html [data-sonner-toast] [data-close-button] {
   left: auto;
   right: 0;

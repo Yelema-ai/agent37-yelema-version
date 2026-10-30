@@ -50,8 +50,24 @@ export function DeliverableWatcher() {
       shown.current = [...shown.current.filter((n) => !fresh.some((f) => f.id === n.id)), ...fresh];
       const all = shown.current;
       const one = all.length === 1 ? all[0] : null;
-      const title = one ? one.title : `${all.length} nouvelles livraisons`;
-      const description = one ? one.description : all.map((n) => n.title.replace(/^.*livrables? de /, "") + " : " + n.description).join(" ; ");
+      const count = all.reduce((n, d) => n + d.docs.length, 0);
+      const title = one ? one.title : `${count} nouveaux livrables`;
+      const text = all.map((n) => `${n.expert ? `${n.expert} : ` : ""}${n.docs.join(", ")}`).join("\n");
+      // Several deliveries: one line per Expert, its name in bold, three at most (Leslie, 30/10 : « ça
+      // doit rester clair, lisible et joli »).
+      const description = one ? (
+        one.description
+      ) : (
+        <ul className="mt-1 space-y-1">
+          {all.slice(0, 3).map((n) => (
+            <li key={n.id} className="line-clamp-2">
+              {n.expert && <span className="font-semibold text-ink">{n.expert} </span>}
+              {n.docs.join(", ")}
+            </li>
+          ))}
+          {all.length > 3 && <li className="text-ink-3">et {all.length - 3} autres Experts</li>}
+        </ul>
+      );
       const open = () =>
         router.push(one ? `${agentTabPath(agentId, "files")}?dossier=${encodeURIComponent(one.folder)}` : "/livrables");
       const reset = () => {
@@ -63,6 +79,8 @@ export function DeliverableWatcher() {
       };
       toast(title, {
         id: TOAST_ID,
+        // Text on the whole width, the two buttons under it (globals.css): readable on a phone.
+        className: "toast-stack",
         description,
         action: { label: "Ouvrir", onClick: open },
         cancel: { label: "Ne plus afficher", onClick: stop },
@@ -72,7 +90,7 @@ export function DeliverableWatcher() {
         onDismiss: reset,
         onAutoClose: reset,
       });
-      if (document.hidden) systemNotify(title, description, TOAST_ID, open);
+      if (document.hidden) systemNotify(title, text, TOAST_ID, open);
     },
     [agentId, router]
   );

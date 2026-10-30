@@ -31,7 +31,7 @@ test("a delivery is one notice per Expert, formats together, under a readable na
       { name: "s.html", path: `${D}/s.html` },
     ]),
     [{ id: `livrables:${D}/Recrutement/261030-yelema-fiche-de-poste-fde_v1.pdf`, title: "Nouveau livrable de Djénéba",
-       description: "Yelema fiche de poste FDE (PDF, Word)", folder: `${D}/Recrutement` }]
+       description: "Yelema fiche de poste FDE (PDF, Word)", folder: `${D}/Recrutement`, expert: "Djénéba", docs: ["Yelema fiche de poste FDE (PDF, Word)"] }]
   );
   const two = deliveryNotices([{ name: "Plan Q4.pdf", path: `${D}/Plan Q4.pdf` }, { name: "Note.docx", path: `${D}/Note.docx` }]);
   assert.equal(two[0].title, "2 nouveaux livrables de Djénéba");

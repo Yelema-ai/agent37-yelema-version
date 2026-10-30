@@ -85,6 +85,10 @@ export interface DeliveryNotice {
   id: string;
   title: string;
   description: string;
+  /** Who delivered (the drive's first folder), "" at the root. */
+  expert: string;
+  /** Each document under its readable name, formats together: « Fiche FDE (PDF, Word) ». */
+  docs: string[];
   /** The folder Ouvrir lands in: the first document's. */
   folder: string;
 }
@@ -118,6 +122,8 @@ export function deliveryNotices(entries: readonly { name: string; path: string }
       title: list.length === 1 ? `Nouveau livrable${who}` : `${list.length} nouveaux livrables${who}`,
       description: named.length > 3 ? `${named.slice(0, 3).join(", ")}…` : named.join(", "),
       folder: list[0].path.slice(0, list[0].path.lastIndexOf("/")),
+      expert,
+      docs: named,
     };
   });
 }
