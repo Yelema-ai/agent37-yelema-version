@@ -17,6 +17,13 @@ const BLOCK = /^\s*(#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||(-{3,}|={3,})\s*$)/;
 // « 🌙 POINT DE FIN DE JOURNÉE · vendredi » : a section title written in capitals, bold, so the
 // report's parts stand out (Leslie, 30/10). Up to a « · », a « : » or the end of the line.
 const CAPS_TITLE = /^([^\p{L}*]*?)(\p{Lu}[\p{Lu}\s'’]{4,}\p{Lu})(?=\s*(?:·|:|$))/u;
+// « … sur Yelema : • Yelema est née… • Les Experts… »: bullets written inside the sentence (Leslie,
+// 30/10). Each « • » starts a list item on its own line; a sentence holding a single one is left be.
+const INLINE_BULLET = /\s+•\s+/;
+// « quel est son rôle ? A. Il construit… B. Il est surtout… »: options in the sentence. With an A and
+// a B on the line, each option goes on its own line, its letter in bold.
+const OPTION = /(^|\s)([A-E])[.)]\s+(?=\p{Lu})/gu;
+const LIST_MARKER = /^(\s*)(\d+[.)]|[-*+])\s+/;
 const ACTION_LINK = /(?:🔗\s*)?\[((?:Ouvrir|Télécharger|Voir|Consulter|Lire|Écouter|Valider|Répondre)\b[^\]\n]*)\]\(([^)\s]+)\)/g;
 
 export function replyLines(text: string): string {
@@ -43,6 +50,12 @@ export function replyLines(text: string): string {
       line = line.replace(RULE_END, "");
       after = true;
     }
+    if (line.split(INLINE_BULLET).length > 2) {
+      const [head, ...items] = line.split(INLINE_BULLET);
+      out.push(head.replace(/\s+$/, ""), "", ...items.map((t) => `- ${t.trim()}`), "");
+      continue;
+    }
+    line = splitOptions(line);
     line = line.replace(CAPS_TITLE, (_m, head: string, title: string) => `${head}**${title}**`);
     line = line.replace(ACTION_LINK, (_m, label: string, url: string) => `[**${label}**](${url})`);
     const next = lines[i + 1];
@@ -51,5 +64,15 @@ export function replyLines(text: string): string {
     out.push(keepEnd ? `${line.replace(/\s+$/, "")}  ` : line);
     if (after) out.push("", "---", "");
   }
-  return out.join("\n").replace(/\n{3,}/g, "\n\n");
+  const joined = out.join("\n").replace(/\n{3,}/g, "\n\n");
+  return text.endsWith("\n") ? joined : joined.replace(/\n+$/, "");
+}
+
+function splitOptions(line: string): string {
+  const letters = [...line.matchAll(OPTION)].map((m) => m[2]);
+  if (!letters.includes("A") || !letters.includes("B")) return line;
+  // Inside a list item, the next lines keep the item's indent.
+  const marker = LIST_MARKER.exec(line);
+  const indent = marker ? " ".repeat(marker[0].length) : "";
+  return line.replace(OPTION, (_m, before: string, letter: string) => (before === "" ? `**${letter}.** ` : `  \n${indent}**${letter}.** `));
 }

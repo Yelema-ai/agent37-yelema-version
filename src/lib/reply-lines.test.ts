@@ -48,3 +48,19 @@ test("a section title in capitals is bold, up to its « · »", () => {
   assert.equal(replyLines("✅ 6 réponses clients rédigées"), "✅ 6 réponses clients rédigées");
   assert.equal(replyLines("MTN a validé"), "MTN a validé");
 });
+
+test("bullets written inside a sentence become a list", () => {
+  assert.equal(
+    replyLines("J'ai regardé : • Yelema est née de Mstudio. • Les Experts travaillent dans vos outils. Dites-moi si je me trompe."),
+    "J'ai regardé :\n\n- Yelema est née de Mstudio.\n- Les Experts travaillent dans vos outils. Dites-moi si je me trompe."
+  );
+  assert.equal(replyLines("Prix • 200 000 F"), "Prix • 200 000 F");
+});
+
+test("options A and B in a sentence go on their own lines", () => {
+  assert.equal(
+    replyLines("1. **CTO** : quel est son rôle ? A. Il construit l'équipe. B. Il garde la plateforme. À défaut, je pars sur A."),
+    "1. **CTO** : quel est son rôle ?  \n   **A.** Il construit l'équipe.  \n   **B.** Il garde la plateforme. À défaut, je pars sur A."
+  );
+  assert.equal(replyLines("Le plan A. Rien d'autre."), "Le plan A. Rien d'autre.");
+});

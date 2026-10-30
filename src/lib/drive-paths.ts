@@ -39,3 +39,18 @@ const UPLOAD_PREFIX = /^[a-z0-9]{8}-(?=.)/;
 export function fileLabel(entry: { name: string; path: string }): string {
   return /(^|\/)pi[eè]ces jointes\//i.test(entry.path.normalize("NFC")) ? entry.name.replace(UPLOAD_PREFIX, "") : entry.name;
 }
+
+// « Nouveau livrable s.html » said neither who made it nor where it is, and « s.html » was the
+// Expert's scratch file (Leslie, 30/10). A notice names the Expert (the drive's first folder) and the
+// folder to open; a name of one or two characters, or a temporary file, is no deliverable.
+const SCRATCH = /^(tmp|temp|test|scratch)([-_ .]|$)|\.(tmp|temp|log|lock|part|crdownload|swp)$/i;
+export function deliverableNotice(entry: { name: string; path: string }): { title: string; folder: string } | null {
+  const stem = entry.name.replace(/\.[^.]+$/, "");
+  if (stem.replace(/[^\p{L}\p{N}]/gu, "").length < 3 || SCRATCH.test(entry.name)) return null;
+  const rel = entry.path.startsWith(`${DRIVE_ABS}/`) ? entry.path.slice(DRIVE_ABS.length + 1) : entry.path;
+  const parts = rel.split("/");
+  return {
+    title: parts.length > 1 ? `Nouveau livrable de ${parts[0]}` : "Nouveau livrable",
+    folder: entry.path.slice(0, entry.path.lastIndexOf("/")),
+  };
+}
