@@ -240,6 +240,15 @@ export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: 
             )}
             {!empty && (
               <>
+            {/* A deliverable's folder downloads whole, in one click (Myriel, Leslie 30/10). */}
+            {!fb.atRoot && fb.path && (
+              <Button asChild size="sm" className="h-9">
+                <a href={archiveUrl(agentId, fb.path)} download>
+                  <Download className="h-4 w-4" />
+                  Tout télécharger
+                </a>
+              </Button>
+            )}
             <ViewToggle value={viewMode} onChange={setViewMode} />
             <ToolbarIconButton onClick={fb.refresh} label="Actualiser">
               <RefreshCw className={cn("h-4 w-4", fb.loading && "animate-spin")} />
