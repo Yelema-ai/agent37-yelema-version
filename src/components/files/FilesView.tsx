@@ -27,6 +27,8 @@ import { cn } from "@/lib/utils";
 import { DropOverlay } from "@/components/DropOverlay";
 import { HiddenFileInput } from "@/components/HiddenFileInput";
 import { FilePreview } from "./FilePreview";
+import { VariantGroups } from "./VariantGroups";
+import { groupVariants, isSourceFolder } from "@/lib/visual-variants";
 import { useFileBrowser } from "./useFileBrowser";
 import { BackButton } from "@/components/ui/back-button";
 import { archiveUrl, breadcrumbs, contentUrl, formatBytes, formatMtime, isDir, type FileEntry } from "./types";
@@ -163,6 +165,14 @@ export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: 
   }
 
   const crumbs = fb.path ? breadcrumbs(fb.path) : [];
+  // A folder of visuals in variants shows by visual first (« Tous les fichiers » for the plain list),
+  // and the editable « source » folder always comes last (Myriel, Leslie 30/10).
+  const variants = useMemo(() => groupVariants(fb.visibleEntries.filter((e) => !isDir(e))), [fb.visibleEntries]);
+  const [byVisual, setByVisual] = useState(true);
+  const listEntries = useMemo(() => {
+    const rest = variants && byVisual ? fb.visibleEntries.filter((e) => !variants.grouped.has(e)) : fb.visibleEntries;
+    return [...rest.filter((e) => !(isDir(e) && isSourceFolder(e.name))), ...rest.filter((e) => isDir(e) && isSourceFolder(e.name))];
+  }, [fb.visibleEntries, variants, byVisual]);
   const selectedEntry = useMemo(
     () => (selectedPath == null ? null : fb.visibleEntries.find((entry) => entry.path === selectedPath) ?? null),
     [fb.visibleEntries, selectedPath]
@@ -325,7 +335,33 @@ export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: 
                 uploading={fb.uploading}
                 onUpload={() => uploadRef.current?.click()}
               />
-            ) : viewMode === "list" ? (
+            ) : (
+              <>
+            {variants && (
+              <div className="mb-4 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
+                <div role="radiogroup" aria-label="Présentation des visuels" className="flex h-10 w-fit items-center rounded-md border bg-card p-1 text-sm">
+                  {(
+                    [
+                      [true, "Par visuel"],
+                      [false, "Tous les fichiers"],
+                    ] as const
+                  ).map(([v, label]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      role="radio"
+                      aria-checked={byVisual === v}
+                      onClick={() => setByVisual(v)}
+                      className={cn("h-full rounded px-3 font-medium", byVisual === v ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground")}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {byVisual && <VariantGroups agentId={agentId} groups={variants.groups} onOpen={(e) => openEntry(e)} />}
+              </div>
+            )}
+            {listEntries.length === 0 ? null : viewMode === "list" ? (
               <div className="overflow-x-auto rounded-lg border bg-card">
                 <table className="w-full min-w-[700px] table-fixed text-sm">
                   <colgroup>
@@ -341,7 +377,7 @@ export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: 
                     </tr>
                   </thead>
                   <tbody>
-                    {fb.visibleEntries.map((entry) => {
+                    {listEntries.map((entry) => {
                       const editing = editingPath === entry.path;
                       const selected = selectedEntry?.path === entry.path;
                       return (
@@ -382,7 +418,7 @@ export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: 
               </div>
             ) : (
               <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3">
-                {fb.visibleEntries.map((entry) => {
+                {listEntries.map((entry) => {
                   const editing = editingPath === entry.path;
                   const selected = selectedEntry?.path === entry.path;
                   return (
@@ -417,6 +453,8 @@ export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: 
                   );
                 })}
               </div>
+            )}
+              </>
             )}
 
             {fb.truncated && (
@@ -585,6 +623,7 @@ function EntryName({
         )}
       >
         {entry.name}
+        {dir && isSourceFolder(entry.name) && <small className="block truncate text-xs font-normal text-muted-foreground">Fichiers modifiables : HTML, images, polices</small>}
       </span>
     </div>
   );
