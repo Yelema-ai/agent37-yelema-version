@@ -14,6 +14,9 @@ const TABLE = /^\s*\|/;
 // A line markdown already keeps apart: a heading, a list item, a quote, a table row.
 const BLOCK = /^\s*(#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||(-{3,}|={3,})\s*$)/;
 // « 🔗 [Ouvrir le manuel](url) »: the emoji goes, the link becomes an action.
+// « 🌙 POINT DE FIN DE JOURNÉE · vendredi » : a section title written in capitals, bold, so the
+// report's parts stand out (Leslie, 30/10). Up to a « · », a « : » or the end of the line.
+const CAPS_TITLE = /^([^\p{L}*]*?)(\p{Lu}[\p{Lu}\s'’]{4,}\p{Lu})(?=\s*(?:·|:|$))/u;
 const ACTION_LINK = /(?:🔗\s*)?\[((?:Ouvrir|Télécharger|Voir|Consulter|Lire|Écouter|Valider|Répondre)\b[^\]\n]*)\]\(([^)\s]+)\)/g;
 
 export function replyLines(text: string): string {
@@ -40,6 +43,7 @@ export function replyLines(text: string): string {
       line = line.replace(RULE_END, "");
       after = true;
     }
+    line = line.replace(CAPS_TITLE, (_m, head: string, title: string) => `${head}**${title}**`);
     line = line.replace(ACTION_LINK, (_m, label: string, url: string) => `[**${label}**](${url})`);
     const next = lines[i + 1];
     // A line followed by another line of text keeps its end: a hard break, not a space.

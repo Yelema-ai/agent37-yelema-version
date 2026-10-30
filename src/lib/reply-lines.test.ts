@@ -16,7 +16,7 @@ test("a report written one idea per line keeps its lines and its rules", () => {
   assert.equal(
     replyLines(report),
     [
-      "🌙 POINT DE FIN DE JOURNÉE · vendredi 30 octobre",
+      "🌙 **POINT DE FIN DE JOURNÉE** · vendredi 30 octobre",
       "",
       "---",
       "",
@@ -40,4 +40,11 @@ test("code, tables, lists and links in a sentence are left as they are", () => {
   assert.equal(replyLines("Voici :\n- un\n- deux"), "Voici :\n- un\n- deux");
   assert.equal(replyLines("Le [rapport](https://x.org) est prêt."), "Le [rapport](https://x.org) est prêt.");
   assert.equal(replyLines("Titre\n---"), "Titre\n---");
+});
+
+test("a section title in capitals is bold, up to its « · »", () => {
+  assert.equal(replyLines("🌙 POINT DE FIN DE JOURNÉE · vendredi 30 octobre"), "🌙 **POINT DE FIN DE JOURNÉE** · vendredi 30 octobre");
+  assert.equal(replyLines("📅 MA LECTURE DE LA SEMAINE"), "📅 **MA LECTURE DE LA SEMAINE**");
+  assert.equal(replyLines("✅ 6 réponses clients rédigées"), "✅ 6 réponses clients rédigées");
+  assert.equal(replyLines("MTN a validé"), "MTN a validé");
 });
