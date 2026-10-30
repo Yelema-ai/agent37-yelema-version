@@ -260,6 +260,7 @@ export interface IntegrationConnection {
   email?: string | null;
   accountName?: string | null;
   label?: string | null;
+  alias?: string | null;
   isDefault?: boolean;
   addedBy?: { email: string; name: string | null } | null;
 }

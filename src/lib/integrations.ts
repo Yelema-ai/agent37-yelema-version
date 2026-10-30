@@ -41,8 +41,8 @@ async function connectionsWithDetails(row: AgentRow): Promise<IntegrationConnect
 }
 
 // The back office notes who added the account; a miss only loses the author, never the connection.
-async function connectAndRecord(row: AgentRow, toolkit: string): Promise<IntegrationConnectResult> {
-  const started = await connectToolkit(composioUserId(row), toolkit);
+async function connectAndRecord(row: AgentRow, toolkit: string, alias?: string): Promise<IntegrationConnectResult> {
+  const started = await connectToolkit(composioUserId(row), toolkit, alias);
   const token = await boToken(row);
   if (token && started.connectedAccountId) {
     await backoffice
@@ -56,8 +56,8 @@ export const integrations = {
   toolkits: (row: AgentRow, search?: string): Promise<IntegrationToolkitsResult> =>
     onYelemaComposio(row) ? listToolkits(search) : agent37.listIntegrationToolkits(row.agent37_id, { search }),
 
-  connect: (row: AgentRow, toolkit: string): Promise<IntegrationConnectResult> =>
-    onYelemaComposio(row) ? connectAndRecord(row, toolkit) : agent37.connectIntegration(row.agent37_id, { toolkit }),
+  connect: (row: AgentRow, toolkit: string, alias?: string): Promise<IntegrationConnectResult> =>
+    onYelemaComposio(row) ? connectAndRecord(row, toolkit, alias) : agent37.connectIntegration(row.agent37_id, { toolkit, alias }),
 
   connections: (row: AgentRow): Promise<IntegrationConnectionsResult> =>
     onYelemaComposio(row) ? connectionsWithDetails(row) : agent37.listIntegrationConnections(row.agent37_id),
