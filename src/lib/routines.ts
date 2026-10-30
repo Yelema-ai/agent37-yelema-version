@@ -241,16 +241,48 @@ export function recurrenceOf(parts: CronParts): string {
   return recurrenceLabel(parts.dom, parts.dow) ?? "";
 }
 
-// "Chaque lundi à 07:30", "Le 6 octobre à 09:00, une fois".
+// "07:30" → "7 h 30", "17:00" → "17 h": as a French reader says it (Leslie, 30/10).
+export function frTime(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  return m ? `${h} h ${pad(String(m))}` : `${h} h`;
+}
+
+// « 17 7-21 * * * », the memory routines' hourly runs, read « Toutes les heures de 7 h à 21 h »
+// rather than « Horaire : 17 7-21 * * * ».
+function hourlyLabel(f: string[]): string | null {
+  if (!/^\d{1,2}$/.test(f[0]) || f[2] !== "*" || f[3] !== "*" || !["*", "1-5"].includes(f[4])) return null;
+  const days = f[4] === "1-5" ? ", du lundi au vendredi" : "";
+  const range = /^(\d{1,2})-(\d{1,2})$/.exec(f[1]);
+  if (range) return `Toutes les heures de ${Number(range[1])} h à ${Number(range[2])} h${days}`;
+  const step = /^\*\/(\d{1,2})$/.exec(f[1]);
+  if (step) return `Toutes les ${step[1]} heures${days}`;
+  if (f[1] === "*") return `Toutes les heures${days}`;
+  return null;
+}
+
+// "Chaque lundi à 7 h 30", "Le 6 octobre à 9 h, une fois".
 export function scheduleLabel(schedule: string): string {
   if (isOneOff(schedule)) {
     const d = new Date(schedule);
     if (Number.isNaN(d.getTime())) return schedule;
     const day = d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" });
-    return `Le ${day} à ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}, une fois`;
+    return `Le ${day} à ${frTime(`${d.getUTCHours()}:${d.getUTCMinutes()}`)}, une fois`;
   }
   const parts = cronParts(schedule);
-  return parts ? `${recurrenceOf(parts)} à ${parts.time}` : `Horaire : ${schedule}`;
+  if (parts) return `${recurrenceOf(parts)} à ${frTime(parts.time)}`;
+  return hourlyLabel(schedule.trim().split(/\s+/)) ?? `Horaire : ${schedule}`;
+}
+
+// The next run, in words and in the routines' time zone (UTC): « aujourd’hui à 17 h », « demain à
+// 7 h 30 », « lundi à 7 h 30 », « le 12 novembre à 9 h ».
+export function nextRunLabel(at: number, now = Date.now()): string {
+  const d = new Date(at);
+  const time = frTime(`${d.getUTCHours()}:${d.getUTCMinutes()}`);
+  const days = Math.round((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate())) / 86_400_000);
+  if (days <= 0) return `aujourd’hui à ${time}`;
+  if (days === 1) return `demain à ${time}`;
+  if (days < 7) return `${d.toLocaleDateString("fr-FR", { weekday: "long", timeZone: "UTC" })} à ${time}`;
+  return `le ${d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" })} à ${time}`;
 }
 
 // Today, or a day ahead, as "YYYY-MM-DD" (the form's date field).
