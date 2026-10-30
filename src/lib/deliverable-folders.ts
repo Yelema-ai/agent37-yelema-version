@@ -70,7 +70,8 @@ export function deliverableItems(entries: readonly TreeEntry[]): DeliverableItem
     if (below.slice(0, -1).some((part) => NOT_DELIVERABLE_FOLDER.test(plain(part)))) continue;
     top.files += 1;
     top.modified = Math.max(top.modified, e.modified || 0);
-    if (!top.cover && COVER.test(e.name)) top.cover = e.path;
+    // A picture beats a PDF for the cover: it is what the folder looks like.
+    if (COVER.test(e.name) && (!top.cover || (/\.pdf$/i.test(top.cover) && !/\.pdf$/i.test(e.name)))) top.cover = e.path;
   }
   return [...items.values()].sort((a, b) => b.modified - a.modified || a.name.localeCompare(b.name, "fr"));
 }

@@ -26,7 +26,7 @@ test("one row per subject, newest first, with its owner, files and cover", () =>
       ["charte.pdf", "Koffi", 1, 5],
     ]
   );
-  assert.equal(items[1].cover, `${R}/Koffi/Flyers/flyer.png`);
+  assert.equal(items[1].cover, `${R}/Koffi/Flyers/flyer.png`); // the picture, though the PDF is newer
   assert.equal(items[2].cover, `${R}/Koffi/charte.pdf`);
 });
 

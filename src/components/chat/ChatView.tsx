@@ -90,21 +90,32 @@ export function ChatView({
 
   // Switching threads / starting a new chat empties the staged tray, so a file picked for one
   // conversation can't silently ride along into the next.
-  useEffect(() => {
-    clearFiles();
-  }, [activeSessionId, clearFiles]);
-
-  // « Modifier avec <Expert> » from a file's preview: the file comes pinned above the field, once,
-  // and leaves the address so a refresh does not pin it again.
+  // « Modifier avec <Expert> » from a file's preview (?ref=): the file comes pinned above the field
+  // of the conversation it opened on, and leaves the address so a refresh does not pin it again. Kept
+  // while that conversation stays open (the tray is emptied again as the rail loads); another
+  // conversation drops it (Myriel, Leslie 30/10).
   const { addReference } = att;
-  useEffect(() => {
+  const pinned = useRef<{ path: string; session: string | null } | null | undefined>(undefined);
+  if (pinned.current === undefined && typeof window !== "undefined") {
     const url = new URL(window.location.href);
     const ref = url.searchParams.get("ref");
-    if (!ref) return;
-    addReference(ref);
-    url.searchParams.delete("ref");
-    window.history.replaceState(window.history.state, "", url);
-  }, [addReference, activeSessionId]);
+    pinned.current = ref ? { path: ref, session: url.searchParams.get("session") } : null;
+  }
+  useEffect(() => {
+    clearFiles();
+    const p = pinned.current;
+    if (!p) return;
+    if ((activeSessionId ?? null) !== p.session) {
+      pinned.current = null;
+      return;
+    }
+    addReference(p.path);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("ref")) {
+      url.searchParams.delete("ref");
+      window.history.replaceState(window.history.state, "", url);
+    }
+  }, [activeSessionId, clearFiles, addReference]);
 
   // A message handed over by the home page ("Demander à mon équipe") is sent once, into a new
   // thread, and dropped from the URL so a refresh does not send it again.
