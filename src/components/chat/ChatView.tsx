@@ -94,6 +94,18 @@ export function ChatView({
     clearFiles();
   }, [activeSessionId, clearFiles]);
 
+  // « Modifier avec <Expert> » from a file's preview: the file comes pinned above the field, once,
+  // and leaves the address so a refresh does not pin it again.
+  const { addReference } = att;
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const ref = url.searchParams.get("ref");
+    if (!ref) return;
+    addReference(ref);
+    url.searchParams.delete("ref");
+    window.history.replaceState(window.history.state, "", url);
+  }, [addReference, activeSessionId]);
+
   // A message handed over by the home page ("Demander à mon équipe") is sent once, into a new
   // thread, and dropped from the URL so a refresh does not send it again.
   const sentInitial = useRef(false);
