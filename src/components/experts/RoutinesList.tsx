@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, Loader2, Paperclip, Repeat, Sparkles, Wrench } from "lucide-react";
 import { relativeFr } from "@/lib/fr-dates";
-import { isUpkeep, scheduleLabel, type Routine } from "@/lib/routines";
+import { deliveryLabel, isUpkeep, nextRunLabel, runDayLabel, scheduleLabel, type Routine } from "@/lib/routines";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { RowMenu, Switch, type RoutineActions } from "./RoutinesTable";
@@ -61,10 +61,12 @@ export function RoutinesList({ routines, expertName, ...act }: { routines: Routi
     </button>
   );
 
+  // The next run apart from the schedule, as a date one reads at a glance (Leslie, 30/10: « le
+  // · prochaine est bizarre »).
   const next = (r: Routine) => {
     const at = r.nextRunAt ? Date.parse(r.nextRunAt) : Number.NaN;
-    if (!r.enabled) return " · en pause";
-    return !Number.isNaN(at) ? ` · prochaine ${relativeFr(at)}` : "";
+    const text = !r.enabled ? "En pause" : !Number.isNaN(at) ? `Prochaine : ${nextRunLabel(at)}` : null;
+    return text && <span className="shrink-0 rounded-full bg-soft px-2 py-0.5 text-[11.5px] font-medium text-ink-2">{text}</span>;
   };
 
   return (
@@ -84,9 +86,14 @@ export function RoutinesList({ routines, expertName, ...act }: { routines: Routi
                   </span>
                   <div className="min-w-0 flex-1 leading-tight">
                     <p className="truncate text-[14.5px] font-semibold text-ink">{r.name}</p>
-                    <p className="mt-0.5 truncate text-[12.5px] text-ink-3">
-                      {scheduleLabel(r.schedule)}
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ink-3">
+                      <span className="min-w-0 sm:truncate">{scheduleLabel(r.schedule)}</span>
                       {next(r)}
+                    </p>
+                    {/* When it last ran and where it arrives (PDF du 30/10, « Mes routines »). */}
+                    <p className="mt-1 text-[12px] text-ink-3">
+                      {r.lastRunAt && !Number.isNaN(Date.parse(r.lastRunAt)) ? `Dernière fois ${runDayLabel(Date.parse(r.lastRunAt))}. ` : "Jamais lancée. "}
+                      <span className={deliveryLabel(r.deliver).ok ? "" : "font-semibold text-coral-ink"}>{deliveryLabel(r.deliver).text}.</span>
                     </p>
                   </div>
                   <span className="max-sm:hidden">{voir(r)}</span>

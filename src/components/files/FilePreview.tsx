@@ -1,13 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, Loader2 } from "lucide-react";
-import { BackButton } from "@/components/ui/back-button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Download, Loader2, Pencil } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useExpertsContext } from "@/components/experts/ExpertsProvider";
+import { agentTabPath } from "@/lib/expert-tabs";
+import { fileLabel, seatFolderOf } from "@/lib/drive-paths";
+import type { Expert } from "@/lib/types";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Preview as DocPreview } from "@/components/chat/DocumentCards";
 import { docKind } from "@/lib/drive-links";
-import { contentUrl, previewKind, thumbUrl, type FileEntry } from "./types";
+import { contentUrl, formatBytes, previewKind, thumbUrl, type FileEntry } from "./types";
+import { Markdown } from "@/components/chat/Markdown";
 
 // Preview one file in a dialog. Rendering is chosen by extension:
 //  - image  -> <img> of a reduced copy, the original one click away (an <img> never runs script)
@@ -27,23 +32,49 @@ export function FilePreview({
   onClose: () => void;
 }) {
   const open = !!entry;
+  const router = useRouter();
+  const { experts } = useExpertsContext();
+  const editor = entry ? editorOf(experts, agentId, entry.path) : null;
+  const where = entry ? folderLabel(entry.path) : "";
+  const ext = entry?.name.includes(".") ? entry.name.split(".").pop()!.toUpperCase() : "";
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-4xl">
+      {/* A panel on the right over the dimmed page (Myriel, Leslie 30/10), the whole height; full
+          screen on a phone. Télécharger first, then the one way to change a deliverable. */}
+      <DialogContent className="left-auto right-0 top-0 flex h-dvh w-full max-w-[640px] translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-y-0 border-r-0 p-0 sm:rounded-l-[22px]">
         {entry && (
           <>
-            <DialogHeader className="items-start gap-3 text-left">
-              <BackButton label="Livrables" onClick={onClose} />
-              <DialogTitle className="max-w-full truncate pr-8">{entry.name}</DialogTitle>
+            <DialogHeader className="flex-row items-center gap-3 space-y-0 border-b border-line px-5 py-4 pr-14 text-left">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-tint text-[11px] font-bold text-brand-ink">{ext.slice(0, 4) || "—"}</span>
+              <span className="min-w-0">
+                <DialogTitle className="truncate text-base">{fileLabel(entry)}</DialogTitle>
+                <DialogDescription className="truncate text-xs text-ink-3">
+                  {[where, ext, formatBytes(entry.size)].filter(Boolean).join(" · ")}
+                </DialogDescription>
+              </span>
             </DialogHeader>
-            <PreviewBody agentId={agentId} entry={entry} />
-            <div className="flex justify-end">
-              <Button asChild variant="outline" size="sm">
-                <a href={contentUrl(agentId, entry.path, "attachment")} download={entry.name}>
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <PreviewBody agentId={agentId} entry={entry} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-4">
+              <Button asChild>
+                <a href={contentUrl(agentId, entry.path, "attachment")} download={fileLabel(entry)}>
                   <Download className="h-4 w-4" />
                   Télécharger
                 </a>
               </Button>
+              {editor && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    onClose();
+                    router.push(`${agentTabPath(agentId, "chat", editor.profileId)}?ref=${encodeURIComponent(entry.path)}`);
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                  {editor.name ? `Modifier avec ${editor.name}` : "Modifier dans le chat d’entreprise"}
+                </Button>
+              )}
             </div>
           </>
         )}
@@ -52,10 +83,29 @@ export function FilePreview({
   );
 }
 
+const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+
+// Who changes a deliverable: the Expert whose folder it lies in, or the chat d'entreprise for its own
+// folder. Nobody for what the member brought or a file outside any Expert's folder.
+function editorOf(experts: Expert[], agentId: string, path: string): { profileId: string | null; name: string | null } | null {
+  const parts = path.replace(/^.*?\/Livrables\//, "").split("/");
+  if (parts.length < 2) return null;
+  if (seatFolderOf(parts)) return { profileId: null, name: null };
+  const f = fold(parts[0]);
+  const e = experts.find((x) => x.agentId === agentId && [x.driveFolder, x.displayName, x.catalogueKey].some((n) => n && fold(n) === f));
+  return e ? { profileId: e.profileId, name: e.displayName } : null;
+}
+
+// « Plan de lancement Q4 » for ~/Livrables/Djénéba/Plan de lancement Q4/plan.pdf.
+function folderLabel(path: string): string {
+  const parts = path.replace(/^.*?\/Livrables\//, "").split("/");
+  return parts.length > 1 ? parts[parts.length - 2] : "Livrables";
+}
+
 function PreviewBody({ agentId, entry }: { agentId: string; entry: FileEntry }) {
   const kind = previewKind(entry.name);
   const inline = contentUrl(agentId, entry.path, "inline");
-  const frame = "max-h-[70vh] min-h-[50vh] w-full rounded-md border bg-background";
+  const frame = "h-[calc(100dvh-13rem)] min-h-[50vh] w-full rounded-md border bg-background";
 
   if (kind === "image") {
     return (
@@ -75,7 +125,7 @@ function PreviewBody({ agentId, entry }: { agentId: string; entry: FileEntry }) 
   }
 
   if (kind === "text") {
-    return <TextPreview url={inline} />;
+    return <TextPreview url={inline} markdown={/\.(md|markdown)$/i.test(entry.name)} />;
   }
 
   // Word, Excel and PowerPoint: read here in full, as far as it goes (Leslie, 26/10: the preview opens
@@ -107,7 +157,9 @@ export function ReducedImage({ thumb, original, alt, className, onFail }: { thum
   );
 }
 
-function TextPreview({ url }: { url: string }) {
+// A note written in markdown (.md) reads as a document, titles and lists rendered, not as raw text
+// (PDF du 30/10 : « un .md n'ouvrait rien »).
+function TextPreview({ url, markdown = false }: { url: string; markdown?: boolean }) {
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -134,6 +186,12 @@ function TextPreview({ url }: { url: string }) {
     return (
       <div className="flex min-h-[12rem] items-center justify-center text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    );
+  if (markdown)
+    return (
+      <div className="max-h-[70vh] overflow-auto rounded-md border bg-surface px-6 py-5 text-[15px] leading-relaxed text-ink">
+        <Markdown content={text} />
       </div>
     );
   return (

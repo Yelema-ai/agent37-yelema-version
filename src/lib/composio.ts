@@ -88,13 +88,19 @@ function normalizeToolkit(raw: unknown): IntegrationToolkit {
 
 // ---- Connect ---------------------------------------------------------------------------------
 
+const ALIAS = /^[\p{L}\p{N} ._@-]{1,40}$/u;
+/** An account name the member chose: short and plain, since an expert repeats it to pick the account. */
+export const isAccountAlias = (alias: string): boolean => ALIAS.test(alias);
+
 // A toolkit with no auth config in Yelema's Composio project fails with 4308 "NoManagedAuth". Several accounts
-// of one tool are allowed; the alias (unique per member and tool) is what an expert names to pick one.
-export async function connectToolkit(userId: string, toolkit: string): Promise<IntegrationConnectResult> {
+// of one tool are allowed; the alias (unique per member and tool) is what an expert names to pick one, drawn
+// when the member chose none.
+export async function connectToolkit(userId: string, toolkit: string, alias?: string): Promise<IntegrationConnectResult> {
   if (HIDDEN_TOOLKITS.has(toolkit.toLowerCase())) throw new ApiError(422, "use_unipile_card", "Unipile se relie avec sa carte « WhatsApp et messageries », en haut de cette page.");
+  const chosen = alias?.trim();
   try {
     const session = await client().toolRouter.create(userId, { manageConnections: true, multiAccount: { enable: true } });
-    const request = await session.authorize(toolkit, { alias: `${toolkit.toLowerCase()}-${randomBytes(3).toString("hex")}` });
+    const request = await session.authorize(toolkit, { alias: chosen || `${toolkit.toLowerCase()}-${randomBytes(3).toString("hex")}` });
     return { toolkit, connectedAccountId: request.id, redirectUrl: request.redirectUrl ?? "" };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -116,13 +122,45 @@ interface RawConnectedAccount {
   toolkit?: { slug?: string; name?: string };
   authConfig?: { id?: string; authScheme?: string };
   auth_config?: { id?: string; auth_scheme?: string };
-  state?: { authScheme?: string };
+  state?: { authScheme?: string; val?: Record<string, unknown> };
+  data?: Record<string, unknown>;
+  params?: Record<string, unknown>;
+  alias?: string | null;
   isDisabled?: boolean;
   is_disabled?: boolean;
   createdAt?: string | number;
   created_at?: string | number;
   updatedAt?: string | number;
   updated_at?: string | number;
+}
+
+const EMAIL = /[\w.%+-]+@[\w.-]+\.[a-z]{2,}/i;
+const NAME_KEYS = ["displayName", "display_name", "name", "username", "login", "workspace_name", "workspaceName", "subdomain"];
+// A credential is never read for an identity, even when it happens to contain an "@".
+const SECRET_KEY = /token|secret|key|url|scope|password/i;
+
+function findEmail(value: unknown, depth = 0): string | null {
+  if (typeof value === "string") return EMAIL.exec(value)?.[0] ?? null;
+  if (!value || typeof value !== "object" || depth > 3) return null;
+  for (const [k, v] of Object.entries(value)) {
+    const found = SECRET_KEY.test(k) ? null : findEmail(v, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+function findName(record: Record<string, unknown>): string | null {
+  const name = NAME_KEYS.map((k) => record[k]).find((v): v is string => typeof v === "string" && !!v.trim() && !v.includes("http"));
+  return name?.trim().slice(0, 120) ?? null;
+}
+
+// Who the account is, as Composio saw it at sign-in: what the screen shows when the back office has nothing.
+function accountIdentity(c: RawConnectedAccount): { email: string | null; accountName: string | null } {
+  const sources = [c.data, c.state?.val, c.params].filter((r): r is Record<string, unknown> => !!r && typeof r === "object");
+  return {
+    email: sources.map((r) => findEmail(r)).find(Boolean) ?? null,
+    accountName: sources.map(findName).find(Boolean) ?? null,
+  };
 }
 
 function toEpochMs(value: string | number | undefined): number | null {
@@ -147,6 +185,8 @@ function normalizeConnection(raw: unknown): IntegrationConnection {
     isDisabled: !!(c.isDisabled ?? c.is_disabled) || status === "INACTIVE" || status === "DISABLED",
     createdAt: toEpochMs(c.createdAt ?? c.created_at),
     updatedAt: toEpochMs(c.updatedAt ?? c.updated_at),
+    alias: c.alias ?? null,
+    ...accountIdentity(c),
   };
 }
 

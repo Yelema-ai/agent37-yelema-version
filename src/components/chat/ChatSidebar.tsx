@@ -251,8 +251,8 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
             <span className={cn("block truncate", status === "unread" && "font-semibold text-ink")}>{label}</span>
             {status && <ConversationBadge status={status} />}
           </span>
-          {/* The date gives way to the row's actions on hover. */}
-          <span className="shrink-0 text-[11.5px] font-normal tabular-nums text-ink-3 group-hover:invisible group-has-[[data-state=open]]:invisible pointer-coarse:mr-7 pointer-coarse:group-hover:visible pointer-coarse:group-has-[[data-state=open]]:visible">{shortWhen(activeAt(s))}</span>
+          {/* The date gives way to the row's actions on hover, and while « … » holds the focus (back from its menu). */}
+          <span className="shrink-0 text-[11.5px] font-normal tabular-nums text-ink-3 group-hover:invisible group-has-[[data-state=open]]:invisible group-has-[:focus-visible]:invisible pointer-coarse:mr-7 pointer-coarse:group-hover:visible pointer-coarse:group-has-[[data-state=open]]:visible">{shortWhen(activeAt(s))}</span>
         </button>
         {/* Renommer, Épingler, Copier, Archiver and Supprimer behind « … »: on hover with a mouse, always shown on a touch screen. */}
         <DropdownMenu>
@@ -371,13 +371,14 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                 onClick={() => setFilter(id)}
                 aria-pressed={filter === id}
                 className={cn(
-                  "h-8 whitespace-nowrap rounded-[9px] px-2 text-[12.5px] font-semibold transition-colors",
+                  "relative h-8 whitespace-nowrap rounded-[9px] px-2 text-[12.5px] font-semibold transition-colors",
                   filter === id ? "bg-surface text-brand-ink shadow-[0_1px_3px_rgba(20,10,60,0.12)]" : "text-ink-2 hover:text-ink"
                 )}
               >
                 {label}
-                {/* A dot, not a number (Leslie, 28/10, A): the count is on the bell. */}
-                {id === "unread" && unreadCount > 0 && <span className="ml-1.5 inline-block size-1.5 -translate-y-px rounded-full bg-brand align-middle" aria-label={`${unreadCount} non lues`} />}
+                {/* A dot, not a number (Leslie, 28/10, A): the count is on the bell. In the tab's corner, never
+                    pushing its label against the next one (Leslie, 30/10). */}
+                {id === "unread" && unreadCount > 0 && <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-brand" aria-label={`${unreadCount} non lues`} />}
               </button>
             ))}
           </div>
