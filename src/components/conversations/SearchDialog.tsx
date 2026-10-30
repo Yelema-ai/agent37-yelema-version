@@ -2,12 +2,16 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { FileText, Lock, Search } from "lucide-react";
+import { FileText, Folder, Lock, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { FilePreview } from "@/components/files/FilePreview";
 import { formatMtime, type FileEntry } from "@/components/files/types";
+import { useAllDeliverables } from "@/components/files/useAllDeliverables";
+import type { Expert } from "@/lib/types";
+
+const NO_EXPERTS: Expert[] = [];
 import { fold, useAllConversations, useDriveFiles, useOwnAgentId } from "./useAllConversations";
 
 // Whether the search is open: one store, so the menu's « Rechercher » and Ctrl K open the same one.
@@ -62,6 +66,8 @@ export function SearchDialog() {
   const [preview, setPreview] = useState<FileEntry | null>(null);
   const convs = useAllConversations(ownAgentId, experts, open || warm);
   const files = useDriveFiles(ownAgentId, open || warm);
+  // The deliverables' folders too (« Plan de lancement Q4 »), not only the files at the top of the drive.
+  const folders = useAllDeliverables(open || warm ? ownAgentId : null, open || warm ? experts : NO_EXPERTS);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -94,6 +100,10 @@ export function SearchDialog() {
     return out.sort((a, b) => Number(!!a.expert) - Number(!!b.expert));
   }, [foundConvs, needle]);
   const foundFiles = useMemo(() => (files ?? []).filter((f) => !needle || fold(f.name).includes(needle)).slice(0, SHOWN), [files, needle]);
+  const foundFolders = useMemo(
+    () => (needle ? (folders ?? []).filter((d) => d.folder && fold(d.name).includes(needle)).slice(0, SHOWN) : []),
+    [folders, needle]
+  );
   const loading = convs === null || files === null;
 
   const close = () => {
@@ -117,9 +127,9 @@ export function SearchDialog() {
             />
           </div>
           <div className="max-h-[60vh] overflow-y-auto p-2">
-            {loading && foundConvs.length === 0 && foundFiles.length === 0 ? (
+            {loading && foundConvs.length === 0 && foundFiles.length === 0 && foundFolders.length === 0 ? (
               <p className="px-3 py-6 text-center text-sm text-ink-3">Recherche…</p>
-            ) : foundConvs.length === 0 && foundFiles.length === 0 ? (
+            ) : foundConvs.length === 0 && foundFiles.length === 0 && foundFolders.length === 0 ? (
               <p className="px-3 py-6 text-center text-sm text-ink-3">Aucun résultat pour « {q.trim()} ».</p>
             ) : (
               <>
@@ -155,7 +165,22 @@ export function SearchDialog() {
                 ))}
                   </div>
                 ))}
-                {foundFiles.length > 0 && <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-ink-3">Livrables</p>}
+                {foundFiles.length + foundFolders.length > 0 && <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-ink-3">Livrables</p>}
+                {foundFolders.map((d) => (
+                  <Link key={`${d.agentId}:${d.path}`} href={d.href} onClick={close} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-1.5 text-left hover:bg-soft">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-tint text-brand-ink">
+                      <Folder className="size-3.5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-ink">
+                        <Highlight text={d.name} needle={needle} />
+                      </span>
+                      <span className="block truncate text-xs text-ink-3">
+                        {d.expert?.displayName ?? "Chat d’entreprise"} · {d.files === 1 ? "1 fichier" : `${d.files} fichiers`}
+                      </span>
+                    </span>
+                  </Link>
+                ))}
                 {foundFiles.map((f) => (
                   <button
                     key={f.path}
