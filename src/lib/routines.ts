@@ -153,6 +153,16 @@ export function isMemoryRun(session: SessionHint): boolean {
   return MEMORY_NAME.test(routine) || MEMORY_TASK.test(session.preview ?? "") || MEMORY_TASK.test(session.title ?? "");
 }
 
+export function isMemoryRoutine(r: Pick<Routine, "name" | "task">): boolean {
+  return MEMORY_NAME.test(r.name.trim()) || MEMORY_TASK.test(r.task);
+}
+
+// Whether a past run opens as a conversation: only one that delivered something, and never a memory
+// routine's (Leslie, 30/10: « rien à signaler » is a line in the history, not a page).
+export function runOpens(run: Pick<RoutineRun, "outcome">, routine: Pick<Routine, "name" | "task">): boolean {
+  return run.outcome === "sent" && !isMemoryRoutine(routine);
+}
+
 // Whether a conversation is one of THIS routine's runs: its id, else its title (name cut as Hermes does).
 export function isRunOf(session: SessionHint, routine: { id: string; hermesName: string }): boolean {
   if (session.id.startsWith(`cron_${routine.id}_`)) return true;
