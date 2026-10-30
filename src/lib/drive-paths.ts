@@ -23,3 +23,19 @@ export interface DriveTree {
   /** False when a folder could not be listed: what it holds is missing, not gone. */
   complete: boolean;
 }
+
+// What the member brought, not what an Expert made: the chat's attachments (« Pièces jointes ») and
+// what was imported into an Expert's folder (« Reçus »). Never a deliverable, never announced as one.
+const MEMBER_FOLDER = /(^|\/)(pi[eè]ces jointes|re[cç]us)(\/|$)/i;
+
+export function isMemberUpload(path: string): boolean {
+  return MEMBER_FOLDER.test(path.normalize("NFC"));
+}
+
+// The upload route names an attachment `<8 random characters>-<original name>` (« 18om3i4g-facture.pdf »):
+// on screen, only the original name (Leslie, 30/10). Elsewhere a name is shown as it is.
+const UPLOAD_PREFIX = /^[a-z0-9]{8}-(?=.)/;
+
+export function fileLabel(entry: { name: string; path: string }): string {
+  return /(^|\/)pi[eè]ces jointes\//i.test(entry.path.normalize("NFC")) ? entry.name.replace(UPLOAD_PREFIX, "") : entry.name;
+}

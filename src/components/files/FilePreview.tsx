@@ -5,7 +5,7 @@ import { Download, Loader2, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { agentTabPath } from "@/lib/expert-tabs";
-import { seatFolderOf } from "@/lib/drive-paths";
+import { fileLabel, seatFolderOf } from "@/lib/drive-paths";
 import type { Expert } from "@/lib/types";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,7 @@ export function FilePreview({
             <DialogHeader className="flex-row items-center gap-3 space-y-0 border-b border-line px-5 py-4 pr-14 text-left">
               <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-tint text-[11px] font-bold text-brand-ink">{ext.slice(0, 4) || "—"}</span>
               <span className="min-w-0">
-                <DialogTitle className="truncate text-base">{entry.name}</DialogTitle>
+                <DialogTitle className="truncate text-base">{fileLabel(entry)}</DialogTitle>
                 <DialogDescription className="truncate text-xs text-ink-3">
                   {[where, ext, formatBytes(entry.size)].filter(Boolean).join(" · ")}
                 </DialogDescription>
@@ -57,7 +57,7 @@ export function FilePreview({
             </div>
             <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-4">
               <Button asChild>
-                <a href={contentUrl(agentId, entry.path, "attachment")} download={entry.name}>
+                <a href={contentUrl(agentId, entry.path, "attachment")} download={fileLabel(entry)}>
                   <Download className="h-4 w-4" />
                   Télécharger
                 </a>

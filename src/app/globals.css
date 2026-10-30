@@ -186,12 +186,40 @@
 .chat-markdown {
   overflow-wrap: anywhere;
 }
-.chat-markdown p + p {
-  margin-top: 0.6em;
-}
 .chat-markdown a {
   color: var(--link);
   text-decoration: underline;
+}
+/* Air between blocks (Leslie, 30/10), and a drawn rule is a real one (lib/chat-layout.ts). */
+.chat-markdown p + p {
+  margin-top: 0.9em;
+}
+.chat-markdown hr {
+  margin: 1em 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+/* A link that is an action (« Ouvrir le manuel », its label in bold) reads as a button, apart from the text. */
+.chat-markdown [data-streamdown="link"]:has(> [data-streamdown="strong"]:only-child) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  margin: 0.35em 0.4em 0.15em 0;
+  padding: 0.3em 0.85em;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--brand-ink, var(--link));
+  font-size: 0.92em;
+  text-decoration: none;
+  line-height: 1.4;
+}
+.chat-markdown [data-streamdown="link"]:has(> [data-streamdown="strong"]:only-child)::before {
+  content: "↗";
+  font-weight: 600;
+}
+.chat-markdown [data-streamdown="link"]:has(> [data-streamdown="strong"]:only-child):hover {
+  background: var(--soft);
 }
 /* Lists: the bullets and numbers stay inside the bubble (Streamdown's list-inside is not in the
    compiled CSS, and the reset leaves lists without any indent). */

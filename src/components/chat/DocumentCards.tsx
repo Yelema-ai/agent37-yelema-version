@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { FilePreview, ReducedImage } from "@/components/files/FilePreview";
 import { contentUrl, formatBytes, thumbUrl, type FileEntry } from "@/components/files/types";
+import { fileLabel } from "@/lib/drive-paths";
 
 const KINDS: Record<DocKind, { label: string; icon: LucideIcon; tone: string }> = {
   pdf: { label: "PDF", icon: FileText, tone: "bg-[#FCE8E4] text-[#B4321F] dark:bg-[#3b2520] dark:text-[#f4a28c]" },
@@ -66,13 +67,13 @@ function FileRow({ agentId, doc }: { agentId: string; doc: TurnDoc }) {
         <Icon className="size-5" />
       </span>
       <span className="min-w-0 grow">
-        <span title={doc.name} className="block truncate text-[14px] font-semibold text-ink">
-          {doc.name}
+        <span title={fileLabel(doc)} className="block truncate text-[14px] font-semibold text-ink">
+          {fileLabel(doc)}
         </span>
         <span className="block text-[12.5px] text-ink-3">{size ? `${kindLabel(doc)}, ${size}` : kindLabel(doc)}</span>
       </span>
       <Button asChild className="h-10 shrink-0 rounded-xl px-3 sm:px-4">
-        <a href={contentUrl(agentId, doc.path, "attachment")} download={doc.name} aria-label={`Télécharger ${doc.name}`}>
+        <a href={contentUrl(agentId, doc.path, "attachment")} download={fileLabel(doc)} aria-label={`Télécharger ${fileLabel(doc)}`}>
           <Download /> <span className="hidden min-[400px]:inline">Télécharger</span>
         </a>
       </Button>
@@ -87,7 +88,7 @@ function FormatThumb({ doc, failed }: { doc: TurnDoc; failed?: boolean }) {
   return (
     <span className={cn("flex size-full flex-col items-center justify-center gap-3 px-6 text-center", tone)}>
       <Icon className="size-16" strokeWidth={1.3} />
-      <span className="line-clamp-2 max-w-sm text-[14px] font-semibold">{doc.name}</span>
+      <span className="line-clamp-2 max-w-sm text-[14px] font-semibold">{fileLabel(doc)}</span>
       {failed && <span className="text-[13px] opacity-80">Aperçu indisponible. Téléchargez le fichier pour l’ouvrir.</span>}
     </span>
   );

@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { apiFetch, readApiError } from "@/lib/api";
 import { runPool } from "@/lib/bulk";
-import { DRIVE_ABS, DRIVE_ROOT, isDriveRoot } from "@/lib/drive-paths";
+import { DRIVE_ABS, DRIVE_ROOT, fileLabel, isDriveRoot } from "@/lib/drive-paths";
+import { driveChanged } from "@/lib/drive-store";
 import { isDriveClutter, matchesDriveQuery, sortDriveEntries, type DriveSort } from "@/lib/drive-order";
+import { shrinkPicture } from "@/lib/shrink-image";
 import { TOO_LARGE, tooLarge } from "@/lib/upload-limit";
 import { useDropZone } from "../useDropZone";
 import { joinPath, type FileEntry, type FileListResponse } from "./types";
@@ -45,11 +47,13 @@ export function useFileBrowser(agentId: string, initialPath?: string, inbox?: st
     pathRef.current = path;
   }, [path]);
 
+  // `fresh`: after a change, a reading started before it would answer the folder as it was (the file
+  // just imported shows, then vanishes, then shows again: Leslie, 30/10). It is not reused.
   const fetchList = useCallback(
-    (target?: string) => {
+    (target?: string, fresh = false) => {
       const key = target ?? "";
       const running = inFlight.current.get(key);
-      if (running) return running;
+      if (running && !fresh) return running;
       const qs = target ? `?path=${encodeURIComponent(target)}` : "";
       const p = apiFetch<FileListResponse>(`/api/agents/${agentId}/files/list${qs}`)
         .then((res) => {
@@ -57,7 +61,9 @@ export function useFileBrowser(agentId: string, initialPath?: string, inbox?: st
           cache.current.set(res.path, res);
           return res;
         })
-        .finally(() => inFlight.current.delete(key));
+        .finally(() => {
+          if (inFlight.current.get(key) === p) inFlight.current.delete(key);
+        });
       inFlight.current.set(key, p);
       return p;
     },
@@ -76,15 +82,15 @@ export function useFileBrowser(agentId: string, initialPath?: string, inbox?: st
   // shows at once from the cache, then the fresh listing replaces it.
   // `orRoot`: a folder that cannot be opened falls back to the drive's root instead of an error.
   const load = useCallback(
-    async (target?: string, orRoot = false): Promise<void> => {
+    async (target?: string, orRoot = false, fresh = false): Promise<void> => {
       const seq = ++loadSeq.current;
-      const known = cache.current.get(target ?? "");
+      const known = fresh ? undefined : cache.current.get(target ?? "");
       if (known) show(known);
       setOpening(known ? null : (target ?? null));
       setLoading(true);
       setError(null);
       try {
-        const res = await fetchList(target);
+        const res = await fetchList(target, fresh);
         if (seq !== loadSeq.current) return; // a newer load superseded us
         show(res);
       } catch (e) {
@@ -101,13 +107,21 @@ export function useFileBrowser(agentId: string, initialPath?: string, inbox?: st
     [fetchList, show]
   );
 
-  // After a change in a folder: its cached listing is stale, read it again before showing it.
+  // After a change in a folder: its cached listing is stale under every name it was read by (the path
+  // asked and the path resolved), and a reading in flight predates the change: read it again, fresh.
+  // The drive's other views (Livrables, the home) are told too.
+  const forget = useCallback((target?: string) => {
+    const key = target ?? "";
+    const resolved = cache.current.get(key)?.path ?? key;
+    for (const [k, v] of cache.current) if (k === key || k === resolved || v.path === resolved) cache.current.delete(k);
+  }, []);
   const reload = useCallback(
     (target?: string) => {
-      cache.current.delete(target ?? "");
-      return load(target);
+      forget(target);
+      driveChanged(agentId);
+      return load(target, false, true);
     },
-    [load]
+    [agentId, forget, load]
   );
 
   // Read a folder ahead (pointer resting on it, or pressed), so the click opens it at once. One pending
@@ -195,7 +209,14 @@ export function useFileBrowser(agentId: string, initialPath?: string, inbox?: st
   // overwrite=true mirrors a normal desktop drop (replace in place); a failed file is toasted but
   // doesn't abort the batch. Concurrency is bounded so a deep folder can't open a socket per file.
   const uploadEntries = useCallback(
-    async (all: { file: File; relPath: string }[]) => {
+    async (given: { file: File; relPath: string }[]) => {
+      // A photo over the limit is made smaller first (lib/shrink-image.ts), under the name it now has.
+      const all = await Promise.all(
+        given.map(async ({ file, relPath }) => {
+          const small = await shrinkPicture(file);
+          return small === file ? { file, relPath } : { file: small, relPath: relPath.replace(/[^/]+$/, small.name) };
+        })
+      );
       // A file over the limit would be refused by the host with a page of its own: say it here.
       const items = all.filter(({ file }) => !tooLarge(file));
       for (const { relPath } of all.filter(({ file }) => tooLarge(file)).slice(0, 3)) toast.error(`${relPath} : ${TOO_LARGE}`);
@@ -225,12 +246,14 @@ export function useFileBrowser(agentId: string, initialPath?: string, inbox?: st
       // Brought into the inbox from elsewhere: the inbox opens, so what was imported shows.
       if (pathRef.current === path) {
         if (dir !== path && ok > 0) {
-          cache.current.delete(dir);
-          navigate(dir);
+          forget(dir);
+          driveChanged(agentId);
+          setQuery("");
+          await load(dir, false, true);
         } else await reload(path);
       }
     },
-    [path, putFile, reload, uploadDir, navigate]
+    [agentId, path, putFile, reload, uploadDir, forget, load]
   );
 
   // Flat upload (the multi-file picker + drag-drop): each file lands by its basename.
@@ -289,6 +312,31 @@ export function useFileBrowser(agentId: string, initialPath?: string, inbox?: st
     [agentId, path, reload]
   );
 
+  // Move into another folder of the drive (« Déplacer vers… », or a file dropped on a folder: Leslie, 30/10).
+  const move = useCallback(
+    async (entry: FileEntry, destDir: string) => {
+      const dest = destDir.replace(DRIVE_ROOT, DRIVE_ABS).replace(/\/+$/, "");
+      // Already there, or onto itself: nothing to do.
+      if (!path || dest === entry.path || entry.path.slice(0, entry.path.lastIndexOf("/")) === dest) return;
+      if (dest.startsWith(`${entry.path}/`)) {
+        toast.error("Un dossier ne peut pas aller dans lui-même.");
+        return;
+      }
+      try {
+        await apiFetch(`/api/agents/${agentId}/files`, {
+          method: "PATCH",
+          body: JSON.stringify({ from: entry.path, to: joinPath(dest, entry.name) }),
+        });
+        forget(dest);
+        toast.success(`${fileLabel(entry)} déplacé dans ${isDriveRoot(dest) ? "Livrables" : dest.split("/").pop()}`);
+        await reload(path);
+      } catch (e) {
+        toast.error((e as Error).message || "Le déplacement a échoué.");
+      }
+    },
+    [agentId, path, forget, reload]
+  );
+
   const remove = useCallback(
     async (entry: FileEntry) => {
       try {
@@ -343,6 +391,7 @@ export function useFileBrowser(agentId: string, initialPath?: string, inbox?: st
     uploadFolder,
     createDir,
     rename,
+    move,
     remove,
   };
 }

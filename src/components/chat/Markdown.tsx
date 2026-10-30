@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
 import { ANGLED, BARE, citedFolder, CODE, FOLDER_BARE, FOLDER_CODE, isHiddenInChat, LINKED, normDrivePath, noteFolder, safeDecode } from "@/lib/drive-links";
+import { chatLayout } from "@/lib/chat-layout";
 import { agentTabPath } from "@/lib/expert-tabs";
 
 const HIDDEN_LINK = /\[([^\]\n]*)\]\(<?(?:file:\/\/|sandbox:)?((?:\/home\/node|~)\/Livrables\/[^)>\n]+)>?\)/g;
@@ -88,7 +89,7 @@ export const Markdown = memo(function Markdown({ content, agentId, profileId }: 
   return (
     <div onClickCapture={openFolder}>
       <Streamdown className="chat-markdown text-[15px] leading-relaxed" linkSafety={LINK_SAFETY} translations={FR}>
-        {agentId ? linkDriveFiles(content, agentId, profileId) : content}
+        {chatLayout(agentId ? linkDriveFiles(content, agentId, profileId) : content)}
       </Streamdown>
     </div>
   );

@@ -13,6 +13,7 @@ import type { Expert } from "@/lib/types";
 
 const NO_EXPERTS: Expert[] = [];
 import { fold, useAllConversations, useDriveFiles, useOwnAgentId } from "./useAllConversations";
+import { fileLabel } from "@/lib/drive-paths";
 
 // Whether the search is open: one store, so the menu's « Rechercher » and Ctrl K open the same one.
 const listeners = new Set<() => void>();
@@ -99,7 +100,7 @@ export function SearchDialog() {
     }
     return out.sort((a, b) => Number(!!a.expert) - Number(!!b.expert));
   }, [foundConvs, needle]);
-  const foundFiles = useMemo(() => (files ?? []).filter((f) => !needle || fold(f.name).includes(needle)).slice(0, SHOWN), [files, needle]);
+  const foundFiles = useMemo(() => (files ?? []).filter((f) => !needle || fold(fileLabel(f)).includes(needle)).slice(0, SHOWN), [files, needle]);
   const foundFolders = useMemo(
     () => (needle ? (folders ?? []).filter((d) => d.folder && fold(d.name).includes(needle)).slice(0, SHOWN) : []),
     [folders, needle]
@@ -196,7 +197,7 @@ export function SearchDialog() {
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-ink">
-                        <Highlight text={f.name} needle={needle} />
+                        <Highlight text={fileLabel(f)} needle={needle} />
                       </span>
                       <span className="block truncate text-xs text-ink-3">{formatMtime(f.modified)}</span>
                     </span>

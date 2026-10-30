@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import {
   ChevronDown,
   ChevronLeft,
@@ -8,6 +8,7 @@ import {
   Download,
   File as FileIcon,
   Folder,
+  FolderInput,
   FolderUp,
   Grid2X2,
   Link2,
@@ -24,9 +25,11 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { fileLabel } from "@/lib/drive-paths";
 import { DropOverlay } from "@/components/DropOverlay";
 import { HiddenFileInput } from "@/components/HiddenFileInput";
 import { FilePreview } from "./FilePreview";
+import { MoveDialog } from "./MoveDialog";
 import { VariantGroups } from "./VariantGroups";
 import { groupVariants, isSourceFolder } from "@/lib/visual-variants";
 import { useFileBrowser } from "./useFileBrowser";
@@ -40,6 +43,8 @@ type ViewMode = "list" | "grid";
 // pane is a drop zone for uploads. Look + primitives mirror the Chat tab: same shadcn Dialog/Input,
 // lucide icons, sonner toasts (raised inside the hook), and the hover-action pattern.
 // A pointer only crossing a folder reads nothing; one resting on it this long reads it ahead.
+// What a row of the list carries when dragged, told apart from files dragged in from the computer.
+const MOVE_TYPE = "application/x-yelema-path";
 const HOVER_INTENT_MS = 150;
 
 export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: string; initialPath?: string; openPath?: string | null; inbox?: string }) {
@@ -55,6 +60,9 @@ export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: 
   }, [openPath, fbNavigate]);
   const [preview, setPreview] = useState<FileEntry | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FileEntry | null>(null);
+  const [moving, setMoving] = useState<FileEntry | null>(null);
+  // The folder a dragged file of the list is over (Leslie, 30/10: déplacer un livrable dans un dossier).
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -161,6 +169,33 @@ export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: 
       onPointerEnter: isDir(entry) ? () => fb.prefetch(entry.path, HOVER_INTENT_MS) : undefined,
       onPointerLeave: isDir(entry) ? () => fb.prefetch(null) : undefined,
       onPointerDown: isDir(entry) ? () => fb.prefetch(entry.path) : undefined,
+      // A file or folder of the list dragged onto a folder moves into it. Files dragged in from the
+      // computer are left to the import drop zone around.
+      draggable: true,
+      onDragStart: (e: DragEvent<HTMLElement>) => {
+        e.dataTransfer.setData(MOVE_TYPE, entry.path);
+        e.dataTransfer.effectAllowed = "move";
+      },
+      onDragOver: isDir(entry)
+        ? (e: DragEvent<HTMLElement>) => {
+            if (!e.dataTransfer.types.includes(MOVE_TYPE)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            setDropTarget(entry.path);
+          }
+        : undefined,
+      onDragLeave: isDir(entry) ? () => setDropTarget((t) => (t === entry.path ? null : t)) : undefined,
+      onDrop: isDir(entry)
+        ? (e: DragEvent<HTMLElement>) => {
+            const from = e.dataTransfer.getData(MOVE_TYPE);
+            setDropTarget(null);
+            if (!from) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const moved = fb.visibleEntries.find((x) => x.path === from);
+            if (moved && moved.path !== entry.path) void fb.move(moved, entry.path);
+          }
+        : undefined,
     };
   }
 
@@ -235,6 +270,7 @@ export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: 
                 agentId={agentId}
                 entry={selectedEntry}
                 onRename={startRename}
+                onMove={setMoving}
                 onDelete={selectForDelete}
               />
             )}
@@ -395,7 +431,8 @@ export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: 
                           aria-selected={selected}
                           className={cn(
                             "cursor-default select-none border-b border-border/70 outline-none last:border-0 hover:bg-secondary/35 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                            selected && "bg-primary/10 text-foreground hover:bg-primary/10"
+                            selected && "bg-primary/10 text-foreground hover:bg-primary/10",
+                            dropTarget === entry.path && "bg-primary/15 ring-2 ring-inset ring-primary/40"
                           )}
                           {...entryHandlers(entry)}
                         >
@@ -436,7 +473,8 @@ export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: 
                       aria-selected={selected}
                       className={cn(
                         "group flex min-h-44 cursor-default select-none flex-col rounded-lg border bg-card p-3 outline-none transition-colors hover:border-primary/35 hover:bg-secondary/25 focus-visible:ring-2 focus-visible:ring-ring",
-                        selected && "border-primary/35 bg-primary/10 hover:border-primary/35 hover:bg-primary/10"
+                        selected && "border-primary/35 bg-primary/10 hover:border-primary/35 hover:bg-primary/10",
+                        dropTarget === entry.path && "border-primary bg-primary/15"
                       )}
                       {...entryHandlers(entry)}
                     >
@@ -476,6 +514,7 @@ export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: 
       </div>
 
       <FilePreview agentId={agentId} entry={preview} onClose={() => setPreview(null)} />
+      <MoveDialog agentId={agentId} entry={moving} onMove={(entry, dest) => void fb.move(entry, dest)} onClose={() => setMoving(null)} />
 
 
       <ConfirmDialog
@@ -558,11 +597,13 @@ function SelectedActions({
   agentId,
   entry,
   onRename,
+  onMove,
   onDelete,
 }: {
   agentId: string;
   entry: FileEntry;
   onRename: (entry: FileEntry) => void;
+  onMove: (entry: FileEntry) => void;
   onDelete: (entry: FileEntry) => void;
 }) {
   return (
@@ -570,7 +611,7 @@ function SelectedActions({
       <Button asChild variant="outline" size="icon" className="size-9" title="Télécharger">
         <a
           href={isDir(entry) ? archiveUrl(agentId, entry.path) : contentUrl(agentId, entry.path, "attachment")}
-          download={isDir(entry) ? `${entry.name}.tar.gz` : entry.name}
+          download={isDir(entry) ? `${entry.name}.tar.gz` : fileLabel(entry)}
           aria-label={isDir(entry) ? `Télécharger ${entry.name} en archive .tar.gz` : `Télécharger ${entry.name}`}
         >
           <Download className="h-4 w-4" />
@@ -586,6 +627,17 @@ function SelectedActions({
         title="Renommer"
       >
         <Pencil className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={() => onMove(entry)}
+        className="size-9"
+        aria-label={`Déplacer ${fileLabel(entry)}`}
+        title="Déplacer vers…"
+      >
+        <FolderInput className="h-4 w-4" />
       </Button>
       <Button
         type="button"
@@ -631,7 +683,7 @@ function EntryName({
           entry.hidden && "text-muted-foreground"
         )}
       >
-        {entry.name}
+        {fileLabel(entry)}
         {dir && isSourceFolder(entry.name) && <small className="block truncate text-xs font-normal text-muted-foreground">Fichiers modifiables : HTML, images, polices</small>}
       </span>
     </div>

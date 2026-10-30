@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { isDriveClutter } from "@/lib/drive-order";
+import { fileLabel, isMemberUpload } from "@/lib/drive-paths";
 import { driveTree, onDriveChanged } from "@/lib/drive-store";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { readNotifyPrefs } from "@/lib/notify-prefs";
@@ -34,14 +35,15 @@ export function DeliverableWatcher() {
       const tree = await driveTree(agentId, maxAgeMs).catch(() => null);
       // A folder that failed to list would read as files gone, then as new ones on the next pass.
       if (!tree || !tree.complete) return;
-      const files = tree.entries.filter((e) => e.type === "file" && !e.hidden && !isDriveClutter(e));
+      // What the member brought is no deliverable of an Expert: never announced (Leslie, 30/10).
+      const files = tree.entries.filter((e) => e.type === "file" && !e.hidden && !isDriveClutter(e) && !isMemberUpload(e.path));
       const before = seen.current;
       seen.current = new Set(files.map((f) => f.path));
       if (!before || !readNotifyPrefs().deliverable) return;
       const open = () => router.push(agentTabPath(agentId, "files"));
       for (const f of files.filter((f) => !before.has(f.path))) {
-        toast("Nouveau livrable", { id: `livrable:${f.path}`, description: f.name, action: { label: "Ouvrir", onClick: open }, duration: 8000 });
-        if (document.hidden) systemNotify("Nouveau livrable", f.name, `livrable:${f.path}`, open);
+        toast("Nouveau livrable", { id: `livrable:${f.path}`, description: fileLabel(f), action: { label: "Ouvrir", onClick: open }, duration: 8000 });
+        if (document.hidden) systemNotify("Nouveau livrable", fileLabel(f), `livrable:${f.path}`, open);
       }
     },
     [agentId, router]
