@@ -3,6 +3,7 @@ import { requireAgentAccess } from "@/lib/auth";
 import { handleError, json } from "@/lib/http";
 import { profileQuery, resolveProfile } from "@/lib/profiles";
 import { isMemoryRun, routineOfSession } from "@/lib/routines";
+import { sessionTitle } from "@/lib/session-title";
 import { isVoiceSession } from "@/lib/voice-sessions";
 import { undeliveredRunIds } from "@/lib/silent-runs";
 
@@ -28,7 +29,7 @@ export async function GET(request: Request, { params }: Ctx) {
       .filter((s) => !isVoiceSession(s.preview) && !hidden.has(s.id) && !isMemoryRun(s))
       .map((s) => ({
         session_id: s.id,
-        title: s.title?.trim() || s.preview?.trim() || null,
+        title: sessionTitle(s.title, s.preview),
         last_active: s.last_active ?? s.started_at ?? 0,
         // A routine's run, by the routine's name: shown as such, never as the member's own words.
         routine: routineOfSession(s),
