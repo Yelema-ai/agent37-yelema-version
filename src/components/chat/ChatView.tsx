@@ -14,7 +14,9 @@ import { agentTabPath } from "@/lib/expert-tabs";
 import { citedFolder, type TurnDoc } from "@/lib/drive-links";
 import { ConversationDocs } from "./ConversationDocs";
 import { DropOverlay } from "@/components/DropOverlay";
+import { useRouter } from "next/navigation";
 import { ChatComposer } from "./ChatComposer";
+import { ExpertReadiness } from "@/components/experts/ExpertReadiness";
 import { ChatMessages } from "./ChatMessages";
 import { ChatSessionsPanel } from "./ChatSessionsPanel";
 import { setChatFull, setChatListHidden, useChatFull, useChatListHidden, useChatSidePanel } from "./chat-layout";
@@ -163,6 +165,7 @@ export function ChatView({
   const headerTitle = activeTitle || (activeSessionId ? "Discussion" : "Nouvelle discussion");
   // The expert this chat talks to, dressed by the catalogue (name, portrait); null on the
   // instance's default home or while the list loads.
+  const router = useRouter();
   const { experts } = useExpertsContext();
   const expert = useMemo(
     () => (profile ? (experts.find((e) => e.agentId === agentId && e.profileId === profile) ?? null) : null),
@@ -310,6 +313,16 @@ export function ChatView({
         <div className={cn("mx-auto w-full", showWelcome ? "max-w-2xl" : "max-w-3xl")} aria-live="polite">
           {error && <p className="mb-2 rounded-xl bg-ko-pale px-3 py-2 text-[13px] text-ko">{error}</p>}
         </div>
+        {profile && (
+          <ExpertReadiness
+            variant="banner"
+            agentId={agentId}
+            profileId={profile}
+            expertName={agentName}
+            onOpenTools={() => router.push("/integrations/connecteurs")}
+            className={cn("mb-3", showWelcome && "max-w-2xl")}
+          />
+        )}
         <ChatComposer
           agentId={agentId}
           isStreaming={isStreaming}

@@ -35,7 +35,7 @@ export function ExpertReadiness({
   expertName: string;
   onOpenTools: () => void;
   className?: string;
-  variant?: "chip" | "dot";
+  variant?: "chip" | "dot" | "banner";
 }) {
   const jzKey = `jour-zero:${agentId}:${profileId}`;
   const [jz, setJz] = useState<JourZero | null>(() => cached<JourZero>(jzKey) ?? null);
@@ -56,6 +56,8 @@ export function ExpertReadiness({
   }, [agentId, profileId, jzKey]);
 
   // During an update the chip says so: the expert answers slower, and it is not a fault of its own.
+  // The banner above the chat bar has nothing to say then, nor once the expert is ready.
+  if (variant === "banner" && (updating || !jz || readiness(jz).state === "ready")) return null;
   if (updating)
     return (
       <span role="status" className={cn("inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-[12px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300", className)}>
@@ -67,7 +69,30 @@ export function ExpertReadiness({
   const Icon = r.state === "ready" ? Check : CircleDashed;
   return (
     <>
-      {variant === "dot" ? (
+      {variant === "banner" ? (
+        // Above the chat bar while the expert's day-zero preparation is not complete (Myriel, Leslie
+        // 30/10): what is left, and « Continuer » opens the checks with the way to each.
+        <div className={cn("mx-auto flex w-full max-w-3xl items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/25 dark:bg-amber-500/10", className)}>
+          <span className="min-w-0 flex-1">
+            <b className="block text-sm text-ink">Préparez {expertName} pour de meilleurs résultats</b>
+            <span className="block text-xs text-ink-2">
+              {r.state === "absent"
+                ? "Sa préparation du premier jour n’est pas encore faite."
+                : (() => {
+                    const left = jz.checks.filter((c) => !c.ok).length;
+                    return `${left === 1 ? "1 étape à faire" : `${left} étapes à faire`} · ${jz.checks.length - left}/${jz.checks.length} terminées`;
+                  })()}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="inline-flex h-10 shrink-0 items-center rounded-xl border border-line bg-surface px-4 text-sm font-semibold text-ink hover:bg-soft"
+          >
+            Continuer
+          </button>
+        </div>
+      ) : variant === "dot" ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
