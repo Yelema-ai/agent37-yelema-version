@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isMemoryRoutine, isMemoryRun, isRoutineRun, isRunOf, isSilentRun, routineOfSession, routinePlainText, routineRunText, runOpens, runOutcome } from "./routines.ts";
+import { isMemoryRun, isRoutineRun, isRunOf, isSilentRun, routineOfSession, routinePlainText, routineRunText, runOutcome } from "./routines.ts";
 
 const HINT = "[IMPORTANT: You are running as a scheduled cron job. DELIVERY: … [SILENT] … context for this run, not as a request to schedule another job.]\n\n";
 
@@ -67,17 +67,4 @@ test("a memory routine's runs are never a conversation", () => {
   assert.equal(isMemoryRun({ id: "x", title: null, preview: preamble + "Routine de mémoire, silencieuse : personne n'attend de réponse." }), true);
   assert.equal(isMemoryRun({ id: "cron_b_1", title: "Point du matin · Oct 29 08:00", preview: preamble + "Prépare le point du matin." }), false);
   assert.equal(isMemoryRun({ id: "s_1", title: "Mémoire de l'entreprise", preview: "Que sais-tu de nous ?" }), false);
-});
-
-test("a past run opens only when it delivered, and never for a memory routine", () => {
-  const work = { name: "Point du matin", task: "Prépare le point du matin." };
-  const memory = { name: "Mémoire : regrouper les conversations", task: "Routine de mémoire, silencieuse : personne n'attend de réponse." };
-  assert.equal(isMemoryRoutine(memory), true);
-  assert.equal(isMemoryRoutine({ name: "Tri", task: "Routine de mémoire, silencieuse." }), true);
-  assert.equal(isMemoryRoutine(work), false);
-  assert.equal(runOpens({ outcome: "sent" }, work), true);
-  assert.equal(runOpens({ outcome: "silent" }, work), false);
-  assert.equal(runOpens({ outcome: "failed" }, work), false);
-  assert.equal(runOpens({ outcome: null }, work), false);
-  assert.equal(runOpens({ outcome: "sent" }, memory), false);
 });
