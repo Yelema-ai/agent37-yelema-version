@@ -14,7 +14,7 @@ import { agentTabPath } from "@/lib/expert-tabs";
 import { citedFolder, type TurnDoc } from "@/lib/drive-links";
 import { ConversationDocs } from "./ConversationDocs";
 import { DropOverlay } from "@/components/DropOverlay";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChatComposer } from "./ChatComposer";
 import { ExpertReadiness } from "@/components/experts/ExpertReadiness";
 import { ChatMessages } from "./ChatMessages";
@@ -95,12 +95,10 @@ export function ChatView({
   // while that conversation stays open (the tray is emptied again as the rail loads); another
   // conversation drops it (Myriel, Leslie 30/10).
   const { addReference } = att;
-  const pinned = useRef<{ path: string; session: string | null } | null | undefined>(undefined);
-  if (pinned.current === undefined && typeof window !== "undefined") {
-    const url = new URL(window.location.href);
-    const ref = url.searchParams.get("ref");
-    pinned.current = ref ? { path: ref, session: url.searchParams.get("session") } : null;
-  }
+  // The chat stays mounted while another tab of the expert shows: the address is read as it changes.
+  const params = useSearchParams();
+  const refParam = params.get("ref");
+  const pinned = useRef<{ path: string; session: string | null } | null>(null);
   useEffect(() => {
     clearFiles();
     const p = pinned.current;
@@ -110,12 +108,16 @@ export function ChatView({
       return;
     }
     addReference(p.path);
-    const url = new URL(window.location.href);
-    if (url.searchParams.has("ref")) {
-      url.searchParams.delete("ref");
-      window.history.replaceState(window.history.state, "", url);
-    }
   }, [activeSessionId, clearFiles, addReference]);
+  useEffect(() => {
+    if (!refParam) return;
+    const url = new URL(window.location.href);
+    pinned.current = { path: refParam, session: url.searchParams.get("session") };
+    if ((activeSessionId ?? null) === pinned.current.session) addReference(refParam);
+    url.searchParams.delete("ref");
+    window.history.replaceState(window.history.state, "", url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refParam]);
 
   // A message handed over by the home page ("Demander à mon équipe") is sent once, into a new
   // thread, and dropped from the URL so a refresh does not send it again.
