@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Preview as DocPreview } from "@/components/chat/DocumentCards";
 import { docKind } from "@/lib/drive-links";
 import { contentUrl, formatBytes, previewKind, thumbUrl, type FileEntry } from "./types";
+import { Markdown } from "@/components/chat/Markdown";
 
 // Preview one file in a dialog. Rendering is chosen by extension:
 //  - image  -> <img> of a reduced copy, the original one click away (an <img> never runs script)
@@ -124,7 +125,7 @@ function PreviewBody({ agentId, entry }: { agentId: string; entry: FileEntry }) 
   }
 
   if (kind === "text") {
-    return <TextPreview url={inline} />;
+    return <TextPreview url={inline} markdown={/\.(md|markdown)$/i.test(entry.name)} />;
   }
 
   // Word, Excel and PowerPoint: read here in full, as far as it goes (Leslie, 26/10: the preview opens
@@ -156,7 +157,9 @@ export function ReducedImage({ thumb, original, alt, className, onFail }: { thum
   );
 }
 
-function TextPreview({ url }: { url: string }) {
+// A note written in markdown (.md) reads as a document, titles and lists rendered, not as raw text
+// (PDF du 30/10 : « un .md n'ouvrait rien »).
+function TextPreview({ url, markdown = false }: { url: string; markdown?: boolean }) {
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -183,6 +186,12 @@ function TextPreview({ url }: { url: string }) {
     return (
       <div className="flex min-h-[12rem] items-center justify-center text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    );
+  if (markdown)
+    return (
+      <div className="max-h-[70vh] overflow-auto rounded-md border bg-surface px-6 py-5 text-[15px] leading-relaxed text-ink">
+        <Markdown content={text} />
       </div>
     );
   return (

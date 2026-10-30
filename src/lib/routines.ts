@@ -18,6 +18,8 @@ export interface Routine {
   // ISO date-times from Hermes; null before the first run, or while paused for the next one.
   lastRunAt: string | null;
   nextRunAt: string | null;
+  /** Where Hermes sends the result: « telegram:…,local », « local », « origin », or null. */
+  deliver?: string | null;
 }
 
 // The time zone schedules are read in. The instances run on UTC, which is Abidjan's time all year.
@@ -241,10 +243,11 @@ export function recurrenceOf(parts: CronParts): string {
   return recurrenceLabel(parts.dom, parts.dow) ?? "";
 }
 
-// "07:30" → "7 h 30", "17:00" → "17 h": as a French reader says it (Leslie, 30/10).
+// "07:30" → "7 h 30", "17:00" → "17 h": as a French reader says it (Leslie, 30/10), with no-break
+// spaces so a narrow row never splits « 7 h » from « 30 ».
 export function frTime(time: string): string {
   const [h, m] = time.split(":").map(Number);
-  return m ? `${h} h ${pad(String(m))}` : `${h} h`;
+  return m ? `${h}\u00a0h\u00a0${pad(String(m))}` : `${h}\u00a0h`;
 }
 
 // « 17 7-21 * * * », the memory routines' hourly runs, read « Toutes les heures de 7 h à 21 h »
@@ -253,7 +256,7 @@ function hourlyLabel(f: string[]): string | null {
   if (!/^\d{1,2}$/.test(f[0]) || f[2] !== "*" || f[3] !== "*" || !["*", "1-5"].includes(f[4])) return null;
   const days = f[4] === "1-5" ? ", du lundi au vendredi" : "";
   const range = /^(\d{1,2})-(\d{1,2})$/.exec(f[1]);
-  if (range) return `Toutes les heures de ${Number(range[1])} h à ${Number(range[2])} h${days}`;
+  if (range) return `Toutes les heures de ${frTime(range[1])} à ${frTime(range[2])}${days}`;
   const step = /^\*\/(\d{1,2})$/.exec(f[1]);
   if (step) return `Toutes les ${step[1]} heures${days}`;
   if (f[1] === "*") return `Toutes les heures${days}`;
@@ -273,16 +276,32 @@ export function scheduleLabel(schedule: string): string {
   return hourlyLabel(schedule.trim().split(/\s+/)) ?? `Horaire : ${schedule}`;
 }
 
-// The next run, in words and in the routines' time zone (UTC): « aujourd’hui à 17 h », « demain à
-// 7 h 30 », « lundi à 7 h 30 », « le 12 novembre à 9 h ».
-export function nextRunLabel(at: number, now = Date.now()): string {
+// A run's day and hour, in words and in the routines' time zone (UTC): « aujourd’hui à 17 h »,
+// « demain à 7 h 30 », « hier à 8 h », « lundi à 7 h 30 », « le 12 novembre à 9 h ».
+export function runDayLabel(at: number, now = Date.now()): string {
   const d = new Date(at);
+  const n = new Date(now);
   const time = frTime(`${d.getUTCHours()}:${d.getUTCMinutes()}`);
-  const days = Math.round((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate())) / 86_400_000);
-  if (days <= 0) return `aujourd’hui à ${time}`;
+  const days = Math.round((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate())) / 86_400_000);
+  if (days === 0) return `aujourd’hui à ${time}`;
   if (days === 1) return `demain à ${time}`;
-  if (days < 7) return `${d.toLocaleDateString("fr-FR", { weekday: "long", timeZone: "UTC" })} à ${time}`;
+  if (days === -1) return `hier à ${time}`;
+  if (Math.abs(days) < 7) return `${d.toLocaleDateString("fr-FR", { weekday: "long", timeZone: "UTC" })}${days < 0 ? " dernier" : ""} à ${time}`;
   return `le ${d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", timeZone: "UTC" })} à ${time}`;
+}
+export const nextRunLabel = runDayLabel;
+
+const PLATFORMS: Record<string, string> = { telegram: "Telegram", slack: "Slack", teams: "Teams", whatsapp: "WhatsApp", discord: "Discord", email: "e-mail", local: "l’app" };
+
+// Where a routine's result arrives (PDF du 30/10 : « canal de réception »). The app always shows a run
+// that delivered; « origin » or nothing is a routine an Expert set up from a chat, whose delivery
+// the member should set again (Modifier, Enregistrer).
+export function deliveryLabel(deliver: string | null | undefined): { text: string; ok: boolean } {
+  const targets = (deliver ?? "").split(",").map((t) => t.trim().split(":")[0].toLowerCase()).filter(Boolean);
+  if (!targets.length || targets.every((t) => t === "origin")) return { text: "Réception à régler : Modifier, puis Enregistrer", ok: false };
+  const names = [...new Set(["l’app", ...targets.filter((t) => t !== "origin").map((t) => PLATFORMS[t] ?? t)])];
+  const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} et ${names[names.length - 1]}` : names[0];
+  return { text: `Reçue dans ${list}`, ok: true };
 }
 
 // Today, or a day ahead, as "YYYY-MM-DD" (the form's date field).

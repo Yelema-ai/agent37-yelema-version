@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, Loader2, Paperclip, Repeat, Sparkles } from "lucide-react";
-import { nextRunLabel, scheduleLabel, type Routine } from "@/lib/routines";
+import { deliveryLabel, nextRunLabel, runDayLabel, scheduleLabel, type Routine } from "@/lib/routines";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { RowMenu, Switch, type RoutineActions } from "./RoutinesTable";
@@ -78,8 +78,13 @@ export function RoutinesList({ routines, expertName, ...act }: { routines: Routi
                   <div className="min-w-0 flex-1 leading-tight">
                     <p className="truncate text-[14.5px] font-semibold text-ink">{r.name}</p>
                     <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ink-3">
-                      <span className="min-w-0 truncate">{scheduleLabel(r.schedule)}</span>
+                      <span className="min-w-0 sm:truncate">{scheduleLabel(r.schedule)}</span>
                       {next(r)}
+                    </p>
+                    {/* When it last ran and where it arrives (PDF du 30/10, « Mes routines »). */}
+                    <p className="mt-1 text-[12px] text-ink-3">
+                      {r.lastRunAt && !Number.isNaN(Date.parse(r.lastRunAt)) ? `Dernière fois ${runDayLabel(Date.parse(r.lastRunAt))}. ` : "Jamais lancée. "}
+                      <span className={deliveryLabel(r.deliver).ok ? "" : "font-semibold text-coral-ink"}>{deliveryLabel(r.deliver).text}.</span>
                     </p>
                   </div>
                   <span className="max-sm:hidden">{voir(r)}</span>
