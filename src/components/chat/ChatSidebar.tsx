@@ -132,6 +132,9 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
     let found = q ? sessions.filter((s) => fold(s.routine ?? s.title ?? "Nouvelle conversation").includes(q)) : sessions;
     if (filter === "unread") found = found.filter((s) => statusOf(s.session_id) === "unread");
     if (filter === "routines") found = found.filter((s) => s.routine);
+    // « Tout » is the member's own conversations (Leslie, 29/10): routines live under « Routines », and an
+    // unread one still shows in « Non lues » and the bell. A search still finds them.
+    if (filter === "all" && !q) found = found.filter((s) => !s.routine);
     const { pinned, rest } = arrange(found, (s) => convKey(agentId, profile, s.session_id), marks);
     return [...(pinned.length ? [{ label: "Épinglées", items: pinned }] : []), ...groupSessions(rest)];
   }, [sessions, query, filter, statusOf, marks, agentId, profile]);
@@ -421,7 +424,7 @@ export function ChatSidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           )}
           {!loadingSessions && sessions.length > 0 && groups.length === 0 && (
             <p className="px-2.5 py-2 text-[13px] text-ink-3">
-              {query.trim() ? "Aucune conversation ne correspond." : filter === "unread" ? "Tout est lu." : "Aucune routine pour l’instant."}
+              {query.trim() ? "Aucune conversation ne correspond." : filter === "unread" ? "Tout est lu." : filter === "all" ? "Aucune conversation pour l’instant." : "Aucune routine pour l’instant."}
             </p>
           )}
         </div>

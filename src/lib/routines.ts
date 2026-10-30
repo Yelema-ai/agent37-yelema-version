@@ -135,10 +135,22 @@ export interface SessionHint {
 // The routine a conversation is a run of, by name, or null for a conversation a person started.
 export function routineOfSession({ id, title, preview }: SessionHint): string | null {
   const t = (title ?? "").trim();
-  if (!id.startsWith("cron_") && !isRoutineRun(preview ?? "") && !(RUN_TITLE_DATE.test(t) && (preview ?? "").startsWith("[IMPORTANT:"))) {
+  // Hermes may also title a run with its own preamble, the preview then starting with a skill it loaded.
+  if (!id.startsWith("cron_") && !isRoutineRun(preview ?? "") && !t.startsWith("[IMPORTANT: You are running as a scheduled cron job") && !(RUN_TITLE_DATE.test(t) && (preview ?? "").startsWith("[IMPORTANT:"))) {
     return null;
   }
-  return t.replace(RUN_TITLE_DATE, "").trim() || "Routine";
+  return (t.startsWith("[IMPORTANT:") ? "" : t.replace(RUN_TITLE_DATE, "").trim()) || "Routine";
+}
+
+// A memory routine works for the expert alone (« Routine de mémoire, silencieuse »): its runs are never
+// a conversation nor a notification, whatever they answer (Leslie, 29/10).
+const MEMORY_NAME = /^m[ée]moire\b/i;
+const MEMORY_TASK = /routine de m[ée]moire/i;
+
+export function isMemoryRun(session: SessionHint): boolean {
+  const routine = routineOfSession(session);
+  if (routine === null) return false;
+  return MEMORY_NAME.test(routine) || MEMORY_TASK.test(session.preview ?? "") || MEMORY_TASK.test(session.title ?? "");
 }
 
 // Whether a conversation is one of THIS routine's runs: its id, else its title (name cut as Hermes does).
