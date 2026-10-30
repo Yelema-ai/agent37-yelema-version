@@ -4,10 +4,10 @@ import { useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { isDriveClutter } from "@/lib/drive-order";
-import { deliveryNotices, isMemberUpload } from "@/lib/drive-paths";
+import { deliveryNotices, isMemberUpload, type DeliveryNotice } from "@/lib/drive-paths";
 import { driveTree, onDriveChanged } from "@/lib/drive-store";
 import { agentTabPath } from "@/lib/expert-tabs";
-import { readNotifyPrefs } from "@/lib/notify-prefs";
+import { readNotifyPrefs, saveNotifyPrefs } from "@/lib/notify-prefs";
 import { useOwnAgentId } from "@/components/conversations/useAllConversations";
 import { usePoll } from "@/components/usePoll";
 import { systemNotify } from "./system-notify";
@@ -22,12 +22,15 @@ const SAFETY_MS = 10 * 60_000;
 const AFTER_EVENT_MS = 4_000;
 // Back on the tab after this long away: one look.
 const RETURN_MS = 2 * 60_000;
+const TOAST_ID = "livrables";
 
 export function DeliverableWatcher() {
   const agentId = useOwnAgentId();
   const router = useRouter();
   const seen = useRef<Set<string> | null>(null);
   const hiddenAt = useRef<number | null>(null);
+  // What the pop-up on screen already announces: a new delivery joins it instead of piling up.
+  const shown = useRef<DeliveryNotice[]>([]);
 
   const check = useCallback(
     async (maxAgeMs: number) => {
@@ -40,12 +43,36 @@ export function DeliverableWatcher() {
       const before = seen.current;
       seen.current = new Set(files.map((f) => f.path));
       if (!before || !readNotifyPrefs().deliverable) return;
-      // One notice per Expert for what it just delivered (lib/drive-paths.ts deliveryNotices).
-      for (const n of deliveryNotices(files.filter((f) => !before.has(f.path)))) {
-        const open = () => router.push(`${agentTabPath(agentId, "files")}?dossier=${encodeURIComponent(n.folder)}`);
-        toast(n.title, { id: n.id, description: n.description, action: { label: "Ouvrir", onClick: open }, duration: 8000 });
-        if (document.hidden) systemNotify(n.title, n.description, n.id, open);
-      }
+      // Never a pile (Leslie, 30/10: « trop de pop-ups »): ONE pop-up for everything delivered while it
+      // shows, replaced as more comes, swiped away or closed at once, with « Ne plus afficher ».
+      const fresh = deliveryNotices(files.filter((f) => !before.has(f.path)));
+      if (!fresh.length) return;
+      shown.current = [...shown.current.filter((n) => !fresh.some((f) => f.id === n.id)), ...fresh];
+      const all = shown.current;
+      const one = all.length === 1 ? all[0] : null;
+      const title = one ? one.title : `${all.length} nouvelles livraisons`;
+      const description = one ? one.description : all.map((n) => n.title.replace(/^.*livrables? de /, "") + " : " + n.description).join(" ; ");
+      const open = () =>
+        router.push(one ? `${agentTabPath(agentId, "files")}?dossier=${encodeURIComponent(one.folder)}` : "/livrables");
+      const reset = () => {
+        shown.current = [];
+      };
+      const stop = () => {
+        void saveNotifyPrefs({ ...readNotifyPrefs(), deliverable: false });
+        toast("Plus de pop-up pour les livrables", { description: "Ils restent dans la cloche. À réactiver dans Paramètres, Notifications.", duration: 5000 });
+      };
+      toast(title, {
+        id: TOAST_ID,
+        description,
+        action: { label: "Ouvrir", onClick: open },
+        cancel: { label: "Ne plus afficher", onClick: stop },
+        // Secondary to « Ouvrir »: a quiet text button.
+        cancelButtonStyle: { background: "transparent", color: "var(--ink-3)", border: "none", boxShadow: "none" },
+        duration: 8000,
+        onDismiss: reset,
+        onAutoClose: reset,
+      });
+      if (document.hidden) systemNotify(title, description, TOAST_ID, open);
     },
     [agentId, router]
   );
