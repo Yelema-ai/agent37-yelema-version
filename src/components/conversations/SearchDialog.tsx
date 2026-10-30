@@ -76,9 +76,23 @@ export function SearchDialog() {
 
   const needle = fold(q.trim());
   const foundConvs = useMemo(
-    () => (convs ?? []).filter((c) => !needle || fold(c.session.routine ?? c.session.title ?? "").includes(needle)).slice(0, SHOWN),
+    () => (convs ?? []).filter((c) => !needle || fold(c.session.routine ?? c.session.title ?? "").includes(needle)).slice(0, needle ? SHOWN * 3 : SHOWN),
     [convs, needle]
   );
+  // Typed something: the conversations by where they live, the chat d'entreprise first then each
+  // Expert (Myriel, Leslie 30/10). Nothing typed: the latest, as one list.
+  const convGroups = useMemo(() => {
+    if (!needle) return foundConvs.length === 0 ? [] : [{ key: "_", expert: null as (typeof foundConvs)[number]["expert"], label: "Conversations", rows: foundConvs }];
+    const out: { key: string; expert: (typeof foundConvs)[number]["expert"]; label: string; rows: typeof foundConvs }[] = [];
+    for (const c of foundConvs) {
+      const key = c.expert ? `${c.expert.agentId}:${c.expert.profileId}` : "entreprise";
+      const g = out.find((x) => x.key === key);
+      if (g) {
+        if (g.rows.length < 4) g.rows.push(c);
+      } else out.push({ key, expert: c.expert, label: c.expert?.displayName ?? "Chat d’entreprise", rows: [c] });
+    }
+    return out.sort((a, b) => Number(!!a.expert) - Number(!!b.expert));
+  }, [foundConvs, needle]);
   const foundFiles = useMemo(() => (files ?? []).filter((f) => !needle || fold(f.name).includes(needle)).slice(0, SHOWN), [files, needle]);
   const loading = convs === null || files === null;
 
@@ -109,8 +123,13 @@ export function SearchDialog() {
               <p className="px-3 py-6 text-center text-sm text-ink-3">Aucun résultat pour « {q.trim()} ».</p>
             ) : (
               <>
-                {foundConvs.length > 0 && <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-ink-3">Conversations</p>}
-                {foundConvs.map((c) => (
+                {convGroups.map((g) => (
+                  <div key={g.key}>
+                    <p className="flex items-center gap-2 px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-ink-3">
+                      {g.label}
+                      {needle && <span className="font-medium normal-case">{g.rows.length}</span>}
+                    </p>
+                {g.rows.map((c) => (
                   // A link, not a button: the page is read ahead under the pointer, and the bar at the top
                   // of the window starts with the click (Leslie, 27/10: the conversation was slow to show).
                   <Link
@@ -127,10 +146,14 @@ export function SearchDialog() {
                       </span>
                     )}
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-ink">{c.session.routine ?? (c.session.title || "Nouvelle conversation")}</span>
+                      <span className="block truncate text-sm font-semibold text-ink">
+                        <Highlight text={c.session.routine ?? (c.session.title || "Nouvelle conversation")} needle={needle} />
+                      </span>
                       <span className="block truncate text-xs text-ink-3">{c.expert ? c.expert.displayName : "Chat d’entreprise"}</span>
                     </span>
                   </Link>
+                ))}
+                  </div>
                 ))}
                 {foundFiles.length > 0 && <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-ink-3">Livrables</p>}
                 {foundFiles.map((f) => (
@@ -147,7 +170,9 @@ export function SearchDialog() {
                       <FileText className="size-3.5" />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-ink">{f.name}</span>
+                      <span className="block truncate text-sm font-semibold text-ink">
+                        <Highlight text={f.name} needle={needle} />
+                      </span>
                       <span className="block truncate text-xs text-ink-3">{formatMtime(f.modified)}</span>
                     </span>
                   </button>
@@ -158,6 +183,21 @@ export function SearchDialog() {
         </DialogContent>
       </Dialog>
       {ownAgentId && <FilePreview agentId={ownAgentId} entry={preview} onClose={() => setPreview(null)} />}
+    </>
+  );
+}
+
+// The words typed, marked where they are found: accents and case aside, the original text shown.
+function Highlight({ text, needle }: { text: string; needle: string }) {
+  if (!needle) return <>{text}</>;
+  // fold() keeps one character per character of a precomposed text: positions carry over.
+  const at = fold(text).indexOf(needle);
+  if (at < 0 || fold(text).length !== text.length) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="rounded-[3px] bg-amber-200/70 px-px text-inherit dark:bg-amber-400/30">{text.slice(at, at + needle.length)}</mark>
+      {text.slice(at + needle.length)}
     </>
   );
 }
