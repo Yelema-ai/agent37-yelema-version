@@ -70,7 +70,7 @@ export function AllDeliverables() {
       <h1 className="mt-4 font-display text-[28px] font-bold tracking-tight text-ink sm:text-[32px]">Livrables</h1>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-line bg-surface px-3 sm:max-w-sm">
+        <label className="flex h-11 w-full min-w-0 items-center gap-2 rounded-xl border border-line bg-surface px-3 sm:w-auto sm:max-w-sm sm:flex-1">
           <Search className="size-4 shrink-0 text-ink-3" />
           <input
             type="search"
