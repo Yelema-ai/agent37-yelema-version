@@ -21,6 +21,7 @@ import { setChatFull, setChatListHidden, useChatFull, useChatListHidden, useChat
 import { useChatContext } from "./ChatProvider";
 import { useChat } from "./useChat";
 import { useChatAttachments } from "./useChatAttachments";
+import { rememberedSettings } from "./rememberedSettings";
 
 // The conversation pane, rendered full-height in the chat tab's main column. Empty state = a
 // centered welcome (heading + big composer + subtitle); once there are messages it becomes a
@@ -100,7 +101,9 @@ export function ChatView({
     const url = new URL(window.location.href);
     url.searchParams.delete("q");
     window.history.replaceState(window.history.state, "", url);
-    void send(initialMessage);
+    // Sent with the model and effort chosen on the home's chat bar.
+    const { model, provider, reasoningEffort } = rememberedSettings();
+    void send(initialMessage, { model, provider, reasoningEffort });
   }, [initialMessage, activeSessionId, send]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
