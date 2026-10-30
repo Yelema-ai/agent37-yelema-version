@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import {
   ChevronDown,
   ChevronLeft,
@@ -8,7 +8,7 @@ import {
   Download,
   File as FileIcon,
   Folder,
-  FolderPlus,
+  FolderInput,
   FolderUp,
   Grid2X2,
   Link2,
@@ -23,14 +23,15 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { fileLabel } from "@/lib/drive-paths";
 import { DropOverlay } from "@/components/DropOverlay";
 import { HiddenFileInput } from "@/components/HiddenFileInput";
-import { useAsyncAction } from "@/components/useAsyncAction";
 import { FilePreview } from "./FilePreview";
+import { MoveDialog } from "./MoveDialog";
+import { VariantGroups } from "./VariantGroups";
+import { groupVariants, isSourceFolder } from "@/lib/visual-variants";
 import { useFileBrowser } from "./useFileBrowser";
 import { BackButton } from "@/components/ui/back-button";
 import { archiveUrl, breadcrumbs, contentUrl, formatBytes, formatMtime, isDir, type FileEntry } from "./types";
@@ -42,10 +43,12 @@ type ViewMode = "list" | "grid";
 // pane is a drop zone for uploads. Look + primitives mirror the Chat tab: same shadcn Dialog/Input,
 // lucide icons, sonner toasts (raised inside the hook), and the hover-action pattern.
 // A pointer only crossing a folder reads nothing; one resting on it this long reads it ahead.
+// What a row of the list carries when dragged, told apart from files dragged in from the computer.
+const MOVE_TYPE = "application/x-yelema-path";
 const HOVER_INTENT_MS = 150;
 
-export function FilesView({ agentId, initialPath, openPath }: { agentId: string; initialPath?: string; openPath?: string | null }) {
-  const fb = useFileBrowser(agentId, initialPath);
+export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: string; initialPath?: string; openPath?: string | null; inbox?: string }) {
+  const fb = useFileBrowser(agentId, initialPath, inbox);
   // A folder named in the address (« ?dossier= », from a path cited in the chat) opens here.
   // The first one is already the browser's starting folder; a cited folder gone opens the root.
   const { navigate: fbNavigate } = fb;
@@ -57,7 +60,9 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
   }, [openPath, fbNavigate]);
   const [preview, setPreview] = useState<FileEntry | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FileEntry | null>(null);
-  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [moving, setMoving] = useState<FileEntry | null>(null);
+  // The folder a dragged file of the list is over (Leslie, 30/10: déplacer un livrable dans un dossier).
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -164,10 +169,45 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
       onPointerEnter: isDir(entry) ? () => fb.prefetch(entry.path, HOVER_INTENT_MS) : undefined,
       onPointerLeave: isDir(entry) ? () => fb.prefetch(null) : undefined,
       onPointerDown: isDir(entry) ? () => fb.prefetch(entry.path) : undefined,
+      // A file or folder of the list dragged onto a folder moves into it. Files dragged in from the
+      // computer are left to the import drop zone around.
+      draggable: true,
+      onDragStart: (e: DragEvent<HTMLElement>) => {
+        e.dataTransfer.setData(MOVE_TYPE, entry.path);
+        e.dataTransfer.effectAllowed = "move";
+      },
+      onDragOver: isDir(entry)
+        ? (e: DragEvent<HTMLElement>) => {
+            if (!e.dataTransfer.types.includes(MOVE_TYPE)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            setDropTarget(entry.path);
+          }
+        : undefined,
+      onDragLeave: isDir(entry) ? () => setDropTarget((t) => (t === entry.path ? null : t)) : undefined,
+      onDrop: isDir(entry)
+        ? (e: DragEvent<HTMLElement>) => {
+            const from = e.dataTransfer.getData(MOVE_TYPE);
+            setDropTarget(null);
+            if (!from) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const moved = fb.visibleEntries.find((x) => x.path === from);
+            if (moved && moved.path !== entry.path) void fb.move(moved, entry.path);
+          }
+        : undefined,
     };
   }
 
   const crumbs = fb.path ? breadcrumbs(fb.path) : [];
+  // A folder of visuals in variants shows by visual first (« Tous les fichiers » for the plain list),
+  // and the editable « source » folder always comes last (Myriel, Leslie 30/10).
+  const variants = useMemo(() => groupVariants(fb.visibleEntries.filter((e) => !isDir(e))), [fb.visibleEntries]);
+  const [byVisual, setByVisual] = useState(true);
+  const listEntries = useMemo(() => {
+    const rest = variants && byVisual ? fb.visibleEntries.filter((e) => !variants.grouped.has(e)) : fb.visibleEntries;
+    return [...rest.filter((e) => !(isDir(e) && isSourceFolder(e.name))), ...rest.filter((e) => isDir(e) && isSourceFolder(e.name))];
+  }, [fb.visibleEntries, variants, byVisual]);
   const selectedEntry = useMemo(
     () => (selectedPath == null ? null : fb.visibleEntries.find((entry) => entry.path === selectedPath) ?? null),
     [fb.visibleEntries, selectedPath]
@@ -230,27 +270,27 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
                 agentId={agentId}
                 entry={selectedEntry}
                 onRename={startRename}
+                onMove={setMoving}
                 onDelete={selectForDelete}
               />
             )}
             {!empty && (
               <>
+            {/* A deliverable's folder downloads whole, in one click (Myriel, Leslie 30/10). */}
+            {!fb.atRoot && fb.path && (
+              <Button asChild size="sm" className="h-9">
+                <a href={archiveUrl(agentId, fb.path)} download>
+                  <Download className="h-4 w-4" />
+                  Tout télécharger
+                </a>
+              </Button>
+            )}
             <ViewToggle value={viewMode} onChange={setViewMode} />
             <ToolbarIconButton onClick={fb.refresh} label="Actualiser">
               <RefreshCw className={cn("h-4 w-4", fb.loading && "animate-spin")} />
             </ToolbarIconButton>
             <span className="mx-1 hidden h-6 w-px bg-border sm:block" />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setNewFolderOpen(true)}
-              disabled={!fb.path}
-              className="h-9"
-            >
-              <FolderPlus className="h-4 w-4" />
-              Nouveau dossier
-            </Button>
+            {/* Only the Experts make folders here (Myriel, Leslie 30/10): no « Nouveau dossier ». */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" disabled={!fb.path || fb.uploading} className="h-9">
@@ -338,10 +378,35 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
                 owner={ownerOf(fb.path)}
                 canCreate={!!fb.path}
                 uploading={fb.uploading}
-                onNewFolder={() => setNewFolderOpen(true)}
                 onUpload={() => uploadRef.current?.click()}
               />
-            ) : viewMode === "list" ? (
+            ) : (
+              <>
+            {variants && (
+              <div className="mb-4 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
+                <div role="radiogroup" aria-label="Présentation des visuels" className="flex h-10 w-fit items-center rounded-md border bg-card p-1 text-sm">
+                  {(
+                    [
+                      [true, "Par visuel"],
+                      [false, "Tous les fichiers"],
+                    ] as const
+                  ).map(([v, label]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      role="radio"
+                      aria-checked={byVisual === v}
+                      onClick={() => setByVisual(v)}
+                      className={cn("h-full rounded px-3 font-medium", byVisual === v ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground")}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {byVisual && <VariantGroups agentId={agentId} groups={variants.groups} onOpen={(e) => openEntry(e)} />}
+              </div>
+            )}
+            {listEntries.length === 0 ? null : viewMode === "list" ? (
               <div className="overflow-x-auto rounded-lg border bg-card">
                 <table className="w-full min-w-[700px] table-fixed text-sm">
                   <colgroup>
@@ -357,7 +422,7 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
                     </tr>
                   </thead>
                   <tbody>
-                    {fb.visibleEntries.map((entry) => {
+                    {listEntries.map((entry) => {
                       const editing = editingPath === entry.path;
                       const selected = selectedEntry?.path === entry.path;
                       return (
@@ -366,7 +431,8 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
                           aria-selected={selected}
                           className={cn(
                             "cursor-default select-none border-b border-border/70 outline-none last:border-0 hover:bg-secondary/35 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                            selected && "bg-primary/10 text-foreground hover:bg-primary/10"
+                            selected && "bg-primary/10 text-foreground hover:bg-primary/10",
+                            dropTarget === entry.path && "bg-primary/15 ring-2 ring-inset ring-primary/40"
                           )}
                           {...entryHandlers(entry)}
                         >
@@ -398,7 +464,7 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
               </div>
             ) : (
               <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3">
-                {fb.visibleEntries.map((entry) => {
+                {listEntries.map((entry) => {
                   const editing = editingPath === entry.path;
                   const selected = selectedEntry?.path === entry.path;
                   return (
@@ -407,7 +473,8 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
                       aria-selected={selected}
                       className={cn(
                         "group flex min-h-44 cursor-default select-none flex-col rounded-lg border bg-card p-3 outline-none transition-colors hover:border-primary/35 hover:bg-secondary/25 focus-visible:ring-2 focus-visible:ring-ring",
-                        selected && "border-primary/35 bg-primary/10 hover:border-primary/35 hover:bg-primary/10"
+                        selected && "border-primary/35 bg-primary/10 hover:border-primary/35 hover:bg-primary/10",
+                        dropTarget === entry.path && "border-primary bg-primary/15"
                       )}
                       {...entryHandlers(entry)}
                     >
@@ -434,6 +501,8 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
                 })}
               </div>
             )}
+              </>
+            )}
 
             {fb.truncated && (
               <p className="mt-3 px-3 text-xs text-muted-foreground">
@@ -445,14 +514,8 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
       </div>
 
       <FilePreview agentId={agentId} entry={preview} onClose={() => setPreview(null)} />
+      <MoveDialog agentId={agentId} entry={moving} onMove={(entry, dest) => void fb.move(entry, dest)} onClose={() => setMoving(null)} />
 
-      <NewFolderDialog
-        open={newFolderOpen}
-        onOpenChange={setNewFolderOpen}
-        onCreate={async (name) => {
-          await fb.createDir(name);
-        }}
-      />
 
       <ConfirmDialog
         open={!!pendingDelete}
@@ -534,11 +597,13 @@ function SelectedActions({
   agentId,
   entry,
   onRename,
+  onMove,
   onDelete,
 }: {
   agentId: string;
   entry: FileEntry;
   onRename: (entry: FileEntry) => void;
+  onMove: (entry: FileEntry) => void;
   onDelete: (entry: FileEntry) => void;
 }) {
   return (
@@ -546,7 +611,7 @@ function SelectedActions({
       <Button asChild variant="outline" size="icon" className="size-9" title="Télécharger">
         <a
           href={isDir(entry) ? archiveUrl(agentId, entry.path) : contentUrl(agentId, entry.path, "attachment")}
-          download={isDir(entry) ? `${entry.name}.tar.gz` : entry.name}
+          download={isDir(entry) ? `${entry.name}.tar.gz` : fileLabel(entry)}
           aria-label={isDir(entry) ? `Télécharger ${entry.name} en archive .tar.gz` : `Télécharger ${entry.name}`}
         >
           <Download className="h-4 w-4" />
@@ -562,6 +627,17 @@ function SelectedActions({
         title="Renommer"
       >
         <Pencil className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={() => onMove(entry)}
+        className="size-9"
+        aria-label={`Déplacer ${fileLabel(entry)}`}
+        title="Déplacer vers…"
+      >
+        <FolderInput className="h-4 w-4" />
       </Button>
       <Button
         type="button"
@@ -607,7 +683,8 @@ function EntryName({
           entry.hidden && "text-muted-foreground"
         )}
       >
-        {entry.name}
+        {fileLabel(entry)}
+        {dir && isSourceFolder(entry.name) && <small className="block truncate text-xs font-normal text-muted-foreground">Fichiers modifiables : HTML, images, polices</small>}
       </span>
     </div>
   );
@@ -688,13 +765,11 @@ function EmptyFolder({
   owner,
   canCreate,
   uploading,
-  onNewFolder,
   onUpload,
 }: {
   owner: string | null;
   canCreate: boolean;
   uploading: boolean;
-  onNewFolder: () => void;
   onUpload: () => void;
 }) {
   return (
@@ -708,73 +783,8 @@ function EmptyFolder({
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           Importer des fichiers
         </Button>
-        <Button variant="outline" size="sm" onClick={onNewFolder} disabled={!canCreate}>
-          <FolderPlus className="h-4 w-4" />
-          Nouveau dossier
-        </Button>
       </div>
     </div>
   );
 }
 
-function NewFolderDialog({
-  open,
-  onOpenChange,
-  onCreate,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreate: (name: string) => Promise<void>;
-}) {
-  const [name, setName] = useState("");
-  const { busy, run } = useAsyncAction();
-
-  function submit() {
-    const clean = name.trim();
-    if (!clean) return;
-    run(async () => {
-      await onCreate(clean);
-      setName("");
-      onOpenChange(false);
-    });
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        if (!busy) {
-          if (!o) setName("");
-          onOpenChange(o);
-        }
-      }}
-    >
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Nouveau dossier</DialogTitle>
-        </DialogHeader>
-        <Input
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          placeholder="Nom du dossier"
-          aria-label="Nom du dossier"
-        />
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Annuler
-          </Button>
-          <Button onClick={submit} disabled={busy || !name.trim()}>
-            {busy ? "Création…" : "Créer"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}

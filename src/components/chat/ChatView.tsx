@@ -14,13 +14,16 @@ import { agentTabPath } from "@/lib/expert-tabs";
 import { citedFolder, type TurnDoc } from "@/lib/drive-links";
 import { ConversationDocs } from "./ConversationDocs";
 import { DropOverlay } from "@/components/DropOverlay";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChatComposer } from "./ChatComposer";
+import { ExpertReadiness } from "@/components/experts/ExpertReadiness";
 import { ChatMessages } from "./ChatMessages";
 import { ChatSessionsPanel } from "./ChatSessionsPanel";
 import { setChatFull, setChatListHidden, useChatFull, useChatListHidden, useChatSidePanel } from "./chat-layout";
 import { useChatContext } from "./ChatProvider";
 import { useChat } from "./useChat";
 import { useChatAttachments } from "./useChatAttachments";
+import { rememberedSettings } from "./rememberedSettings";
 
 // The conversation pane, rendered full-height in the chat tab's main column. Empty state = a
 // centered welcome (heading + big composer + subtitle); once there are messages it becomes a
@@ -87,9 +90,34 @@ export function ChatView({
 
   // Switching threads / starting a new chat empties the staged tray, so a file picked for one
   // conversation can't silently ride along into the next.
+  // « Modifier avec <Expert> » from a file's preview (?ref=): the file comes pinned above the field
+  // of the conversation it opened on, and leaves the address so a refresh does not pin it again. Kept
+  // while that conversation stays open (the tray is emptied again as the rail loads); another
+  // conversation drops it (Myriel, Leslie 30/10).
+  const { addReference } = att;
+  // The chat stays mounted while another tab of the expert shows: the address is read as it changes.
+  const params = useSearchParams();
+  const refParam = params.get("ref");
+  const pinned = useRef<{ path: string; session: string | null } | null>(null);
   useEffect(() => {
     clearFiles();
-  }, [activeSessionId, clearFiles]);
+    const p = pinned.current;
+    if (!p) return;
+    if ((activeSessionId ?? null) !== p.session) {
+      pinned.current = null;
+      return;
+    }
+    addReference(p.path);
+  }, [activeSessionId, clearFiles, addReference]);
+  useEffect(() => {
+    if (!refParam) return;
+    const url = new URL(window.location.href);
+    pinned.current = { path: refParam, session: url.searchParams.get("session") };
+    if ((activeSessionId ?? null) === pinned.current.session) addReference(refParam);
+    url.searchParams.delete("ref");
+    window.history.replaceState(window.history.state, "", url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refParam]);
 
   // A message handed over by the home page ("Demander à mon équipe") is sent once, into a new
   // thread, and dropped from the URL so a refresh does not send it again.
@@ -100,7 +128,9 @@ export function ChatView({
     const url = new URL(window.location.href);
     url.searchParams.delete("q");
     window.history.replaceState(window.history.state, "", url);
-    void send(initialMessage);
+    // Sent with the model and effort chosen on the home's chat bar.
+    const { model, provider, reasoningEffort } = rememberedSettings();
+    void send(initialMessage, { model, provider, reasoningEffort });
   }, [initialMessage, activeSessionId, send]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -160,6 +190,7 @@ export function ChatView({
   const headerTitle = activeTitle || (activeSessionId ? "Discussion" : "Nouvelle discussion");
   // The expert this chat talks to, dressed by the catalogue (name, portrait); null on the
   // instance's default home or while the list loads.
+  const router = useRouter();
   const { experts } = useExpertsContext();
   const expert = useMemo(
     () => (profile ? (experts.find((e) => e.agentId === agentId && e.profileId === profile) ?? null) : null),
@@ -307,6 +338,16 @@ export function ChatView({
         <div className={cn("mx-auto w-full", showWelcome ? "max-w-2xl" : "max-w-3xl")} aria-live="polite">
           {error && <p className="mb-2 rounded-xl bg-ko-pale px-3 py-2 text-[13px] text-ko">{error}</p>}
         </div>
+        {profile && (
+          <ExpertReadiness
+            variant="banner"
+            agentId={agentId}
+            profileId={profile}
+            expertName={agentName}
+            onOpenTools={() => router.push("/integrations/connecteurs")}
+            className={cn("mb-3", showWelcome && "max-w-2xl")}
+          />
+        )}
         <ChatComposer
           agentId={agentId}
           isStreaming={isStreaming}

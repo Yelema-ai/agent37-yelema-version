@@ -4,6 +4,7 @@ import { handleError, json } from "@/lib/http";
 import { profileQuery, resolveProfile } from "@/lib/profiles";
 import { isMemoryRun, routineOfSession } from "@/lib/routines";
 import { sessionTitle } from "@/lib/session-title";
+import { isSystemSession } from "@/lib/system-sessions";
 import { isVoiceSession } from "@/lib/voice-sessions";
 import { undeliveredRunIds } from "@/lib/silent-runs";
 
@@ -26,7 +27,7 @@ export async function GET(request: Request, { params }: Ctx) {
     // report, failed or not read yet, the bell has it.
     const hidden = await undeliveredRunIds(id, query, data);
     const sessions = data
-      .filter((s) => !isVoiceSession(s.preview) && !hidden.has(s.id) && !isMemoryRun(s))
+      .filter((s) => !isVoiceSession(s.preview) && !hidden.has(s.id) && !isMemoryRun(s) && !isSystemSession(s))
       .map((s) => ({
         session_id: s.id,
         title: sessionTitle(s.title, s.preview),

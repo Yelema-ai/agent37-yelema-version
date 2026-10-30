@@ -13,6 +13,7 @@ import { useChatContext } from "./ChatProvider";
 import { findModel, prettyModelLabel, type ChatSettings } from "./types";
 import type { SendSettings } from "./useChat";
 import { useDictation } from "./useDictation";
+import { rememberSettings, rememberedSettings } from "./rememberedSettings";
 import { useCallState } from "@/components/voice/CallProvider";
 import { useVoices } from "@/components/voice/useVoices";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
@@ -33,12 +34,26 @@ export function ChatComposer({ agentId, isStreaming, att, onSend, onStop, large 
   const [text, setText] = useState("");
   // model + provider are always chosen together (one selection); effort is independent. Group
   // them as the composer's outgoing ChatSettings so send is just `{ ...settings, files }`.
-  const [settings, setSettings] = useState<ChatSettings>({ model: null, provider: null, reasoningEffort: null });
+  const [settings, setSettingsState] = useState<ChatSettings>({ model: null, provider: null, reasoningEffort: null });
+  // The last choice, from any screen, once this Expert's models are known: a model it does not offer
+  // falls back to its default, the effort always carries over.
+  const setSettings = (next: (s: ChatSettings) => ChatSettings) =>
+    setSettingsState((s) => {
+      const v = next(s);
+      rememberSettings(v);
+      return v;
+    });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Each expert's profile has its own model configuration.
   const { profile } = useChatContext();
   const { groups, defaultModel, loading } = useChatModels(agentId, profile);
+  useEffect(() => {
+    if (loading) return;
+    const r = rememberedSettings();
+    const known = findModel(groups, r.model, r.provider);
+    setSettingsState({ model: known ? r.model : null, provider: known ? r.provider : null, reasoningEffort: r.reasoningEffort });
+  }, [loading, groups]);
 
   useEffect(() => {
     if (focusToken === 0) return;

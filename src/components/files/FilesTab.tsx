@@ -1,6 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
+import { DRIVE_ROOT } from "@/lib/drive-paths";
 import { FilesView } from "./FilesView";
 
 // The native Files tab. The shell mounts this against the active agent (agentId, from the URL) and
@@ -10,5 +11,7 @@ import { FilesView } from "./FilesView";
 // « ?dossier=<path> » opens that folder: a folder the Expert cites in the chat links here.
 export function FilesTab({ agentId, initialPath }: { agentId: string; initialPath?: string }) {
   const openPath = useSearchParams().get("dossier");
-  return <FilesView agentId={agentId} initialPath={openPath ?? initialPath} openPath={openPath} />;
+  // What the member imports goes to « Reçus » in the Expert's folder, apart from what the Expert made.
+  const inbox = `${initialPath ?? DRIVE_ROOT}/Reçus`;
+  return <FilesView agentId={agentId} initialPath={openPath ?? initialPath} openPath={openPath} inbox={inbox} />;
 }

@@ -1,11 +1,17 @@
 "use client";
 
-import { memo, type MouseEvent } from "react";
+import { memo, useMemo, useState, type MouseEvent } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
 import { ANGLED, BARE, citedFolder, CODE, FOLDER_BARE, FOLDER_CODE, isHiddenInChat, LINKED, normDrivePath, noteFolder, safeDecode } from "@/lib/drive-links";
+import { replyLines } from "@/lib/reply-lines";
 import { agentTabPath } from "@/lib/expert-tabs";
+import type { FileEntry } from "@/components/files/types";
+
+// Loaded on a click only, and apart: FilePreview itself renders markdown with this component.
+const FilePreview = dynamic(() => import("@/components/files/FilePreview").then((m) => m.FilePreview), { ssr: false });
 
 const HIDDEN_LINK = /\[([^\]\n]*)\]\(<?(?:file:\/\/|sandbox:)?((?:\/home\/node|~)\/Livrables\/[^)>\n]+)>?\)/g;
 
@@ -13,7 +19,8 @@ const HIDDEN_LINK = /\[([^\]\n]*)\]\(<?(?:file:\/\/|sandbox:)?((?:\/home\/node|~
 // browser can't open file:// links or instance paths, and Streamdown blocks them). A working note or memory file keeps its name, unlinked.
 // A folder the Expert cites opens in Livrables, at that folder (Leslie, 27/10: « tu peux pas les rendre
 // par défaut cliquables, sinon ça sert à rien »).
-function linkDriveFiles(content: string, agentId: string, profileId?: string | null): string {
+// `files` collects each link's text and the drive path behind it: a click on one opens its preview.
+function linkDriveFiles(content: string, agentId: string, profileId?: string | null, files?: Map<string, string>): string {
   const url = (path: string) =>
     `/api/agents/${agentId}/files/content?path=${encodeURIComponent(normDrivePath(path))}&disposition=attachment`;
   // A link's text is markdown: an underscore or a star in a file name must not turn into emphasis.
@@ -21,11 +28,20 @@ function linkDriveFiles(content: string, agentId: string, profileId?: string | n
   const name = (path: string) => md(safeDecode(path.split("/").pop() ?? path));
   const link = (label: string, path: string) => {
     const note = noteFolder(path);
+    // A note opens in its preview now (PDF du 30/10 : « un .md n'ouvrait rien »), its folder as before
+    // when the preview cannot be shown.
+    if (note) files?.set(normDrivePath(path).replace(/^~\//, ""), normDrivePath(path));
     if (note) return `[${md(normDrivePath(path).replace(/^~\//, ""))}](${agentTabPath(agentId, "files", profileId)}?dossier=${encodeURIComponent(note)})`;
-    return isHiddenInChat(path) ? label : `[${label}](${url(path)})`;
+    if (isHiddenInChat(path)) return label;
+    files?.set(safeDecode(path.split("/").pop() ?? path), normDrivePath(path));
+    return `[${label}](${url(path)})`;
   };
   return content
-    .replace(HIDDEN_LINK, (m, label: string, path: string) => (isHiddenInChat(path) ? label : m))
+    .replace(HIDDEN_LINK, (m, label: string, path: string) => {
+      if (isHiddenInChat(path)) return label;
+      files?.set(label.replace(/[*_]/g, "").trim(), normDrivePath(path));
+      return m;
+    })
     .replace(ANGLED, (_m, path: string) => `](${url(path)})`)
     .replace(LINKED, (_m, path: string) => `](${url(path)})`)
     .replace(CODE, (_m, path: string) => link(name(path), path))
@@ -85,11 +101,28 @@ export const Markdown = memo(function Markdown({ content, agentId, profileId }: 
     e.stopPropagation();
     router.push(`${agentTabPath(agentId, "files", profileId)}?dossier=${encodeURIComponent(folder)}`);
   };
+  // A delivered file opens in its preview, with « Télécharger » there, rather than downloading at once
+  // (PDF du 30/10 : « aperçu et téléchargement dans le chat »).
+  const { text, files } = useMemo(() => {
+    const files = new Map<string, string>();
+    return { text: replyLines(agentId ? linkDriveFiles(content, agentId, profileId, files) : content), files };
+  }, [content, agentId, profileId]);
+  const [preview, setPreview] = useState<FileEntry | null>(null);
+  const onClick = (e: MouseEvent<HTMLDivElement>) => {
+    const el = (e.target as Element).closest?.("[data-streamdown=link]");
+    const path = agentId ? files.get(el?.textContent?.trim() ?? "") : undefined;
+    if (!path) return openFolder(e);
+    e.preventDefault();
+    e.stopPropagation();
+    const name = path.split("/").pop() ?? path;
+    setPreview({ name, path, type: "file", size: null, modified: 0 } as FileEntry);
+  };
   return (
-    <div onClickCapture={openFolder}>
+    <div onClickCapture={onClick}>
       <Streamdown className="chat-markdown text-[15px] leading-relaxed" linkSafety={LINK_SAFETY} translations={FR}>
-        {agentId ? linkDriveFiles(content, agentId, profileId) : content}
+        {text}
       </Streamdown>
+      {preview && agentId && <FilePreview agentId={agentId} entry={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 });

@@ -8,20 +8,13 @@ import { useEffect, useState } from "react";
 import {
   ArrowRight,
   Blocks,
-  Calculator,
   ChevronDown,
-  Handshake,
-  Headset,
-  Layers,
   Lock,
-  Megaphone,
   PanelLeftClose,
   Search,
   SquarePen,
-  TrendingUp,
   Pin,
-  Users,
-  type LucideIcon,
+  Plus,
 } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { EnterpriseSidebar } from "@/components/enterprise/EnterpriseSidebar";
@@ -33,10 +26,11 @@ import { READ_AHEAD, useReadAhead } from "@/components/experts/expert-preload";
 import { useOwnAgentId } from "@/components/conversations/useAllConversations";
 import { useChatMarks } from "@/components/conversations/useChatMarks";
 import { arrange } from "@/lib/chat-marks";
-import { convKey } from "@/lib/activity";
+import { convKey, toMs } from "@/lib/activity";
 import { openSearch, warmSearch } from "@/components/conversations/SearchDialog";
 import { useCompanySessions } from "@/components/conversations/useCompanySessions";
 import type { Expert } from "@/lib/types";
+import { cycleKind, isDjeneba } from "@/lib/expert-cycle";
 import { cn } from "@/lib/utils";
 
 // Le haut du menu : « Nouvelle conversation » (l'accueil et sa barre de chat), en couleur, puis
@@ -182,7 +176,7 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
                 className="flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 pt-2 text-left text-[12px] font-semibold text-ink-3 hover:text-ink"
               >
                 {(() => {
-                  const Icon = cycleIcon(g.cycle.label);
+                  const Icon = cycleKind(g.cycle.label).icon;
                   return <Icon className="size-3.5 shrink-0" />;
                 })()}
                 <span className="min-w-0 flex-1 truncate">{g.cycle.label}</span>
@@ -201,6 +195,7 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
                   onNavigate={onNavigate}
                   readAhead={ahead.has(`${e.agentId}:${e.profileId}`)}
                   className={g.cycle && !collapsed ? "pl-4" : undefined}
+                  showCycle={!g.cycle}
                 />
               ))}
           </div>
@@ -260,8 +255,6 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
 // Menu folded: every entry is the same square, centred in the rail, so icons and faces line up.
 const RAIL_SQUARE = "size-11 min-h-0 shrink-0 justify-center px-0";
 
-const isDjeneba = (e: { catalogueKey?: string | null; profileId: string }) =>
-  (e.catalogueKey ?? e.profileId).toLowerCase().includes("djeneba");
 
 // The latest conversations of the chat d'entreprise, under a lock: private to the company. An
 // Expert's conversations stay in its space. A failed read shows nothing rather than an error here.
@@ -273,21 +266,38 @@ function CompanyChats({ agentId, pathname, onNavigate }: { agentId: string; path
   const sessions = [...pinned, ...rest].slice(0, Math.max(6, pinned.length));
   const pinnedIds = new Set(pinned.map((s) => s.session_id));
   const home = `/experts/${agentId}/chat`;
+  // Pinned first, then by day (Myriel, Leslie 30/10): Aujourd'hui, Hier, Cette semaine, Plus ancien.
+  const groups = byDay(sessions, pinnedIds);
   return (
     <>
-      <Link
-        href={home}
-        onClick={onNavigate}
-        className={cn(
-          "mt-3 flex items-center gap-1.5 rounded-[11px] px-2.5 pt-1 pb-1.5 text-xs font-semibold uppercase tracking-wide",
-          pathname === home ? "text-ink" : "text-ink-3 hover:text-ink"
-        )}
-      >
-        <Lock className="size-3.5" strokeWidth={2.2} />
-        Chat d’entreprise
-      </Link>
+      <div className="mt-3 flex items-center gap-1">
+        <Link
+          href={home}
+          onClick={onNavigate}
+          className={cn(
+            "flex min-h-8 flex-1 items-center gap-1.5 rounded-[11px] px-2.5 text-xs font-semibold uppercase tracking-wide",
+            pathname === home ? "text-ink" : "text-ink-3 hover:text-ink"
+          )}
+        >
+          <Lock className="size-3.5" strokeWidth={2.2} />
+          Chat d’entreprise
+        </Link>
+        {/* A new conversation of the chat d'entreprise, from anywhere. */}
+        <Link
+          href={home}
+          onClick={onNavigate}
+          aria-label="Nouvelle conversation du chat d’entreprise"
+          title="Nouvelle conversation du chat d’entreprise"
+          className="grid size-9 shrink-0 place-items-center rounded-[10px] text-ink-3 hover:bg-soft hover:text-ink"
+        >
+          <Plus className="size-4" />
+        </Link>
+      </div>
       {sessions.length === 0 && <p className="px-2.5 pb-1 text-[13px] text-ink-3">Vos conversations apparaîtront ici.</p>}
-      {sessions.map((s) => (
+      {groups.map(({ label, rows }) => (
+        <div key={label} className="flex flex-col gap-0.5">
+          {label && <p className="px-2.5 pt-2 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">{label}</p>}
+          {rows.map((s) => (
         <Link
           key={s.session_id}
           href={`${home}?session=${encodeURIComponent(s.session_id)}`}
@@ -298,30 +308,35 @@ function CompanyChats({ agentId, pathname, onNavigate }: { agentId: string; path
           <span className="truncate">{s.title || "Nouvelle conversation"}</span>
           {pinnedIds.has(s.session_id) && <Pin className="ml-auto size-3.5 shrink-0 text-ink-3" aria-label="Épinglée" />}
         </Link>
+          ))}
+        </div>
       ))}
     </>
   );
 }
 
-// A cycle's icon and place, read from its label (the back office sends neither): the six cycles
-// Yelema sells, in the order of its offer, matched most specific first. Any other cycle comes after
-// them, with a neutral stack.
-const CYCLE_KINDS: { re: RegExp; icon: LucideIcon; rank: number }[] = [
-  { re: /invest|portefeuille/, icon: TrendingUp, rank: 5 },
-  { re: /client|fid[eé]lisation/, icon: Headset, rank: 4 },
-  { re: /commercial|vente/, icon: Handshake, rank: 0 },
-  { re: /marketing|communication/, icon: Megaphone, rank: 1 },
-  { re: /\brh\b|talent|ressources humaines/, icon: Users, rank: 2 },
-  { re: /financ|compta/, icon: Calculator, rank: 3 },
-];
+const DAY = 86_400_000;
 
-function cycleKind(label: string): { icon: LucideIcon; rank: number } {
-  const l = label.toLowerCase();
-  return CYCLE_KINDS.find((k) => k.re.test(l)) ?? { icon: Layers, rank: CYCLE_KINDS.length };
-}
-
-function cycleIcon(label: string): LucideIcon {
-  return cycleKind(label).icon;
+function byDay<S extends { session_id: string; last_active: number }>(rows: S[], pinned: Set<string>): { label: string; rows: S[] }[] {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const today = start.getTime();
+  const label = (s: S) => {
+    if (pinned.has(s.session_id)) return "";
+    const at = toMs(s.last_active);
+    if (at >= today) return "Aujourd’hui";
+    if (at >= today - DAY) return "Hier";
+    if (at >= today - 6 * DAY) return "Cette semaine";
+    return "Plus ancien";
+  };
+  const out: { label: string; rows: S[] }[] = [];
+  for (const s of rows) {
+    const l = label(s);
+    const g = out.find((x) => x.label === l);
+    if (g) g.rows.push(s);
+    else out.push({ label: l, rows: [s] });
+  }
+  return out;
 }
 
 // Experts without a cycle first (Djénéba heads them), then one group per cycle, in the offer's order.

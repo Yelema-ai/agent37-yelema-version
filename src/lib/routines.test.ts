@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isMemoryRun, isRoutineRun, isRunOf, isSilentRun, routineOfSession, routinePlainText, routineRunText, runOutcome } from "./routines.ts";
+import { deliveryLabel, isMemoryRun, nextRunLabel, runDayLabel, scheduleLabel, isRoutineRun, isRunOf, isSilentRun, routineOfSession, routinePlainText, routineRunText, runOutcome } from "./routines.ts";
+
+const sp = (s: string) => s.replace(/\u00a0/g, " ");
 
 const HINT = "[IMPORTANT: You are running as a scheduled cron job. DELIVERY: … [SILENT] … context for this run, not as a request to schedule another job.]\n\n";
 
@@ -67,4 +69,26 @@ test("a memory routine's runs are never a conversation", () => {
   assert.equal(isMemoryRun({ id: "x", title: null, preview: preamble + "Routine de mémoire, silencieuse : personne n'attend de réponse." }), true);
   assert.equal(isMemoryRun({ id: "cron_b_1", title: "Point du matin · Oct 29 08:00", preview: preamble + "Prépare le point du matin." }), false);
   assert.equal(isMemoryRun({ id: "s_1", title: "Mémoire de l'entreprise", preview: "Que sais-tu de nous ?" }), false);
+});
+
+test("schedules and the next run read as a French reader says them", () => {
+  assert.equal(sp(scheduleLabel("30 7 * * 1")), "Chaque lundi à 7 h 30");
+  assert.equal(sp(scheduleLabel("0 17 * * 1-5")), "Chaque jour ouvré à 17 h");
+  assert.equal(sp(scheduleLabel("17 7-21 * * *")), "Toutes les heures de 7 h à 21 h");
+  assert.equal(sp(scheduleLabel("0 */2 * * 1-5")), "Toutes les 2 heures, du lundi au vendredi");
+  const fri = Date.UTC(2026, 9, 30, 20, 43);
+  assert.equal(sp(nextRunLabel(Date.UTC(2026, 9, 30, 21, 17), fri)), "aujourd’hui à 21 h 17");
+  assert.equal(sp(nextRunLabel(Date.UTC(2026, 9, 31, 8, 0), fri)), "demain à 8 h");
+  assert.equal(sp(nextRunLabel(Date.UTC(2026, 10, 2, 17, 0), fri)), "lundi à 17 h");
+  assert.equal(sp(nextRunLabel(Date.UTC(2026, 10, 12, 9, 0), fri)), "le 12 novembre à 9 h");
+});
+
+test("a routine says when it last ran and where it arrives", () => {
+  const fri = Date.UTC(2026, 9, 30, 20, 43);
+  assert.equal(sp(runDayLabel(Date.UTC(2026, 9, 29, 8, 0), fri)), "hier à 8 h");
+  assert.equal(sp(runDayLabel(Date.UTC(2026, 9, 27, 8, 0), fri)), "mardi dernier à 8 h");
+  assert.deepEqual(deliveryLabel("telegram:-100123:45,local"), { text: "Reçue dans l’app et Telegram", ok: true });
+  assert.deepEqual(deliveryLabel("local"), { text: "Reçue dans l’app", ok: true });
+  assert.equal(deliveryLabel("origin").ok, false);
+  assert.equal(deliveryLabel(null).ok, false);
 });
