@@ -148,7 +148,7 @@ export function AllDeliverables() {
             {label}
           </button>
         ))}
-        <span className="mx-1 h-6 w-px bg-line" aria-hidden />
+        <span className="mx-1 h-6 w-px bg-line max-sm:hidden" aria-hidden />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
