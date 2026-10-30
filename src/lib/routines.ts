@@ -319,3 +319,21 @@ export function todayIso(offsetDays = 0): string {
   const d = new Date(Date.now() + offsetDays * 86_400_000);
   return d.toISOString().slice(0, 10);
 }
+
+// Upkeep: the routines an expert runs on itself (memory, the evening tidy-up, its connections, its
+// own review) or that only sync a form to a sheet. They send nothing when all is well and open no
+// conversation, so the Routines tab folds them under « Entretien », below the work (Leslie, 29/10).
+const UPKEEP = [
+  /^routine de mémoire\b/i,
+  /\brange ta journée sans écrire\b/i,
+  /\brévise ta mémoire\b/i,
+  /\bbalaie tes connexions\b/i,
+  /^synchronise\b/i,
+];
+const UPKEEP_NAME = /^(m[ée]moire\b|r[ée]vision (de la )?m[ée]moire|relecture de moi|rangement du soir|balayage des connexions)|\bsynchro\b/i;
+
+export function isUpkeep(r: Pick<Routine, "name" | "task">): boolean {
+  if (UPKEEP_NAME.test(r.name.trim())) return true;
+  const task = r.task.replace(/^Tu es [^.\n]+\.\s*/, "").trim();
+  return UPKEEP.some((re) => re.test(task));
+}
