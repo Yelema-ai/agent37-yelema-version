@@ -38,7 +38,19 @@ const RUNTIME_LINES = [
   /^\s*(\[?system\]?\s*:?\s*)?your previous response was truncated\b.*$/i,
   /^\s*(\[?system\]?\s*:?\s*)?your request was not processed\b.*$/i,
   /^\s*[^\w\s]{0,3}\s*command invoked\b.*$/i,
+  // A delegated task's own notices (Djénéba's audit, 29/10): « ASYNC DELEGATION BATCH COMPLETE »,
+  // « Task … completed. Check the result ».
+  /^\s*[^\w\s]{0,3}\s*\[?\s*async delegation\b.*$/i,
+  /^\s*[^\w\s]{0,3}\s*task\b.{0,120}\b(completed|failed)\b.*$/i,
+  /^\s*[^\w\s]{0,3}\s*check the result\b.*$/i,
 ];
+
+// The marker an expert writes for itself when it hands work to a colleague: « [DÉLÉGUER] », « [DÉLÉGUER → Salif] ».
+const HANDOFF_MARK = /\[\s*d[ée]l[ée]guer\b[^\]\n]*\]\s*/gi;
+
+// The runtime's own words when a turn stops waiting for the model: the member reads what happened.
+const INTERRUPTED = /^\s*[^\w\s]{0,3}\s*operation interrupted\b.*$/i;
+export const INTERRUPTED_REPLY = "Ma réponse a été interrompue avant la fin. Renvoyez votre message et je reprends.";
 
 /**
  * A member's message as they wrote it: when an answer is cut, the runtime appends its own English
@@ -74,7 +86,11 @@ export function attachedFiles(text: string): { text: string; files: { name: stri
 
 /** A reply as the member reads it: the runtime's English lines and MEDIA tags out, the same paragraph never twice in a row. */
 export function cleanReply(text: string): string {
-  const kept = mediaTags(text).text.split("\n").filter((line) => !RUNTIME_LINES.some((re) => re.test(line)));
+  const kept = mediaTags(text)
+    .text.replace(HANDOFF_MARK, "")
+    .split("\n")
+    .map((line) => (INTERRUPTED.test(line) ? INTERRUPTED_REPLY : line))
+    .filter((line) => !RUNTIME_LINES.some((re) => re.test(line)));
   const paragraphs = kept.join("\n").split(/\n{2,}/);
   const out = paragraphs.filter((p, i) => !p.trim() || i === 0 || p.trim() !== paragraphs[i - 1].trim());
   return out.join("\n\n").replace(/^\s+|\s+$/g, "");

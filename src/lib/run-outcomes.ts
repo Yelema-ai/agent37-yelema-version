@@ -73,6 +73,16 @@ export function runOutcomes(readers: OutcomeReaders, { memoMax = MEMO_MAX, now =
   }
 
   return {
+    /** What each routine run among `sessions` is known to have come to; a run missing is unread yet. */
+    async outcomes(agentId: string, profileQuery: string, sessions: SessionSummary[], budget: ReadBudget = { left: DIRECT_READS }): Promise<Map<string, RunOutcome>> {
+      const all = await learn(agentId, profileQuery, sessions, budget);
+      const out = new Map<string, RunOutcome>();
+      for (const s of all) {
+        const o = known.get(`${agentId}|${s.id}`);
+        if (o) out.set(s.id, o);
+      }
+      return out;
+    },
     /** The ids of the finished routine runs among `sessions` that answered [SILENT]. */
     async silent(agentId: string, profileQuery: string, sessions: SessionSummary[], budget: ReadBudget = { left: DIRECT_READS }): Promise<Set<string>> {
       const all = await learn(agentId, profileQuery, sessions, budget);

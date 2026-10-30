@@ -113,6 +113,15 @@ test("routine runs: first look sets the mark, later finished runs are new", () =
   assert.deepEqual(detectRoutineRuns(later.since, [{ session_id: "c3", routine: "Point", last_active: 360 }]).fresh, []);
 });
 
+test("routine runs: a run whose outcome is not read yet waits for the next look", () => {
+  const next = detectRoutineRuns(100_000, [
+    { session_id: "c2", routine: "Mémoire", last_active: 200, message_count: 2, silent: false, pending: true },
+  ]);
+  assert.deepEqual(next, { since: 100_000, fresh: [] });
+  const later = detectRoutineRuns(next.since, [{ session_id: "c2", routine: "Mémoire", last_active: 200, message_count: 2, silent: true }]);
+  assert.deepEqual(later.fresh.map((r) => [r.session_id, r.silent]), [["c2", true]]);
+});
+
 test("a routine run marks its conversation unless it is on screen", () => {
   const key = convKey("a1", "p", "cron_x");
   assert.equal(conversationStatus(routineFinished(EMPTY_ACTIVITY, key, true, 1).state, key), "unread");
