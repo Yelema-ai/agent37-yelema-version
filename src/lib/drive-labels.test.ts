@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deliverableNotice, fileLabel, isMemberUpload } from "./drive-paths.ts";
+import { deliveryNotices, fileLabel, isMemberUpload, readableTitle } from "./drive-paths.ts";
 
 const R = "/home/node/Livrables";
 
@@ -20,12 +20,21 @@ test("an attachment shows its original name, any other file its own", () => {
   assert.equal(fileLabel({ name: "planning-q4.pdf", path: `${R}/Djénéba/planning-q4.pdf` }), "planning-q4.pdf");
 });
 
-test("a new deliverable names its Expert, and a scratch file is not one", () => {
-  assert.deepEqual(deliverableNotice({ name: "Plan Q4.pdf", path: "/home/node/Livrables/Djénéba/Plans/Plan Q4.pdf" }), {
-    title: "Nouveau livrable de Djénéba",
-    folder: "/home/node/Livrables/Djénéba/Plans",
-  });
-  assert.equal(deliverableNotice({ name: "Note.docx", path: "/home/node/Livrables/Note.docx" })?.title, "Nouveau livrable");
-  assert.equal(deliverableNotice({ name: "s.html", path: "/home/node/Livrables/Djénéba/s.html" }), null);
-  assert.equal(deliverableNotice({ name: "tmp_rapport.md", path: "/home/node/Livrables/Djénéba/tmp_rapport.md" }), null);
+const D = "/home/node/Livrables/Djénéba";
+test("a delivery is one notice per Expert, formats together, under a readable name", () => {
+  assert.equal(readableTitle("261030-yelema-fiche-de-poste-fde_v1.pdf"), "Yelema fiche de poste FDE");
+  assert.deepEqual(
+    deliveryNotices([
+      { name: "261030-yelema-fiche-de-poste-fde_v1.pdf", path: `${D}/Recrutement/261030-yelema-fiche-de-poste-fde_v1.pdf` },
+      { name: "261030-yelema-fiche-de-poste-fde_v1.docx", path: `${D}/Recrutement/261030-yelema-fiche-de-poste-fde_v1.docx` },
+      { name: "style.css", path: `${D}/Recrutement/style.css` },
+      { name: "s.html", path: `${D}/s.html` },
+    ]),
+    [{ id: `livrables:${D}/Recrutement/261030-yelema-fiche-de-poste-fde_v1.pdf`, title: "Nouveau livrable de Djénéba",
+       description: "Yelema fiche de poste FDE (PDF, Word)", folder: `${D}/Recrutement` }]
+  );
+  const two = deliveryNotices([{ name: "Plan Q4.pdf", path: `${D}/Plan Q4.pdf` }, { name: "Note.docx", path: `${D}/Note.docx` }]);
+  assert.equal(two[0].title, "2 nouveaux livrables de Djénéba");
+  assert.equal(two[0].description, "Plan Q4, Note");
+  assert.deepEqual(deliveryNotices([{ name: "tmp_rapport.md", path: `${D}/tmp_rapport.md` }]), []);
 });

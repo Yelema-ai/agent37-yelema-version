@@ -41,16 +41,69 @@ export function fileLabel(entry: { name: string; path: string }): string {
 }
 
 // « Nouveau livrable s.html » said neither who made it nor where it is, and « s.html » was the
-// Expert's scratch file (Leslie, 30/10). A notice names the Expert (the drive's first folder) and the
-// folder to open; a name of one or two characters, or a temporary file, is no deliverable.
-const SCRATCH = /^(tmp|temp|test|scratch)([-_ .]|$)|\.(tmp|temp|log|lock|part|crdownload|swp)$/i;
-export function deliverableNotice(entry: { name: string; path: string }): { title: string; folder: string } | null {
+// Expert's scratch file; then one document in two formats and its style sheet made three pop-ups over
+// the screen (Leslie, 30/10). New files are announced per delivery: one notice per Expert, a document's
+// formats together, under a readable name. Scratch files and a page's style or script never count.
+const SCRATCH = /^(tmp|temp|test|scratch)([-_ .]|$)|\.(tmp|temp|log|lock|part|crdownload|swp|css|js|mjs|map|woff2?|ttf|otf|ico)$/i;
+const FORMATS: Record<string, string> = {
+  pdf: "PDF", doc: "Word", docx: "Word", xls: "Excel", xlsx: "Excel", csv: "Excel", ppt: "PowerPoint", pptx: "PowerPoint",
+  html: "page web", htm: "page web", md: "texte", txt: "texte", png: "image", jpg: "image", jpeg: "image", webp: "image", svg: "image",
+  mp3: "audio", m4a: "audio", wav: "audio", mp4: "vidéo", zip: "archive",
+};
+const SMALL_WORDS = new Set(["de", "du", "la", "le", "les", "et", "en", "un", "une", "des", "au", "aux", "pour", "par", "sur", "a", "à"]);
+
+/** « 261030-yelema-fiche-de-poste-fde_v1.pdf » → « Yelema fiche de poste FDE »: no date, no version. */
+export function readableTitle(name: string): string {
+  const words = name
+    .replace(/\.[^.]+$/, "")
+    .replace(/^\d{6,8}[-_ ]+/, "")
+    .replace(/[-_ ]v\d+$/i, "")
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((w) => (w.length <= 3 && /^\p{Ll}[\p{Ll}\d]*$/u.test(w) && !SMALL_WORDS.has(w) ? w.toUpperCase() : w));
+  const text = words.join(" ");
+  return text ? text[0].toUpperCase() + text.slice(1) : name;
+}
+
+function isDeliverable(entry: { name: string }): boolean {
   const stem = entry.name.replace(/\.[^.]+$/, "");
-  if (stem.replace(/[^\p{L}\p{N}]/gu, "").length < 3 || SCRATCH.test(entry.name)) return null;
-  const rel = entry.path.startsWith(`${DRIVE_ABS}/`) ? entry.path.slice(DRIVE_ABS.length + 1) : entry.path;
-  const parts = rel.split("/");
-  return {
-    title: parts.length > 1 ? `Nouveau livrable de ${parts[0]}` : "Nouveau livrable",
-    folder: entry.path.slice(0, entry.path.lastIndexOf("/")),
-  };
+  return stem.replace(/[^\p{L}\p{N}]/gu, "").length >= 3 && !SCRATCH.test(entry.name);
+}
+
+export interface DeliveryNotice {
+  id: string;
+  title: string;
+  description: string;
+  /** The folder Ouvrir lands in: the first document's. */
+  folder: string;
+}
+
+export function deliveryNotices(entries: readonly { name: string; path: string }[]): DeliveryNotice[] {
+  const byExpert = new Map<string, Map<string, { title: string; formats: string[]; path: string }>>();
+  for (const e of entries) {
+    if (!isDeliverable(e)) continue;
+    const rel = e.path.startsWith(`${DRIVE_ABS}/`) ? e.path.slice(DRIVE_ABS.length + 1) : e.path;
+    const parts = rel.split("/");
+    const expert = parts.length > 1 ? parts[0] : "";
+    const docs = byExpert.get(expert) ?? new Map();
+    byExpert.set(expert, docs);
+    const title = readableTitle(fileLabel(e));
+    const key = `${e.path.slice(0, e.path.lastIndexOf("/"))}/${title}`;
+    const ext = /\.([^.]+)$/.exec(e.name)?.[1]?.toLowerCase() ?? "";
+    const doc = docs.get(key) ?? { title, formats: [], path: e.path };
+    const format = FORMATS[ext] ?? ext.toUpperCase();
+    if (format && !doc.formats.includes(format)) doc.formats.push(format);
+    docs.set(key, doc);
+  }
+  return [...byExpert].map(([expert, docs]) => {
+    const list = [...docs.values()];
+    const named = list.map((d) => (d.formats.length > 1 ? `${d.title} (${d.formats.join(", ")})` : d.title));
+    const who = expert ? ` de ${expert}` : "";
+    return {
+      id: `livrables:${list[0].path}`,
+      title: list.length === 1 ? `Nouveau livrable${who}` : `${list.length} nouveaux livrables${who}`,
+      description: named.length > 3 ? `${named.slice(0, 3).join(", ")}…` : named.join(", "),
+      folder: list[0].path.slice(0, list[0].path.lastIndexOf("/")),
+    };
+  });
 }

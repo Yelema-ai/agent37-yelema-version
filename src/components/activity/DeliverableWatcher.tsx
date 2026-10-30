@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { isDriveClutter } from "@/lib/drive-order";
-import { deliverableNotice, fileLabel, isMemberUpload } from "@/lib/drive-paths";
+import { deliveryNotices, isMemberUpload } from "@/lib/drive-paths";
 import { driveTree, onDriveChanged } from "@/lib/drive-store";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { readNotifyPrefs } from "@/lib/notify-prefs";
@@ -40,13 +40,11 @@ export function DeliverableWatcher() {
       const before = seen.current;
       seen.current = new Set(files.map((f) => f.path));
       if (!before || !readNotifyPrefs().deliverable) return;
-      for (const f of files.filter((f) => !before.has(f.path))) {
-        // Who made it, and Ouvrir lands in its folder; an Expert's scratch file is not announced.
-        const notice = deliverableNotice(f);
-        if (!notice) continue;
-        const open = () => router.push(`${agentTabPath(agentId, "files")}?dossier=${encodeURIComponent(notice.folder)}`);
-        toast(notice.title, { id: `livrable:${f.path}`, description: fileLabel(f), action: { label: "Ouvrir", onClick: open }, duration: 8000 });
-        if (document.hidden) systemNotify(notice.title, fileLabel(f), `livrable:${f.path}`, open);
+      // One notice per Expert for what it just delivered (lib/drive-paths.ts deliveryNotices).
+      for (const n of deliveryNotices(files.filter((f) => !before.has(f.path)))) {
+        const open = () => router.push(`${agentTabPath(agentId, "files")}?dossier=${encodeURIComponent(n.folder)}`);
+        toast(n.title, { id: n.id, description: n.description, action: { label: "Ouvrir", onClick: open }, duration: 8000 });
+        if (document.hidden) systemNotify(n.title, n.description, n.id, open);
       }
     },
     [agentId, router]
