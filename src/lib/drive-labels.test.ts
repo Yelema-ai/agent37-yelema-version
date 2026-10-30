@@ -37,4 +37,21 @@ test("a delivery is one notice per Expert, formats together, under a readable na
   assert.equal(two[0].title, "2 nouveaux livrables de Djénéba");
   assert.equal(two[0].description, "Plan Q4, Note");
   assert.deepEqual(deliveryNotices([{ name: "tmp_rapport.md", path: `${D}/tmp_rapport.md` }]), []);
+  // Only a finished deliverable: no logo, no page source, no picture of a document, no assets folder.
+  assert.deepEqual(
+    deliveryNotices([
+      { name: "logo.png", path: `${D}/logo.png` },
+      { name: "rapport.html", path: `${D}/rapport.html` },
+      { name: "notes.md", path: `${D}/notes.md` },
+      { name: "flyer-salon.png", path: `${D}/Site/assets/flyer-salon.png` },
+    ]),
+    []
+  );
+  const flyer = deliveryNotices([{ name: "Flyer salon Agro.png", path: `${D}/Visuels/Flyer salon Agro.png` }]);
+  assert.equal(flyer[0].description, "Flyer salon Agro");
+  const withChart = deliveryNotices([
+    { name: "Bilan.pdf", path: `${D}/Bilan/Bilan.pdf` },
+    { name: "courbe-ventes.png", path: `${D}/Bilan/courbe-ventes.png` },
+  ]);
+  assert.equal(withChart[0].description, "Bilan");
 });

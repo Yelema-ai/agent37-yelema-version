@@ -65,9 +65,20 @@ export function readableTitle(name: string): string {
   return text ? text[0].toUpperCase() + text.slice(1) : name;
 }
 
-function isDeliverable(entry: { name: string }): boolean {
+// Only a finished deliverable is announced (Leslie, 30/10: « tout ce qui n'est pas livrable fini, évite
+// les pop-ups »): a document, a video, or a picture made for itself. A web page's source, its style, a
+// logo or a picture inside an assets folder are the making of a deliverable, never one.
+const FINISHED = /\.(pdf|docx?|xlsx?|pptx?|mp4|mov|png|jpe?g|webp)$/i;
+const PICTURE = /\.(png|jpe?g|webp)$/i;
+const PART_NAME = /^(logo|icon|icone|favicon|image|img|photo|capture|screenshot|asset|fond|background|bg|cover)([-_ .\d]|$)/i;
+const PART_FOLDER = /(^|\/)(assets?|img|images|static|build|dist|src|sources?|_[^/]*|\.[^/]*)\//i;
+
+function isDeliverable(entry: { name: string; path: string }): boolean {
   const stem = entry.name.replace(/\.[^.]+$/, "");
-  return stem.replace(/[^\p{L}\p{N}]/gu, "").length >= 3 && !SCRATCH.test(entry.name);
+  if (stem.replace(/[^\p{L}\p{N}]/gu, "").length < 3 || SCRATCH.test(entry.name) || !FINISHED.test(entry.name)) return false;
+  if (PICTURE.test(entry.name) && PART_NAME.test(entry.name)) return false;
+  const rel = entry.path.startsWith(`${DRIVE_ABS}/`) ? entry.path.slice(DRIVE_ABS.length + 1) : entry.path;
+  return !PART_FOLDER.test(rel);
 }
 
 export interface DeliveryNotice {
@@ -80,8 +91,11 @@ export interface DeliveryNotice {
 
 export function deliveryNotices(entries: readonly { name: string; path: string }[]): DeliveryNotice[] {
   const byExpert = new Map<string, Map<string, { title: string; formats: string[]; path: string }>>();
-  for (const e of entries) {
-    if (!isDeliverable(e)) continue;
+  const kept = entries.filter(isDeliverable);
+  // A picture written beside a document in the same delivery is that document's illustration.
+  const docFolders = new Set(kept.filter((e) => !PICTURE.test(e.name)).map((e) => e.path.slice(0, e.path.lastIndexOf("/"))));
+  for (const e of kept) {
+    if (PICTURE.test(e.name) && docFolders.has(e.path.slice(0, e.path.lastIndexOf("/")))) continue;
     const rel = e.path.startsWith(`${DRIVE_ABS}/`) ? e.path.slice(DRIVE_ABS.length + 1) : e.path;
     const parts = rel.split("/");
     const expert = parts.length > 1 ? parts[0] : "";
