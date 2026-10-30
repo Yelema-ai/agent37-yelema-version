@@ -8,7 +8,6 @@ import {
   Download,
   File as FileIcon,
   Folder,
-  FolderPlus,
   FolderUp,
   Grid2X2,
   Link2,
@@ -23,13 +22,10 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { DropOverlay } from "@/components/DropOverlay";
 import { HiddenFileInput } from "@/components/HiddenFileInput";
-import { useAsyncAction } from "@/components/useAsyncAction";
 import { FilePreview } from "./FilePreview";
 import { useFileBrowser } from "./useFileBrowser";
 import { BackButton } from "@/components/ui/back-button";
@@ -44,8 +40,8 @@ type ViewMode = "list" | "grid";
 // A pointer only crossing a folder reads nothing; one resting on it this long reads it ahead.
 const HOVER_INTENT_MS = 150;
 
-export function FilesView({ agentId, initialPath, openPath }: { agentId: string; initialPath?: string; openPath?: string | null }) {
-  const fb = useFileBrowser(agentId, initialPath);
+export function FilesView({ agentId, initialPath, openPath, inbox }: { agentId: string; initialPath?: string; openPath?: string | null; inbox?: string }) {
+  const fb = useFileBrowser(agentId, initialPath, inbox);
   // A folder named in the address (« ?dossier= », from a path cited in the chat) opens here.
   // The first one is already the browser's starting folder; a cited folder gone opens the root.
   const { navigate: fbNavigate } = fb;
@@ -57,7 +53,6 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
   }, [openPath, fbNavigate]);
   const [preview, setPreview] = useState<FileEntry | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FileEntry | null>(null);
-  const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
@@ -240,17 +235,7 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
               <RefreshCw className={cn("h-4 w-4", fb.loading && "animate-spin")} />
             </ToolbarIconButton>
             <span className="mx-1 hidden h-6 w-px bg-border sm:block" />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setNewFolderOpen(true)}
-              disabled={!fb.path}
-              className="h-9"
-            >
-              <FolderPlus className="h-4 w-4" />
-              Nouveau dossier
-            </Button>
+            {/* Only the Experts make folders here (Myriel, Leslie 30/10): no « Nouveau dossier ». */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" disabled={!fb.path || fb.uploading} className="h-9">
@@ -338,7 +323,6 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
                 owner={ownerOf(fb.path)}
                 canCreate={!!fb.path}
                 uploading={fb.uploading}
-                onNewFolder={() => setNewFolderOpen(true)}
                 onUpload={() => uploadRef.current?.click()}
               />
             ) : viewMode === "list" ? (
@@ -446,13 +430,6 @@ export function FilesView({ agentId, initialPath, openPath }: { agentId: string;
 
       <FilePreview agentId={agentId} entry={preview} onClose={() => setPreview(null)} />
 
-      <NewFolderDialog
-        open={newFolderOpen}
-        onOpenChange={setNewFolderOpen}
-        onCreate={async (name) => {
-          await fb.createDir(name);
-        }}
-      />
 
       <ConfirmDialog
         open={!!pendingDelete}
@@ -688,13 +665,11 @@ function EmptyFolder({
   owner,
   canCreate,
   uploading,
-  onNewFolder,
   onUpload,
 }: {
   owner: string | null;
   canCreate: boolean;
   uploading: boolean;
-  onNewFolder: () => void;
   onUpload: () => void;
 }) {
   return (
@@ -708,73 +683,8 @@ function EmptyFolder({
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           Importer des fichiers
         </Button>
-        <Button variant="outline" size="sm" onClick={onNewFolder} disabled={!canCreate}>
-          <FolderPlus className="h-4 w-4" />
-          Nouveau dossier
-        </Button>
       </div>
     </div>
   );
 }
 
-function NewFolderDialog({
-  open,
-  onOpenChange,
-  onCreate,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreate: (name: string) => Promise<void>;
-}) {
-  const [name, setName] = useState("");
-  const { busy, run } = useAsyncAction();
-
-  function submit() {
-    const clean = name.trim();
-    if (!clean) return;
-    run(async () => {
-      await onCreate(clean);
-      setName("");
-      onOpenChange(false);
-    });
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        if (!busy) {
-          if (!o) setName("");
-          onOpenChange(o);
-        }
-      }}
-    >
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Nouveau dossier</DialogTitle>
-        </DialogHeader>
-        <Input
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          placeholder="Nom du dossier"
-          aria-label="Nom du dossier"
-        />
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Annuler
-          </Button>
-          <Button onClick={submit} disabled={busy || !name.trim()}>
-            {busy ? "Création…" : "Créer"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}

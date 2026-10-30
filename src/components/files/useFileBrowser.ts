@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { apiFetch, readApiError } from "@/lib/api";
 import { runPool } from "@/lib/bulk";
-import { isDriveRoot } from "@/lib/drive-paths";
+import { DRIVE_ABS, DRIVE_ROOT, isDriveRoot } from "@/lib/drive-paths";
 import { isDriveClutter, matchesDriveQuery, sortDriveEntries, type DriveSort } from "@/lib/drive-order";
 import { TOO_LARGE, tooLarge } from "@/lib/upload-limit";
 import { useDropZone } from "../useDropZone";
@@ -15,7 +15,7 @@ import { joinPath, type FileEntry, type FileListResponse } from "./types";
 // from the Agents API (it resolves ~ / defaults), so navigation, upload targets, and
 // new-folder/rename paths are all derived from the listing the server returns. Every call targets
 // the active agent via the `agentId` prop (this app is multi-agent).
-export function useFileBrowser(agentId: string, initialPath?: string) {
+export function useFileBrowser(agentId: string, initialPath?: string, inbox?: string) {
   const [path, setPath] = useState<string | null>(null); // resolved abs dir; null until first load
   const [parentPath, setParentPath] = useState<string | null>(null);
   const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -172,15 +172,23 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
   // Content-Length — the instance-host proxy drops chunked uploads (→ 0-byte files), so the
   // component just PUTs the File and lets the route frame it.
   const putFile = useCallback(
-    async (file: File, relPath: string): Promise<void> => {
-      const target = joinPath(path!, relPath);
+    async (file: File, relPath: string, dir: string): Promise<void> => {
+      const target = joinPath(dir, relPath);
       const res = await fetch(
         `/api/agents/${agentId}/files/content?path=${encodeURIComponent(target)}&overwrite=true`,
         { method: "PUT", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file }
       );
       if (!res.ok) throw new Error(await readApiError(res, "L’import a échoué"));
     },
-    [agentId, path]
+    [agentId]
+  );
+
+  // What the member brings lands in the inbox (« Reçus »), never among what the Expert made (Leslie,
+  // 30/10). Already in the inbox, or below it, a file lands where one is.
+  const inboxAbs = inbox ? inbox.replace(DRIVE_ROOT, DRIVE_ABS).replace(/\/+$/, "") : null;
+  const uploadDir = useCallback(
+    (here: string) => (inboxAbs && here !== inboxAbs && !here.startsWith(`${inboxAbs}/`) ? inboxAbs : here),
+    [inboxAbs]
   );
 
   // Upload a batch of (file, destination-relative-path) pairs to the current dir, then refresh once.
@@ -193,12 +201,13 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
       for (const { relPath } of all.filter(({ file }) => tooLarge(file)).slice(0, 3)) toast.error(`${relPath} : ${TOO_LARGE}`);
       if (all.length - items.length > 3) toast.error(`${all.length - items.length - 3} autres fichiers dépassent 4 Mo.`);
       if (!items.length || !path) return;
+      const dir = uploadDir(path);
       setUploading((n) => n + items.length);
       let failures = 0;
       try {
         await runPool(items, 4, async ({ file, relPath }) => {
           try {
-            await putFile(file, relPath);
+            await putFile(file, relPath, dir);
           } catch (e) {
             failures += 1;
             toast.error(`${relPath} : ${(e as Error).message}`);
@@ -208,13 +217,20 @@ export function useFileBrowser(agentId: string, initialPath?: string) {
         setUploading((n) => Math.max(0, n - items.length));
       }
       const ok = items.length - failures;
-      if (ok > 0) toast.success(ok === 1 ? "1 fichier importé" : `${ok} fichiers importés`);
+      const where = dir === path ? "" : ` dans ${dir.split("/").pop()}`;
+      if (ok > 0) toast.success(ok === 1 ? `1 fichier importé${where}` : `${ok} fichiers importés${where}`);
       // Refresh only if the user is still in the directory we uploaded into. A folder upload can run
       // for many seconds; reloading the captured `path` would otherwise undo a navigation made while
       // it was in flight.
-      if (pathRef.current === path) await reload(path);
+      // Brought into the inbox from elsewhere: the inbox opens, so what was imported shows.
+      if (pathRef.current === path) {
+        if (dir !== path && ok > 0) {
+          cache.current.delete(dir);
+          navigate(dir);
+        } else await reload(path);
+      }
     },
-    [path, putFile, reload]
+    [path, putFile, reload, uploadDir, navigate]
   );
 
   // Flat upload (the multi-file picker + drag-drop): each file lands by its basename.
