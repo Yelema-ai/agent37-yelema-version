@@ -2,7 +2,7 @@ import { agent37 } from "@/lib/agent37";
 import { requireAgentAccess } from "@/lib/auth";
 import { ApiError, handleError, json } from "@/lib/http";
 import { profileQuery, resolveProfile } from "@/lib/profiles";
-import { routineOfSession } from "@/lib/routines";
+import { isMemoryRun, routineOfSession } from "@/lib/routines";
 import type { RoutineSession } from "@/lib/activity";
 import type { RunOutcome } from "@/lib/routines";
 import { DIRECT_READS } from "@/lib/run-outcomes";
@@ -32,6 +32,8 @@ export async function GET(request: Request, { params }: Ctx) {
           const { data } = await agent37.listSessions(id, query);
           const known = await runOutcomeOf(id, query, data, budget);
           const runs = data
+            // A memory routine is announced nowhere, not even in the bell.
+            .filter((s) => !isMemoryRun(s))
             .map((s) => ({ s, routine: routineOfSession(s) }))
             .filter((x): x is { s: (typeof data)[number]; routine: string } => x.routine !== null)
             .map(({ s, routine }) => ({ session_id: s.id, routine, last_active: s.last_active ?? s.started_at ?? 0, message_count: s.message_count ?? null, ...outcomeFields(known.get(s.id)) }))

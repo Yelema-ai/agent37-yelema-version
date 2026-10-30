@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isRoutineRun, isUpkeep, isRunOf, isSilentRun, routineOfSession, routinePlainText, routineRunText, runOutcome } from "./routines.ts";
+import { isMemoryRun, isRoutineRun, isUpkeep, isRunOf, isSilentRun, routineOfSession, routinePlainText, routineRunText, runOutcome } from "./routines.ts";
 
 const HINT = "[IMPORTANT: You are running as a scheduled cron job. DELIVERY: … [SILENT] … context for this run, not as a request to schedule another job.]\n\n";
 
@@ -68,4 +68,18 @@ test("upkeep routines are told apart from the work", () => {
   assert.equal(isUpkeep(r("Point de fin de journée", "Tu es Djénéba. Il est 17 h : rends ton point de fin de journée.")), false);
   assert.equal(isUpkeep(r("Novotel – demandes de devis vers le tableur", "Range les nouvelles demandes de devis dans le tableur et signale-les.")), false);
   assert.equal(isUpkeep(r("Tri Boite Mail", "Note Yelema : les outils cités…")), false);
+});
+
+test("a run titled with Hermes's own preamble is a routine run, named plainly", () => {
+  const preamble = "[IMPORTANT: You are running as a scheduled cron job. DELIVERY: your final response is sent";
+  assert.equal(routineOfSession({ id: "20261029_191500_ab", title: preamble, preview: "---\nname: memoire\n" }), "Routine");
+  assert.equal(routineOfSession({ id: "s_1", title: "Relance des devis", preview: "Relance" }), null);
+});
+
+test("a memory routine's runs are never a conversation", () => {
+  const preamble = "[IMPORTANT: You are running as a scheduled cron job.]\n\n";
+  assert.equal(isMemoryRun({ id: "cron_a_1", title: "Mémoire : regrouper les conversations · Oct 29 19:18", preview: preamble }), true);
+  assert.equal(isMemoryRun({ id: "x", title: null, preview: preamble + "Routine de mémoire, silencieuse : personne n'attend de réponse." }), true);
+  assert.equal(isMemoryRun({ id: "cron_b_1", title: "Point du matin · Oct 29 08:00", preview: preamble + "Prépare le point du matin." }), false);
+  assert.equal(isMemoryRun({ id: "s_1", title: "Mémoire de l'entreprise", preview: "Que sais-tu de nous ?" }), false);
 });
