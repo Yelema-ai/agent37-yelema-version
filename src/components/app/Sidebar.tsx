@@ -8,20 +8,12 @@ import { useEffect, useState } from "react";
 import {
   ArrowRight,
   Blocks,
-  Calculator,
   ChevronDown,
-  Handshake,
-  Headset,
-  Layers,
   Lock,
-  Megaphone,
   PanelLeftClose,
   Search,
   SquarePen,
-  TrendingUp,
   Pin,
-  Users,
-  type LucideIcon,
 } from "lucide-react";
 import { useWorkspace } from "@/components/WorkspaceProvider";
 import { EnterpriseSidebar } from "@/components/enterprise/EnterpriseSidebar";
@@ -37,6 +29,7 @@ import { convKey } from "@/lib/activity";
 import { openSearch, warmSearch } from "@/components/conversations/SearchDialog";
 import { useCompanySessions } from "@/components/conversations/useCompanySessions";
 import type { Expert } from "@/lib/types";
+import { cycleKind, isDjeneba } from "@/lib/expert-cycle";
 import { cn } from "@/lib/utils";
 
 // Le haut du menu : « Nouvelle conversation » (l'accueil et sa barre de chat), en couleur, puis
@@ -182,7 +175,7 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
                 className="flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 pt-2 text-left text-[12px] font-semibold text-ink-3 hover:text-ink"
               >
                 {(() => {
-                  const Icon = cycleIcon(g.cycle.label);
+                  const Icon = cycleKind(g.cycle.label).icon;
                   return <Icon className="size-3.5 shrink-0" />;
                 })()}
                 <span className="min-w-0 flex-1 truncate">{g.cycle.label}</span>
@@ -201,6 +194,7 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
                   onNavigate={onNavigate}
                   readAhead={ahead.has(`${e.agentId}:${e.profileId}`)}
                   className={g.cycle && !collapsed ? "pl-4" : undefined}
+                  showCycle={!g.cycle}
                 />
               ))}
           </div>
@@ -260,8 +254,6 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
 // Menu folded: every entry is the same square, centred in the rail, so icons and faces line up.
 const RAIL_SQUARE = "size-11 min-h-0 shrink-0 justify-center px-0";
 
-const isDjeneba = (e: { catalogueKey?: string | null; profileId: string }) =>
-  (e.catalogueKey ?? e.profileId).toLowerCase().includes("djeneba");
 
 // The latest conversations of the chat d'entreprise, under a lock: private to the company. An
 // Expert's conversations stay in its space. A failed read shows nothing rather than an error here.
@@ -301,27 +293,6 @@ function CompanyChats({ agentId, pathname, onNavigate }: { agentId: string; path
       ))}
     </>
   );
-}
-
-// A cycle's icon and place, read from its label (the back office sends neither): the six cycles
-// Yelema sells, in the order of its offer, matched most specific first. Any other cycle comes after
-// them, with a neutral stack.
-const CYCLE_KINDS: { re: RegExp; icon: LucideIcon; rank: number }[] = [
-  { re: /invest|portefeuille/, icon: TrendingUp, rank: 5 },
-  { re: /client|fid[eé]lisation/, icon: Headset, rank: 4 },
-  { re: /commercial|vente/, icon: Handshake, rank: 0 },
-  { re: /marketing|communication/, icon: Megaphone, rank: 1 },
-  { re: /\brh\b|talent|ressources humaines/, icon: Users, rank: 2 },
-  { re: /financ|compta/, icon: Calculator, rank: 3 },
-];
-
-function cycleKind(label: string): { icon: LucideIcon; rank: number } {
-  const l = label.toLowerCase();
-  return CYCLE_KINDS.find((k) => k.re.test(l)) ?? { icon: Layers, rank: CYCLE_KINDS.length };
-}
-
-function cycleIcon(label: string): LucideIcon {
-  return cycleKind(label).icon;
 }
 
 // Experts without a cycle first (Djénéba heads them), then one group per cycle, in the offer's order.

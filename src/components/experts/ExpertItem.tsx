@@ -5,6 +5,7 @@ import { useExpertActivity } from "@/components/activity/hooks";
 import { expertKey } from "@/lib/activity";
 import { ExpertAvatar } from "@/components/experts/ExpertAvatar";
 import { agentTabPath } from "@/lib/expert-tabs";
+import { expertCycle } from "@/lib/expert-cycle";
 import { preloadExpert, sparingData } from "@/components/experts/expert-preload";
 import type { Expert } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -26,7 +27,10 @@ export function ExpertItem({
   className,
   onNavigate,
   readAhead = false,
+  showCycle = false,
 }: {
+  /** Its cycle beside the name (« Direction » for Djénéba): where no cycle heading says it already. */
+  showCycle?: boolean;
   expert: Expert;
   /** One of the first rows of the menu: its whole page is fetched ahead, code included. */
   readAhead?: boolean;
@@ -42,6 +46,7 @@ export function ExpertItem({
   const waiting = unread
     ? bell.items.find((i) => i.unread && expertKey(i.agentId, i.profile) === expertKey(expert.agentId, expert.profileId))
     : undefined;
+  const cycle = showCycle && !compact ? expertCycle(expert) : null;
   const hint = unread ? (unread === 1 ? "1 nouvelle réponse" : `${unread} nouvelles réponses`) : running ? "En cours" : null;
 
   return (
@@ -79,7 +84,10 @@ export function ExpertItem({
       </span>
       {!compact && (
         <span className="min-w-0 grow">
-          <span className="block truncate">{expert.displayName}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate">{expert.displayName}</span>
+            {cycle && <CyclePill name={cycle.name} />}
+          </span>
           <small className="block truncate text-xs font-medium text-ink-3">{subtitle}</small>
         </span>
       )}
@@ -90,5 +98,12 @@ export function ExpertItem({
       )}
       {!compact && !unread && running && <Loader2 className="size-4 shrink-0 animate-spin text-ok" aria-label="En cours" />}
     </Link>
+  );
+}
+
+/** The cycle as one quiet word beside a name (Leslie, 30/10). */
+export function CyclePill({ name, className }: { name: string; className?: string }) {
+  return (
+    <span className={cn("shrink-0 rounded-full bg-tint px-2 py-0.5 text-[11px] font-semibold leading-4 text-brand-ink", className)}>{name}</span>
   );
 }
