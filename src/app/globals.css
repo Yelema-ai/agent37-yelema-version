@@ -349,8 +349,14 @@ html [data-sonner-toast].toast-stack [data-content] {
   flex: 1 1 100%;
   min-width: 0;
 }
-html [data-sonner-toast].toast-stack [data-cancel] {
-  margin-left: auto;
+/* Both buttons together on the right, « Ouvrir » last, same height, on every width. */
+html [data-sonner-toast].toast-stack {
+  justify-content: flex-end;
+  column-gap: 8px;
+}
+html [data-sonner-toast].toast-stack [data-button] {
+  margin: 0;
+  height: 36px;
 }
 html [data-sonner-toast] [data-close-button] {
   left: auto;
