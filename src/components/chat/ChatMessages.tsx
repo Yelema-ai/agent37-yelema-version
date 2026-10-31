@@ -17,6 +17,8 @@ import { UpdateSpinner, useDeployPhase } from "@/components/app/DeployStatus";
 import type { Expert } from "@/lib/types";
 import { useChatContext } from "./ChatProvider";
 import { DocumentCards, useDriveListing } from "./DocumentCards";
+import { GoogleDocCards } from "./GoogleDocs";
+import { googleDocs, usedGoogleDocs, withoutGoogleActions, type GoogleDoc } from "@/lib/google-docs";
 import { Markdown } from "./Markdown";
 import { FilePreview, ReducedImage } from "@/components/files/FilePreview";
 import { contentUrl, thumbUrl, type FileEntry } from "@/components/files/types";
@@ -131,6 +133,7 @@ export function ChatMessages({
   onShowEarlier,
   onUnqueue,
   onDocs,
+  onGoogle,
   routine = null,
 }: {
   messages: ChatMessage[];
@@ -144,6 +147,8 @@ export function ChatMessages({
   onUnqueue?: (id: string) => void;
   /** Every document of the finished replies, each once: the chat's « Livrables » button lists them. */
   onDocs?: (docs: TurnDoc[]) => void;
+  /** The Google documents of the finished replies, each once, the last one used first, with when. */
+  onGoogle?: (docs: (GoogleDoc & { usedAt: number | null })[]) => void;
   /** The routine this conversation is a run of, by name. */
   routine?: string | null;
 }) {
@@ -174,6 +179,11 @@ export function ChatMessages({
     return [...seen.values()];
   }, [messages, liveIndex, listing]);
   useEffect(() => onDocs?.(allDocs), [allDocs, onDocs]);
+  const allGoogle = useMemo(
+    () => usedGoogleDocs(messages.flatMap((m, i) => (m.role === "assistant" && i !== liveIndex && m.content ? [{ text: cleanReply(m.content), at: m.at ?? null }] : []))),
+    [messages, liveIndex]
+  );
+  useEffect(() => onGoogle?.(allGoogle), [allGoogle, onGoogle]);
       const dashboard = useSafeDashboard();
 
   const handleContainerClick = (e: React.MouseEvent) => {
@@ -291,7 +301,7 @@ export function ChatMessages({
               {routineThread && !live && isSilentRun(m.content) ? (
                 <p className="text-sm italic text-ink-3">{SILENT_RUN_LABEL}</p>
               ) : m.content && !working ? (
-                <Markdown content={cleanReply(m.content)} agentId={agentId} profileId={profile} />
+                <Markdown content={live ? cleanReply(m.content) : withoutGoogleActions(cleanReply(m.content))} agentId={agentId} profileId={profile} />
               ) : showDots && updating ? (
                 // A reply held by the update: said to be received, so the wait does not read as a bug.
                 <p role="status" className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3.5 py-2 text-sm font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
@@ -299,6 +309,7 @@ export function ChatMessages({
                   {face ? `${face.displayName} reprend` : "Votre Expert reprend"} dans un instant, votre message est bien reçu.
                 </p>
               ) : null}
+              {!live && m.content && <GoogleDocCards docs={googleDocs(cleanReply(m.content))} />}
               {!live && m.content && <DocumentCards agentId={agentId} docs={turnDocs(cleanReply(m.content), listing, [...(m.files ?? []), ...mediaTags(m.content).paths])} />}
               {!live && m.content && !(routineThread && isSilentRun(m.content)) && <CopyReply text={cleanReply(m.content)} />}
             </div>

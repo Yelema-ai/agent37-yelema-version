@@ -29,6 +29,8 @@ import { fileLabel } from "@/lib/drive-paths";
 import { DropOverlay } from "@/components/DropOverlay";
 import { HiddenFileInput } from "@/components/HiddenFileInput";
 import { FilePreview } from "./FilePreview";
+import { GoogleGlyph } from "@/components/chat/GoogleDocs";
+import { shortcutKind } from "@/lib/google-docs";
 import { MoveDialog } from "./MoveDialog";
 import { VariantGroups } from "./VariantGroups";
 import { groupVariants, isSourceFolder } from "@/lib/visual-variants";
@@ -705,6 +707,8 @@ function EntryGlyph({ entry, large = false, selected = false }: { entry: FileEnt
     >
       {dir ? (
         <Folder className={iconClassName} />
+      ) : shortcutKind(entry.name) ? (
+        <GoogleGlyph kind={shortcutKind(entry.name)!} className={large ? "h-8 w-6" : "h-[18px] w-[14px]"} />
       ) : entry.type === "symlink" ? (
         <Link2 className={iconClassName} />
       ) : (
