@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Copy, FolderOpen, Mail, MessageSquare, Pencil, Repeat, Phone } from "lucide-react";
 import { agentTabPath, parseAgentRoute, type AgentTab } from "@/lib/expert-tabs";
@@ -166,6 +166,11 @@ export function AgentWorkspace({
     window.addEventListener("popstate", read);
     return () => window.removeEventListener("popstate", read);
   }, []);
+  // A link into one thread from elsewhere in the app (« Modifier avec » on a file) arrives by router.push.
+  const searchSession = useSearchParams().get("session");
+  useEffect(() => {
+    if (searchSession) setUrlSessionId(searchSession);
+  }, [searchSession]);
 
   // Its member may rename it and change its picture, where the back office keeps them.
   const canEdit = usePublicConfig().authVia === "backoffice" && !!expert?.catalogueKey;
