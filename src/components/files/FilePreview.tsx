@@ -36,6 +36,7 @@ export function FilePreview({
   const { experts } = useExpertsContext();
   const editor = entry ? editorOf(experts, agentId, entry.path) : null;
   const where = entry ? folderLabel(entry.path) : "";
+  const [opening, setOpening] = useState(false);
   const ext = entry?.name.includes(".") ? entry.name.split(".").pop()!.toUpperCase() : "";
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -66,12 +67,17 @@ export function FilePreview({
               {editor && (
                 <Button
                   variant="outline"
-                  onClick={() => {
+                  disabled={opening}
+                  onClick={async () => {
+                    setOpening(true);
+                    const session = await originOf(agentId, entry, editor.profileId);
+                    setOpening(false);
                     onClose();
-                    router.push(`${agentTabPath(agentId, "chat", editor.profileId)}?ref=${encodeURIComponent(entry.path)}`);
+                    const thread = session ? `session=${encodeURIComponent(session)}&` : "";
+                    router.push(`${agentTabPath(agentId, "chat", editor.profileId)}?${thread}ref=${encodeURIComponent(entry.path)}`);
                   }}
                 >
-                  <Pencil className="h-4 w-4" />
+                  {opening ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
                   {editor.name ? `Modifier avec ${editor.name}` : "Modifier dans le chat d’entreprise"}
                 </Button>
               )}
@@ -81,6 +87,19 @@ export function FilePreview({
       </DialogContent>
     </Dialog>
   );
+}
+
+// The conversation that wrote the file, to change it where it was made; null (a new one) when not found
+// within a few seconds.
+async function originOf(agentId: string, entry: FileEntry, profileId: string | null): Promise<string | null> {
+  const q = new URLSearchParams({ path: entry.path, modified: String(entry.modified || "") });
+  if (profileId) q.set("profile", profileId);
+  try {
+    const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/files/origin?${q}`, { signal: AbortSignal.timeout(8000) });
+    return res.ok ? (((await res.json()) as { session_id?: string | null }).session_id ?? null) : null;
+  } catch {
+    return null;
+  }
 }
 
 const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
