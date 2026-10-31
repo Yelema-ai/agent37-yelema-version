@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { agentTabPath } from "@/lib/expert-tabs";
 import { citedFolder, type TurnDoc } from "@/lib/drive-links";
 import { ConversationDocs } from "./ConversationDocs";
+import { GooglePin } from "./GoogleDocs";
+import type { GoogleDoc } from "@/lib/google-docs";
 import { DropOverlay } from "@/components/DropOverlay";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatComposer } from "./ChatComposer";
@@ -211,7 +213,12 @@ export function ChatView({
 
   // The documents this discussion produced: the « Livrables » button of the chat's bar lists them.
   const [docs, setDocs] = useState<TurnDoc[]>([]);
-  useEffect(() => setDocs([]), [activeSessionId]);
+  // The Google documents this discussion uses, the last one used first (Leslie, 31/10).
+  const [google, setGoogle] = useState<(GoogleDoc & { usedAt: number | null })[]>([]);
+  useEffect(() => {
+    setDocs([]);
+    setGoogle([]);
+  }, [activeSessionId]);
   const docsFolder = (docs[0] && citedFolder(docs[0].path.slice(0, docs[0].path.lastIndexOf("/")))) || driveFolder;
   const docsHref = `${agentTabPath(agentId, "files", profile)}${docsFolder ? `?dossier=${encodeURIComponent(docsFolder)}` : ""}`;
   const inHeader = Boolean(profile && actionsSlot);
@@ -256,7 +263,7 @@ export function ChatView({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-        {profile && messages.length > 0 && <ConversationDocs agentId={agentId} docs={docs} folderHref={docsHref} />}
+        {profile && messages.length > 0 && <ConversationDocs agentId={agentId} docs={docs} google={google} folderHref={docsHref} />}
         {inHeader && actionsSlot ? (
           createPortal(
             <span className="contents" onClickCapture={onAction}>
@@ -296,6 +303,7 @@ export function ChatView({
         </button>
         </div>
       </header>
+      {messages.length > 0 && <GooglePin doc={google[0] ?? null} />}
       {/* Top: scrolling transcript when there are messages; the centered welcome heading when
           empty (justify-end seats it just above the composer). */}
       <div
@@ -315,7 +323,7 @@ export function ChatView({
           </div>
         ) : messages.length > 0 ? (
           <div ref={contentRef}>
-            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} onUnqueue={unqueue} onDocs={setDocs} routine={sessions.find((s) => s.session_id === activeSessionId)?.routine ?? null} />
+            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} onUnqueue={unqueue} onDocs={setDocs} onGoogle={setGoogle} routine={sessions.find((s) => s.session_id === activeSessionId)?.routine ?? null} />
           </div>
         ) : (
           <>

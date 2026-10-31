@@ -37,7 +37,9 @@ export function isMemberUpload(path: string): boolean {
 const UPLOAD_PREFIX = /^[a-z0-9]{8}-(?=.)/;
 
 export function fileLabel(entry: { name: string; path: string }): string {
-  return /(^|\/)pi[eè]ces jointes\//i.test(entry.path.normalize("NFC")) ? entry.name.replace(UPLOAD_PREFIX, "") : entry.name;
+  if (/(^|\/)pi[eè]ces jointes\//i.test(entry.path.normalize("NFC"))) return entry.name.replace(UPLOAD_PREFIX, "");
+  // A Google document's shortcut reads as the document: « Suivi des candidatures », not « ….gsheet ».
+  return entry.name.replace(/\.(gsheet|gdoc|gslides)$/i, "");
 }
 
 // « Nouveau livrable s.html » said neither who made it nor where it is, and « s.html » was the
@@ -46,7 +48,7 @@ export function fileLabel(entry: { name: string; path: string }): string {
 // formats together, under a readable name. Scratch files and a page's style or script never count.
 const SCRATCH = /^(tmp|temp|test|scratch)([-_ .]|$)|\.(tmp|temp|log|lock|part|crdownload|swp|css|js|mjs|map|woff2?|ttf|otf|ico)$/i;
 const FORMATS: Record<string, string> = {
-  pdf: "PDF", doc: "Word", docx: "Word", xls: "Excel", xlsx: "Excel", csv: "Excel", ppt: "PowerPoint", pptx: "PowerPoint",
+  pdf: "PDF", doc: "Word", docx: "Word", xls: "Excel", xlsx: "Excel", csv: "Excel", ppt: "PowerPoint", pptx: "PowerPoint", gsheet: "Google Sheets", gdoc: "Google Docs", gslides: "Google Slides",
   html: "page web", htm: "page web", md: "texte", txt: "texte", png: "image", jpg: "image", jpeg: "image", webp: "image", svg: "image",
   mp3: "audio", m4a: "audio", wav: "audio", mp4: "vidéo", zip: "archive",
 };
@@ -68,7 +70,7 @@ export function readableTitle(name: string): string {
 // Only a finished deliverable is announced (Leslie, 30/10: « tout ce qui n'est pas livrable fini, évite
 // les pop-ups »): a document, a video, or a picture made for itself. A web page's source, its style, a
 // logo or a picture inside an assets folder are the making of a deliverable, never one.
-const FINISHED = /\.(pdf|docx?|xlsx?|pptx?|mp4|mov|png|jpe?g|webp)$/i;
+const FINISHED = /\.(pdf|docx?|xlsx?|pptx?|mp4|mov|png|jpe?g|webp|gsheet|gdoc|gslides)$/i;
 const PICTURE = /\.(png|jpe?g|webp)$/i;
 const PART_NAME = /^(logo|icon|icone|favicon|image|img|photo|capture|screenshot|asset|fond|background|bg|cover)([-_ .\d]|$)/i;
 const PART_FOLDER = /(^|\/)(assets?|img|images|static|build|dist|src|sources?|_[^/]*|\.[^/]*)\//i;

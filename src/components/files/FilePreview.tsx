@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, Loader2, Pencil } from "lucide-react";
+import { Download, ExternalLink, Loader2, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { agentTabPath } from "@/lib/expert-tabs";
@@ -13,6 +13,8 @@ import { Preview as DocPreview } from "@/components/chat/DocumentCards";
 import { docKind } from "@/lib/drive-links";
 import { contentUrl, formatBytes, previewKind, thumbUrl, type FileEntry } from "./types";
 import { Markdown } from "@/components/chat/Markdown";
+import { GoogleTile } from "@/components/chat/GoogleDocs";
+import { GOOGLE_LABEL, parseShortcut, shortcutKind, type GoogleDoc } from "@/lib/google-docs";
 
 // Preview one file in a dialog. Rendering is chosen by extension:
 //  - image  -> <img> of a reduced copy, the original one click away (an <img> never runs script)
@@ -21,6 +23,7 @@ import { Markdown } from "@/components/chat/Markdown";
 //  - sandbox (html/svg) -> a SANDBOXED <iframe> with all permissions stripped, so embedded
 //    scripts can't run and can't reach this origin's session — the XSS guard for active documents
 //  - Word, Excel, PowerPoint -> read in the page (DocumentCards' renderers, in full)
+//  - Google shortcut (.gsheet, .gdoc, .gslides) -> the document's name and a button to open it in Google
 //  - none   -> no inline preview; offer the download instead
 export function FilePreview({
   agentId,
@@ -37,7 +40,8 @@ export function FilePreview({
   const editor = entry ? editorOf(experts, agentId, entry.path) : null;
   const where = entry ? folderLabel(entry.path) : "";
   const [opening, setOpening] = useState(false);
-  const ext = entry?.name.includes(".") ? entry.name.split(".").pop()!.toUpperCase() : "";
+  const google = entry ? shortcutKind(entry.name) : null;
+  const ext = google ? GOOGLE_LABEL[google] : entry?.name.includes(".") ? entry.name.split(".").pop()!.toUpperCase() : "";
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       {/* A panel on the right over the dimmed page (Myriel, Leslie 30/10), the whole height; full
@@ -46,11 +50,15 @@ export function FilePreview({
         {entry && (
           <>
             <DialogHeader className="flex-row items-center gap-3 space-y-0 border-b border-line px-5 py-4 pr-14 text-left">
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-tint text-[11px] font-bold text-brand-ink">{ext.slice(0, 4) || "—"}</span>
+              {google ? (
+                <GoogleTile kind={google} />
+              ) : (
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-tint text-[11px] font-bold text-brand-ink">{ext.slice(0, 4) || "—"}</span>
+              )}
               <span className="min-w-0">
                 <DialogTitle className="truncate text-base">{fileLabel(entry)}</DialogTitle>
                 <DialogDescription className="truncate text-xs text-ink-3">
-                  {[where, ext, formatBytes(entry.size)].filter(Boolean).join(" · ")}
+                  {[where, ext, google ? null : formatBytes(entry.size)].filter(Boolean).join(" · ")}
                 </DialogDescription>
               </span>
             </DialogHeader>
@@ -58,12 +66,15 @@ export function FilePreview({
               <PreviewBody agentId={agentId} entry={entry} />
             </div>
             <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-4">
-              <Button asChild>
-                <a href={contentUrl(agentId, entry.path, "attachment")} download={fileLabel(entry)}>
-                  <Download className="h-4 w-4" />
-                  Télécharger
-                </a>
-              </Button>
+              {/* A Google shortcut has nothing to download: its document opens in Google. */}
+              {!shortcutKind(entry.name) && (
+                <Button asChild>
+                  <a href={contentUrl(agentId, entry.path, "attachment")} download={fileLabel(entry)}>
+                    <Download className="h-4 w-4" />
+                    Télécharger
+                  </a>
+                </Button>
+              )}
               {editor && (
                 <Button
                   variant="outline"
@@ -143,6 +154,10 @@ function PreviewBody({ agentId, entry }: { agentId: string; entry: FileEntry }) 
     return <iframe src={inline} title={entry.name} sandbox="" className={frame} />;
   }
 
+  if (shortcutKind(entry.name)) {
+    return <GoogleShortcut url={inline} name={entry.name} />;
+  }
+
   if (kind === "text") {
     return <TextPreview url={inline} markdown={/\.(md|markdown)$/i.test(entry.name)} />;
   }
@@ -173,6 +188,41 @@ export function ReducedImage({ thumb, original, alt, className, onFail }: { thum
   return (
     // eslint-disable-next-line @next/next/no-img-element -- streamed via our BFF, not a remote asset
     <img src={src} alt={alt} loading="lazy" decoding="async" className={className} onError={() => (src === thumb ? setSrc(original) : onFail?.())} />
+  );
+}
+
+// A Google document the Expert keeps a shortcut of in its drive (Leslie, 31/10): it lives in Google,
+// so the preview is its name and the way there.
+function GoogleShortcut({ url, name }: { url: string; name: string }) {
+  const [doc, setDoc] = useState<GoogleDoc | null | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    setDoc(undefined);
+    fetch(url)
+      .then((res) => (res.ok ? res.text() : Promise.reject()))
+      .then((body) => !cancelled && setDoc(parseShortcut(name, body)))
+      .catch(() => !cancelled && setDoc(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [url, name]);
+  if (doc === undefined)
+    return (
+      <div className="flex min-h-[12rem] items-center justify-center text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+      </div>
+    );
+  if (!doc) return <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">Ce raccourci ne mène à aucun document Google.</p>;
+  return (
+    <div className="flex min-h-[12rem] flex-col items-center justify-center gap-4 rounded-md border bg-secondary/30 p-6 text-center">
+      <GoogleTile kind={doc.kind} className="size-14 rounded-2xl [&_svg]:h-9 [&_svg]:w-7" />
+      <p className="text-[15px] font-semibold text-ink">{doc.title}</p>
+      <Button asChild className="h-11 rounded-xl px-5">
+        <a href={doc.url} target="_blank" rel="noopener noreferrer">
+          <ExternalLink /> Ouvrir dans {GOOGLE_LABEL[doc.kind]}
+        </a>
+      </Button>
+    </div>
   );
 }
 
