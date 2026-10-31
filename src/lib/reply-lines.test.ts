@@ -64,3 +64,14 @@ test("options A and B in a sentence go on their own lines", () => {
   );
   assert.equal(replyLines("Le plan A. Rien d'autre."), "Le plan A. Rien d'autre.");
 });
+
+test("numbered items in the sentence or under a title become a list (Leslie, 31/10)", () => {
+  assert.equal(
+    replyLines("**Ensuite** 4. **La paie.** Fixer le cycle. 5. **Une grille.** Elle évite.\n\n**Quand l'équipe grandit** 8. L'accueil."),
+    "**Ensuite**\n\n4. **La paie.** Fixer le cycle.\n5. **Une grille.** Elle évite.\n\n**Quand l'équipe grandit**\n\n8. L'accueil."
+  );
+  assert.equal(replyLines("**Ensuite**\n4. **La paie.**\n5. **La grille.**"), "**Ensuite**\n\n4. **La paie.**\n5. **La grille.**");
+  assert.equal(replyLines("1. Premier point. 2. Deuxième point."), "1. Premier point.\n2. Deuxième point.");
+  assert.equal(replyLines("Il reste 3. Pas plus. Le budget est de 5. Nous verrons."), "Il reste 3. Pas plus. Le budget est de 5. Nous verrons.");
+  assert.equal(replyLines("Voici :\n1. Un\n2. Deux"), "Voici :\n\n1. Un\n2. Deux");
+});

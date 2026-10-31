@@ -24,6 +24,12 @@ const INLINE_BULLET = /\s+•\s+/;
 // a B on the line, each option goes on its own line, its letter in bold.
 const OPTION = /(^|\s)([A-E])[.)]\s+(?=\p{Lu})/gu;
 const LIST_MARKER = /^(\s*)(\d+[.)]|[-*+])\s+/;
+// « **Ensuite** 4. **La paie.** … 5. **Une grille.** … »: numbered items in the sentence (Leslie, 31/10).
+// Only numbers that follow each other (4, 5, 6) and open a capital or bold text start an item.
+const INLINE_NUM = /\s(\d{1,2})[.)]\s+(?=\*\*|\p{Lu})/gu;
+// A numbered item that does not start at 1 cannot interrupt a paragraph in markdown: under a title
+// line (« **Ensuite** » then « 4. La paie »), it is glued to it as text unless a blank line comes first.
+const NUM_ITEM = /^\s*\d+[.)]\s/;
 const ACTION_LINK = /(?:🔗\s*)?\[((?:Ouvrir|Télécharger|Voir|Consulter|Lire|Écouter|Valider|Répondre)\b[^\]\n]*)\]\(([^)\s]+)\)/g;
 
 export function replyLines(text: string): string {
@@ -55,6 +61,14 @@ export function replyLines(text: string): string {
       out.push(head.replace(/\s+$/, ""), "", ...items.map((t) => `- ${t.trim()}`), "");
       continue;
     }
+    const numbered = splitNumbers(line);
+    if (numbered) {
+      if (!LIST_MARKER.test(numbered[0]) || !NUM_ITEM.test(numbered[0])) out.push(numbered[0].replace(/\s+$/, ""), "");
+      else out.push(numbered[0]);
+      out.push(...numbered.slice(1), "");
+      continue;
+    }
+    if (NUM_ITEM.test(line) && out.length && out[out.length - 1].trim() && !LIST_MARKER.test(out[out.length - 1]) && !/^\s/.test(out[out.length - 1])) out.push("");
     line = splitOptions(line);
     line = line.replace(CAPS_TITLE, (_m, head: string, title: string) => `${head}**${title}**`);
     line = line.replace(ACTION_LINK, (_m, label: string, url: string) => `[**${label}**](${url})`);
@@ -75,4 +89,24 @@ function splitOptions(line: string): string {
   const marker = LIST_MARKER.exec(line);
   const indent = marker ? " ".repeat(marker[0].length) : "";
   return line.replace(OPTION, (_m, before: string, letter: string) => (before === "" ? `**${letter}.** ` : `  \n${indent}**${letter}.** `));
+}
+
+// The line cut at its inline numbered items, or null: at least two (or one after a title), each one
+// more than the one before.
+function splitNumbers(line: string): string[] | null {
+  const marks = [...line.matchAll(INLINE_NUM)];
+  if (!marks.length) return null;
+  const lead = NUM_ITEM.exec(line) ? Number(/\d+/.exec(line)![0]) : null;
+  // A lone item counts only right after a bold title or a colon (« **Quand l'équipe grandit** 8. … »).
+  const titled = /(\*\*|:)\s*$/.test(line.slice(0, marks[0].index));
+  if (marks.length + (lead === null ? 0 : 1) < 2 && !titled) return null;
+  const nums = marks.map((m) => Number(m[1]));
+  const seq = lead === null ? nums : [lead, ...nums];
+  if (seq.some((n, i) => i > 0 && n !== seq[i - 1] + 1)) return null;
+  const parts: string[] = [line.slice(0, marks[0].index).trimEnd()];
+  marks.forEach((m, i) => {
+    const end = i + 1 < marks.length ? marks[i + 1].index : line.length;
+    parts.push(`${m[1]}. ${line.slice(m.index! + m[0].length, end).trim()}`);
+  });
+  return parts;
 }
