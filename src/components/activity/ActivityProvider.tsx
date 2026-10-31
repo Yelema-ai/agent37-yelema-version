@@ -231,7 +231,7 @@ export function ActivityProvider({ children }: { children: ReactNode }) {
         if (ref && !silent) driveChanged(ref.agentId);
         if (ref && !silent) presenceRef.current.get(expertKey(ref.agentId, ref.profile))?.addSession({ session_id: sessionId, title: routine, last_active: at, routine });
         const now = Date.now();
-        const r = routineFinished(stateRef.current, key, visible(), now);
+        const r = routineFinished(stateRef.current, key, visible(), now, silent);
         commit(r.notice ? remember(r.state, r.notice, "", routine, now, silent) : r.state);
         if (r.notice && loud && !silent) announce(r.notice, "", routine);
       },

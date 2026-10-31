@@ -125,8 +125,11 @@ export function finishTurn(
   return notice(dropped, convKey(t.agentId, t.profile, t.sessionId), outcome === "failed" ? "failed" : "reply", visible, now);
 }
 
-export function routineFinished(s: ActivityState, key: string, visible: boolean, now: number): { state: ActivityState; notice: Notice | null } {
-  return notice(s, key, "routine", visible, now);
+// A run with nothing to report (`silent`) is a line in the bell only: no unread mark, so no dot on its
+// expert in the menu nor in « Non lues », as it has no conversation to open (Leslie, 31/10).
+export function routineFinished(s: ActivityState, key: string, visible: boolean, now: number, silent = false): { state: ActivityState; notice: Notice | null } {
+  const r = notice(s, key, "routine", visible, now);
+  return silent && r.state.unread[key] && !s.unread[key] ? { ...r, state: { ...r.state, unread: without(r.state.unread, (_, k) => k === key) } } : r;
 }
 
 // The conversation on screen changes; opening one reads it.
@@ -280,6 +283,8 @@ export function parsePersisted(raw: string | null, agentId: string, now: number)
       }
     }
   }
+  // An unread mark a quiet run left before 31/10: it goes, the run's line stays in the bell.
+  for (const [k, n] of Object.entries(out.notes)) if (n.silent && out.unread[k]?.kind === "routine") delete out.unread[k];
   if (isObj(data.routines)) {
     for (const [k, v] of Object.entries(data.routines)) if (k.startsWith(prefix) && typeof v === "number") out.routines[k] = v;
   }
