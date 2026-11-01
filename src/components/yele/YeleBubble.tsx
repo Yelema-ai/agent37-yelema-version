@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUpRight, BarChart3, Bug, ChevronLeft, History, KeyRound, Loader2, Mic, Plug, Receipt, Repeat, FileSpreadsheet, ShieldCheck, Send, Sparkles, SquarePen, Users, X, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, BarChart3, Maximize2, Bug, ChevronLeft, History, KeyRound, Loader2, Mic, Plug, Receipt, Repeat, FileSpreadsheet, ShieldCheck, Send, Sparkles, SquarePen, Users, X, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { profileQuery } from "@/lib/profile-id";
@@ -22,6 +22,7 @@ import { CallButton } from "@/components/voice/CallButton";
 import type { Companion } from "@/lib/companion";
 import { cn } from "@/lib/utils";
 import { toMs } from "@/lib/activity";
+import { agentTabPath } from "@/lib/expert-tabs";
 
 type Shortcut = { label: string; desc: string; prompt: string; icon: LucideIcon };
 type PastSession = { session_id: string; title: string | null; last_active: number };
@@ -237,6 +238,11 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
         </div>
         <div className="flex items-center gap-1">
           {/* Yélé se joint aussi par la voix, comme dans l'app mobile (Leslie, 01/11). */}
+          {/* Sa page entière : ses discussions, appels, livrables et routines, au lieu de les chercher
+              dans les notifications (Leslie, 01/11). */}
+          <Link href={agentTabPath(companion.agentId, "chat", companion.profileId)} onClick={onClose} title="Agrandir" aria-label="Agrandir : l’espace de Yélé" className="grid size-10 place-items-center rounded-lg text-ink-2 hover:bg-soft hover:text-ink">
+            <Maximize2 className="size-4" />
+          </Link>
           <CallButton expert={{ key: companion.profileId, name: "Yélé", photoUrl: YELE_FACE }} iconOnly label="Appeler" className="size-10 rounded-lg bg-transparent text-ink-2 shadow-none hover:bg-soft hover:text-ink" />
           <button type="button" onClick={() => (past ? setPast(null) : openPast())} title="Anciennes discussions" aria-label="Anciennes discussions" aria-pressed={!!past} className={cn("flex h-10 items-center gap-1.5 rounded-lg px-2 text-[13px] font-semibold hover:bg-soft hover:text-ink", past ? "bg-soft text-ink" : "text-ink-2")}>
             <History className="size-4" /> Historique
