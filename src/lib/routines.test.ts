@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deliveryLabel, isMemoryRun, isUpkeep, nextRunLabel, runDayLabel, scheduleLabel, isRoutineRun, isRunOf, isSilentRun, routineOfSession, routinePlainText, routineRunText, runOutcome } from "./routines.ts";
+import { cronFor, cronParts, deliveryLabel, RECURRENCES, recurrenceOf, isMemoryRun, isUpkeep, nextRunLabel, runDayLabel, scheduleLabel, isRoutineRun, isRunOf, isSilentRun, routineOfSession, routinePlainText, routineRunText, runOutcome } from "./routines.ts";
 
 const sp = (s: string) => s.replace(/\u00a0/g, " ");
 
@@ -106,4 +106,20 @@ test("a routine says when it last ran and where it arrives", () => {
   assert.deepEqual(deliveryLabel("local"), { text: "Reçue dans l’app", ok: true });
   assert.equal(deliveryLabel("origin").ok, false);
   assert.equal(deliveryLabel(null).ok, false);
+});
+
+test("every choice of the « Récurrent » list makes a schedule the instance accepts", () => {
+  // The runtime gateway's check before it writes an expert's jobs.json (yelema-platform,
+  // apps/runtime-gateway/src/routines.ts), and the app's own (routines/_body.ts).
+  const GATEWAY = /^[0-9*,/ -]{9,100}$/;
+  const APP = /^[\d*,\-/]+(\s+[\d*,\-/]+){4}$/;
+  for (const r of RECURRENCES) {
+    for (const time of ["00:00", "07:30", "09:05", "23:59"]) {
+      const cron = cronFor({ dom: r.dom, dow: r.dow, time });
+      assert.ok(GATEWAY.test(cron) && cron.split(" ").length === 5, `${r.label} ${time} → ${cron}`);
+      assert.ok(APP.test(cron), cron);
+      assert.deepEqual(cronParts(cron), { dom: r.dom, dow: r.dow, time });
+      assert.equal(recurrenceOf(cronParts(cron)!), r.label);
+    }
+  }
 });
