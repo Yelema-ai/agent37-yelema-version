@@ -62,21 +62,27 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
   const shown = groupByCycle(experts).flatMap((g) => g.experts);
   const ahead = new Set(shown.slice(0, READ_AHEAD).map((e) => `${e.agentId}:${e.profileId}`));
   useReadAhead(shown);
-  // Cycles folded by the member, remembered per browser.
-  const [foldedCycles, setFoldedCycles] = useState<string[]>([]);
+  // Each cycle the member folded (true) or opened (false), remembered per browser. Past FOLD_FROM Experts,
+  // a cycle they never touched starts folded, except the one of the Expert on screen (Leslie, 01/11 : gagner
+  // de la place à gauche sans perdre l'accès en un clic).
+  const [cycleChoice, setCycleChoice] = useState<Record<string, boolean>>({});
   useEffect(() => {
     try {
-      setFoldedCycles(JSON.parse(localStorage.getItem("yelema.cycles-folded") ?? "[]"));
+      const old: string[] = JSON.parse(localStorage.getItem("yelema.cycles-folded") ?? "[]");
+      const saved: Record<string, boolean> = JSON.parse(localStorage.getItem(CYCLES_KEY) ?? "{}");
+      setCycleChoice({ ...Object.fromEntries(old.map((k) => [k, true])), ...saved });
     } catch {}
   }, []);
-  const toggleCycle = (key: string) =>
-    setFoldedCycles((prev) => {
-      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+  const toggleCycle = (key: string, folded: boolean) =>
+    setCycleChoice((prev) => {
+      const next = { ...prev, [key]: !folded };
       try {
-        localStorage.setItem("yelema.cycles-folded", JSON.stringify(next));
+        localStorage.setItem(CYCLES_KEY, JSON.stringify(next));
       } catch {}
       return next;
     });
+  const isActive = (e: { agentId: string; profileId: string }) =>
+    here === `/experts/${e.agentId}/${e.profileId}` || here.startsWith(`/experts/${e.agentId}/${e.profileId}/`);
 
   return (
     <aside
@@ -164,14 +170,15 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
       )}
 
       {groupByCycle(experts).map((g) => {
-        const folded = !collapsed && g.cycle !== null && foldedCycles.includes(g.cycle.key);
+        const folded =
+          !collapsed && g.cycle !== null && (cycleChoice[g.cycle.key] ?? (experts.length > FOLD_FROM && !g.experts.some(isActive)));
         return (
           <div key={g.cycle?.key ?? "_"} className="flex flex-col gap-0.5">
             {/* The cycle a group of Experts came with: one quiet line, folding the group. */}
             {g.cycle && !collapsed && (
               <button
                 type="button"
-                onClick={() => toggleCycle(g.cycle!.key)}
+                onClick={() => toggleCycle(g.cycle!.key, folded)}
                 aria-expanded={!folded}
                 className="flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 pt-2 text-left text-[12px] font-semibold text-ink-3 hover:text-ink"
               >
@@ -190,7 +197,7 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
                   // Keyed on instance and profile: a profile name alone is not unique across instances.
                   key={`${e.agentId}:${e.profileId}`}
                   expert={e}
-                  active={here === `/experts/${e.agentId}/${e.profileId}` || here.startsWith(`/experts/${e.agentId}/${e.profileId}/`)}
+                  active={isActive(e)}
                   compact={collapsed}
                   onNavigate={onNavigate}
                   readAhead={ahead.has(`${e.agentId}:${e.profileId}`)}
@@ -254,6 +261,9 @@ function ExpertsSidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
 
 // Menu folded: every entry is the same square, centred in the rail, so icons and faces line up.
 const RAIL_SQUARE = "size-11 min-h-0 shrink-0 justify-center px-0";
+// Past this many Experts, the cycles start folded (Leslie, 01/11).
+const FOLD_FROM = 8;
+const CYCLES_KEY = "yelema.cycles-fold";
 
 
 // The latest conversations of the chat d'entreprise, under a lock: private to the company. An
