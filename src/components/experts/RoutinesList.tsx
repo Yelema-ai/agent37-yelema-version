@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, Loader2, Paperclip, Repeat, Sparkles, Wrench } from "lucide-react";
 import { relativeFr } from "@/lib/fr-dates";
-import { deliveryLabel, isUpkeep, nextRunLabel, runDayLabel, scheduleLabel, type Routine } from "@/lib/routines";
+import { deliveryLabel, isUpkeep, nextRunChip, runDayLabel, scheduleLabel, type Routine } from "@/lib/routines";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { RowMenu, Switch, type RoutineActions } from "./RoutinesTable";
@@ -65,7 +65,7 @@ export function RoutinesList({ routines, expertName, ...act }: { routines: Routi
   // · prochaine est bizarre »).
   const next = (r: Routine) => {
     const at = r.nextRunAt ? Date.parse(r.nextRunAt) : Number.NaN;
-    const text = !r.enabled ? "En pause" : !Number.isNaN(at) ? `Prochaine : ${nextRunLabel(at)}` : null;
+    const text = !r.enabled ? "En pause" : !Number.isNaN(at) ? nextRunChip(at) : null;
     return text && <span className="shrink-0 rounded-full bg-soft px-2 py-0.5 text-[11.5px] font-medium text-ink-2">{text}</span>;
   };
 

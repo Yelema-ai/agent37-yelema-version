@@ -301,6 +301,15 @@ export function runDayLabel(at: number, now = Date.now()): string {
 }
 export const nextRunLabel = runDayLabel;
 
+/**
+ * The chip beside a routine's schedule. A next run already past (an instance that slept: no routine
+ * runs then) never reads « Prochaine : lundi dernier » (Leslie, 01/11): it says the run has not left yet.
+ */
+export function nextRunChip(nextRunAt: number, now = Date.now()): string {
+  if (nextRunAt < now - 60_000) return `Pas encore partie, prévue ${runDayLabel(nextRunAt, now)}`;
+  return `Prochaine : ${runDayLabel(nextRunAt, now)}`;
+}
+
 const PLATFORMS: Record<string, string> = { telegram: "Telegram", slack: "Slack", teams: "Teams", whatsapp: "WhatsApp", discord: "Discord", email: "e-mail", local: "l’app" };
 
 // Where a routine's result arrives (PDF du 30/10 : « canal de réception »). The app always shows a run
