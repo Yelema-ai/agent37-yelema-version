@@ -26,6 +26,7 @@ import { cleanReply } from "@/lib/chat-errors";
 import { mediaTags } from "@/lib/media-tags";
 import { LiveWait, StepsList } from "./ChatSteps";
 import type { ChatMessage, MessageAttachment } from "./types";
+import { commandText } from "@/lib/session-title";
 
 const PAGE = 80;
 
@@ -135,6 +136,7 @@ export function ChatMessages({
   onDocs,
   onGoogle,
   routine = null,
+  pronoun = null,
 }: {
   messages: ChatMessage[];
   isStreaming: boolean;
@@ -151,6 +153,8 @@ export function ChatMessages({
   onGoogle?: (docs: (GoogleDoc & { usedAt: number | null })[]) => void;
   /** The routine this conversation is a run of, by name. */
   routine?: string | null;
+  /** The expert's « elle » or « il »: a command the app sent reads as its button (« Ce qu'elle sait »). */
+  pronoun?: "elle" | "il" | null;
 }) {
   // The instance whose drive the paths in a reply point into (they become download links).
   const { agentId, profile } = useChatContext();
@@ -262,7 +266,7 @@ export function ChatMessages({
                 {attachments.length > 0 && <MessageAttachments attachments={attachments} agentId={agentId} />}
                 {m.content && (
                   <div className={cn("max-w-full whitespace-pre-wrap rounded-[18px] rounded-br-md bg-brand [overflow-wrap:anywhere] px-4 py-2.5 text-[15px] text-on-brand", m.queued && "opacity-60", m.steered && !m.queued && "bg-brand/80")}>
-                    {m.content}
+                    {commandText(m.content, pronoun)}
                   </div>
                 )}
                 {m.queued && (
