@@ -650,6 +650,9 @@ export const backoffice = {
   uploadMemoryDocument: (token: string, form: FormData) => call<{ id: string }>("/app/memory/items", { method: "POST", token, form, timeoutMs: MAIL_SEND_TIMEOUT_MS }),
   updateMemoryItem: (token: string, id: string, patch: MemoryPatch) => call<{ ok: true }>(ownPath("/app/memory/items", id), { method: "PATCH", token, body: patch }),
   deleteMemoryItem: (token: string, id: string) => call<{ ok: true }>(ownPath("/app/memory/items", id), { method: "DELETE", token }),
+  // A new file for a deposited document; the back office keeps the old one as the previous version.
+  uploadMemoryVersion: (token: string, id: string, form: FormData) =>
+    call<{ id: string; version: number }>(`${ownPath("/app/memory/items", id)}/versions`, { method: "POST", token, form, timeoutMs: MAIL_SEND_TIMEOUT_MS }),
   // The document of a deposit, as a stream for the route to pipe. 404 when the member does not read its compartment.
   memoryDocument: (token: string, id: string) => stream(`${ownPath("/app/memory/items", id)}/file`, token),
 
