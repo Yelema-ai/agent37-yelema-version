@@ -45,9 +45,10 @@ export function useAllDeliverables(ownAgentId: string | null, experts: Expert[])
     let live = true;
     void Promise.all(
       agentIds.map((agentId) =>
-        driveTree(agentId).then(
-          (tree) =>
-            deliverableItems(tree.entries).flatMap((item): Deliverable[] => {
+        // A tree that cannot be read or walked counts as empty: never a list stuck on « Chargement ».
+        driveTree(agentId)
+          .then((tree) =>
+            deliverableItems(tree.entries ?? []).flatMap((item): Deliverable[] => {
               const seat = seatFolderOf([item.owner]);
               const expert = seat ? null : ownerOf(experts, agentId, item.owner);
               // A folder that is no Expert's and not the chat d'entreprise's is the member's own.
@@ -55,9 +56,9 @@ export function useAllDeliverables(ownAgentId: string | null, experts: Expert[])
               const tab = agentTabPath(agentId, "files", expert?.profileId);
               const at = item.folder ? item.path : item.path.slice(0, item.path.lastIndexOf("/"));
               return [{ ...item, agentId, expert, href: `${tab}?dossier=${encodeURIComponent(at)}` }];
-            }),
-          () => [] as Deliverable[]
-        )
+            })
+          )
+          .catch(() => [] as Deliverable[])
       )
     ).then((all) => {
       const sorted = all.flat().sort((a, b) => b.modified - a.modified);
