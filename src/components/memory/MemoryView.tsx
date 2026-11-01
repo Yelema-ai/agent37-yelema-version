@@ -11,6 +11,8 @@ import { HiddenFileInput } from "@/components/HiddenFileInput";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MemoryGroups } from "./MemoryGroups";
+import Link from "next/link";
+import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { usePoll } from "@/components/usePoll";
 import { runPool } from "@/lib/bulk";
 
@@ -57,6 +59,11 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
 
   // The company's brand book, always on top: the Experts apply it to every deliverable (Leslie, 01/11).
   const charte = list?.items.find((i) => i.kind === "document" && /charte/i.test(i.title)) ?? null;
+  // No brand book yet: Koffi (Design & Création) can make one with his /charte command (Leslie, 01/11).
+  const { experts } = useExpertsContext();
+  const designer = experts.find((e) =>
+    [e.catalogueKey, e.driveFolder, e.profileId].some((k) => k && k.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes("koffi"))
+  );
   async function depositCharte(file: File) {
     if (charte) return newVersion(charte, file);
     const form = new FormData();
@@ -163,12 +170,24 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
                 {charte.version && charte.version > 1 ? `, version ${charte.version}` : ""}. Vos Experts l’appliquent à chaque livrable.
               </p>
             ) : (
-              <p className="text-[13px] text-ink-3">Logo, couleurs, polices : vos Experts l’appliquent à chaque livrable.</p>
+              <p className="text-[13px] text-ink-3">
+                Logo, couleurs, polices : vos Experts l’appliquent à chaque livrable.
+                {designer ? ` Pas de charte ? ${designer.displayName} la crée, à partir de votre site s’il existe.` : ""}
+              </p>
             )}
           </div>
-          <Button variant={charte ? "outline" : "default"} size="sm" className="max-sm:w-full" onClick={() => chartePicker.current?.click()}>
-            {charte ? "Remplacer" : "Déposer la charte"}
-          </Button>
+          <div className="flex gap-2 max-sm:w-full max-sm:flex-col">
+            {!charte && designer && (
+              <Button asChild size="sm" className="max-sm:w-full">
+                <Link href={`/experts/${designer.agentId}/${designer.profileId}/chat?q=${encodeURIComponent("/charte")}`}>
+                  La créer avec {designer.displayName}
+                </Link>
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="max-sm:w-full" onClick={() => chartePicker.current?.click()}>
+              {charte ? "Remplacer" : "Déposer la charte"}
+            </Button>
+          </div>
           <HiddenFileInput inputRef={chartePicker} onFiles={(picked) => picked[0] && void depositCharte(picked[0])} />
         </section>
       )}
