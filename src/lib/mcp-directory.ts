@@ -81,3 +81,8 @@ export function searchDirectory(query: string, list: McpDirectoryEntry[] = MCP_D
 export function serverName(entry: McpDirectoryEntry): string {
   return entry.key.replace(/[^a-z0-9]+/g, "_");
 }
+
+/** A server name made from what the member typed (« Magnific AI » → « magnific_ai »). */
+export function serverSlug(typed: string): string {
+  return typed.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+}

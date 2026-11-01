@@ -241,7 +241,7 @@ export function AgentWorkspace({
                       onClick={() => (canEdit ? setEditOpen(true) : setVoiceOpen(true))}
                       title={`Personnaliser ${expertName}`}
                       aria-label={`Personnaliser ${expertName}`}
-                      className="absolute -bottom-0.5 -right-0.5 grid size-4 place-items-center rounded-full bg-ink text-surface ring-2 ring-surface hover:opacity-85 lg:size-5"
+                      className="absolute -bottom-0.5 -right-0.5 grid size-4 place-items-center rounded-full bg-ink text-surface ring-2 ring-surface after:absolute after:-inset-3 after:content-[''] hover:opacity-85 lg:size-5"
                     >
                       <Pencil className="size-2 lg:size-2.5" />
                     </button>
@@ -260,7 +260,7 @@ export function AgentWorkspace({
                         onClick={copyAddress}
                         title={`Copier l’adresse e-mail : ${inbox.address}`}
                         aria-label="Copier l’adresse e-mail"
-                        className="flex min-w-0 items-center gap-1.5 text-left hover:text-ink"
+                        className="flex min-w-0 items-center gap-1.5 text-left hover:text-ink max-lg:-my-2 max-lg:py-2"
                       >
                         <Mail className="size-3.5 shrink-0 max-lg:hidden" />
                         <span className="truncate lg:hidden">{inbox.address}</span>
