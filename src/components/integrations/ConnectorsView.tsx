@@ -178,6 +178,12 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
     return merged.sort((a, b) => Number(accounts.has(slugKey(b.slug))) - Number(accounts.has(slugKey(a.slug))));
   }, [q, base, remote, accounts]);
 
+  // The connected tools with an account to sign in again, for the sentence above the list.
+  const toFix = useMemo(
+    () => base.filter((t) => (accounts.get(slugKey(t.slug)) ?? []).some(needsReconnect)),
+    [base, accounts]
+  );
+
   // Watch the connections until this tool gains an account (the sign-in happens in another tab) or
   // the deadline passes.
   function startPolling(toolkit: IntegrationToolkit, baseline: number) {
@@ -272,11 +278,33 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
         )}
       </div>
 
+      {toFix.length > 0 && (
+        // A calm sentence and one button, never a red block (Leslie, 27/10).
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[18px] border bg-card px-4 py-3">
+          <AlertCircle className="h-4 w-4 shrink-0 text-coral-ink" />
+          <p className="min-w-0 flex-1 text-[14px] text-ink-2">
+            {toFix.length === 1
+              ? `Un compte ${toFix[0].name} est à reconnecter.`
+              : `Des comptes sont à reconnecter : ${toFix.map((t) => t.name).join(", ")}.`}
+          </p>
+          <Button size="sm" variant="outline" onClick={() => setOpen(toFix[0])}>
+            Reconnecter
+          </Button>
+        </div>
+      )}
+
       {visible.length > 0 ? (
-        <div>
-        {!q && <h3 className="mb-2.5 px-0.5 text-[12px] font-bold uppercase tracking-[0.06em] text-ink-3">Les plus utiles à vos Experts</h3>}
+        <div className="space-y-6">
+        {[
+          { title: "Connectés", items: q ? [] : visible.filter((t) => accounts.has(slugKey(t.slug))) },
+          { title: q ? "" : "Les plus utiles à vos Experts", items: q ? visible : visible.filter((t) => !accounts.has(slugKey(t.slug))) },
+        ]
+          .filter((g) => g.items.length > 0)
+          .map((g) => (
+        <div key={g.title || "q"}>
+        {g.title && <h3 className="mb-2.5 px-0.5 text-[12px] font-bold uppercase tracking-[0.06em] text-ink-3">{g.title}</h3>}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {visible.map((t) => {
+          {g.items.map((t) => {
             const k = slugKey(t.slug);
             return (
               <ToolTile
@@ -290,6 +318,8 @@ export function ConnectorsView({ agentId }: { agentId: string }) {
             );
           })}
         </div>
+        </div>
+          ))}
         </div>
       ) : searching ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -362,10 +392,10 @@ function ToolTile({
       <ToolLogo logo={toolkit.logo} name={toolkit.name} />
       <div className="min-w-0 flex-1">
         <p className="line-clamp-2 text-[15px] font-semibold leading-snug text-ink">{toolkit.name}</p>
-        {accounts && accounts.length > 0 ? (
-          <p className="truncate text-[13px] text-ink-3">{accountSummary(accounts)}</p>
+        {toolkit.description ? (
+          <p className="truncate text-[13px] text-ink-3">{toolkit.description}</p>
         ) : (
-          toolkit.description && <p className="truncate text-[13px] text-ink-3">{toolkit.description}</p>
+          accounts && accounts.length > 0 && <p className="truncate text-[13px] text-ink-3">{accountSummary(accounts)}</p>
         )}
       </div>
     </>
@@ -374,17 +404,20 @@ function ToolTile({
   // A tool with accounts is one button: the card sums them up, the panel lists them.
   if (accounts && accounts.length > 0) {
     const broken = accounts.some(needsReconnect) || !accounts.some(isActive);
+    // The default account first; the others in their order.
+    const listed = [...splitAccounts(accounts).accounts].sort((a, b) => Number(!!b.isDefault) - Number(!!a.isDefault));
+    const many = listed.length > 1;
     return (
       <button
         type="button"
         onClick={onOpen}
         aria-label={`Comptes ${toolkit.name}`}
-        className="flex min-h-[78px] w-full items-center gap-3 rounded-[22px] border bg-card py-3 pl-4 pr-3 text-left transition-colors hover:border-ink-3/40"
+        className="flex min-h-[78px] w-full flex-wrap items-center gap-3 rounded-[22px] border bg-card py-3 pl-4 pr-3 text-left transition-colors hover:border-ink-3/40"
       >
         {head}
         {waiting ? (
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ink-3" />
-        ) : broken ? (
+        ) : listed.length > 0 ? null : broken ? (
           <span title="Un compte est à reconnecter" className="grid size-6 shrink-0 place-items-center rounded-full bg-coral-pale text-coral-ink">
             <AlertCircle className="h-3.5 w-3.5" />
           </span>
@@ -395,6 +428,27 @@ function ToolTile({
           </span>
         )}
         <ChevronRight className="h-4 w-4 shrink-0 text-ink-3" />
+        {/* Each account in one line: which one the Experts use by default, which one to sign in again. */}
+        {listed.length > 0 && (
+          <ul className="w-full space-y-1 border-t pt-2.5 text-[13px] text-ink-2">
+            {listed.slice(0, 3).map((a, i) => (
+              <li key={a.id} className="flex min-w-0 items-center gap-2">
+                <span className={cn("size-2 shrink-0 rounded-full", needsReconnect(a) ? "bg-coral" : "bg-ok")} />
+                <span className="min-w-0 truncate">{accountTitle(a, i)}</span>
+                {needsReconnect(a) ? (
+                  <span className="ml-auto shrink-0 font-semibold text-coral-ink">À reconnecter</span>
+                ) : (
+                  many && a.isDefault && (
+                    <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold text-ink-3">
+                      <Star className="h-3 w-3 fill-current" /> par défaut
+                    </span>
+                  )
+                )}
+              </li>
+            ))}
+            {listed.length > 3 && <li className="pl-4 text-ink-3">et {listed.length - 3} autres</li>}
+          </ul>
+        )}
       </button>
     );
   }
