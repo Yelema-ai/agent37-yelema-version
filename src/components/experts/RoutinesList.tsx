@@ -66,7 +66,7 @@ export function RoutinesList({ routines, expertName, ...act }: { routines: Routi
   const next = (r: Routine) => {
     const at = r.nextRunAt ? Date.parse(r.nextRunAt) : Number.NaN;
     const text = !r.enabled ? "En pause" : !Number.isNaN(at) ? nextRunChip(at) : null;
-    return text && <span className="max-w-full truncate rounded-full bg-soft px-2 py-0.5 text-[11.5px] font-medium text-ink-2">{text}</span>;
+    return text && <span className="max-w-full rounded-lg bg-soft px-2 py-0.5 text-[11.5px] font-medium text-ink-2 sm:truncate sm:rounded-full">{text}</span>;
   };
 
   return (
