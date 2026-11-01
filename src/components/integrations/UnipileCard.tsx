@@ -33,6 +33,10 @@ export function UnipileCard() {
   const [details, setDetails] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [linking, setLinking] = useState<string | null>(null);
+  // Who reaches the messaging, changed in the panel itself: the key on the instance is kept (Leslie, 01/11:
+  // « il faut carrément re-entrer le DSN et la clé d’API… c’est too much »).
+  const [access, setAccess] = useState<string[]>([]);
+  const [savingAccess, setSavingAccess] = useState(false);
   const { experts: team } = useExpertsContext();
 
   const load = useCallback(async () => {
@@ -95,6 +99,25 @@ export function UnipileCard() {
     else window.location.assign(url);
     window.addEventListener("focus", () => void load(), { once: true });
   };
+  const showDetails = () => {
+    setAccess(status?.experts ?? []);
+    setDetails(true);
+  };
+  const toggleAccess = (p: string) => setAccess((list) => (list.includes(p) ? list.filter((x) => x !== p) : [...list, p]));
+  const accessChanged = Boolean(status) && (access.length !== status!.experts.length || access.some((p) => !status!.experts.includes(p)));
+  const saveAccess = async () => {
+    setSavingAccess(true);
+    try {
+      const next = remember("unipile", await apiFetch<UnipileStatus>("/api/unipile/experts", { method: "PUT", body: JSON.stringify({ experts: access }) }));
+      setStatus(next);
+      setAccess(next.experts);
+      toast.success("Accès des Experts mis à jour");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingAccess(false);
+    }
+  };
   const toggle = (p: string) => setExperts((list) => (list.includes(p) ? list.filter((x) => x !== p) : [...list, p]));
   const ready = dsn.trim() && apiKey.trim() && experts.length > 0;
 
@@ -112,7 +135,7 @@ export function UnipileCard() {
       <div className="flex min-h-[78px] items-center gap-3 py-3 pl-4 pr-3">
         <button
           type="button"
-          onClick={() => connected && setDetails(true)}
+          onClick={() => connected && showDetails()}
           disabled={!connected}
           className="flex min-w-0 flex-1 items-center gap-3 self-stretch text-left disabled:cursor-default"
         >
@@ -160,7 +183,7 @@ export function UnipileCard() {
           {status.accountsError ? (
             <Button size="sm" onClick={open}>Reconnecter</Button>
           ) : (
-            <Button size="sm" disabled={linking !== null} onClick={() => (broken.length === 1 ? void reconnect(broken[0]) : setDetails(true))}>
+            <Button size="sm" disabled={linking !== null} onClick={() => (broken.length === 1 ? void reconnect(broken[0]) : showDetails())}>
               {linking ? <Loader2 className="animate-spin" /> : null}
               Reconnecter
             </Button>
@@ -198,24 +221,47 @@ export function UnipileCard() {
                 {status.accounts.length === 0 && <p className="text-sm text-ink-3">Aucun compte relié chez Unipile.</p>}
               </div>
               <div>
-                <p className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-ink-3">Experts qui y ont accès</p>
+                <p className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-ink-3">Experts qui y ont accès</p>
                 <div className="flex flex-wrap gap-2">
-                  {status.experts.map((p) => {
+                  {status.available.map((p) => {
                     const e = team.find((x) => x.profileId === p);
+                    const on = access.includes(p);
                     return (
-                      <span key={p} className="inline-flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 text-[13px] text-ink-2">
-                        {e ? <ExpertAvatar expert={e} size="xs" /> : null}
+                      <button
+                        key={p}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => toggleAccess(p)}
+                        disabled={savingAccess}
+                        className={cn(
+                          "inline-flex min-h-10 items-center gap-1.5 rounded-full border py-1 pl-1 pr-3 text-[13px] transition-colors disabled:opacity-60",
+                          on ? "border-primary bg-primary/5 font-medium text-ink" : "text-ink-3 hover:bg-soft",
+                        )}
+                      >
+                        {e ? <ExpertAvatar expert={e} size="xs" className={cn(!on && "opacity-50 grayscale")} /> : null}
                         {e?.displayName ?? expertDisplayName(p)}
-                      </span>
+                        {on && <Check className="size-3.5 text-primary" />}
+                      </button>
                     );
                   })}
-                  {status.experts.length === 0 && <span className="text-sm text-ink-3">Aucun</span>}
                 </div>
               </div>
               <div className="flex items-center justify-between gap-2 border-t pt-3">
-                <Button size="sm" variant="outline" onClick={open} disabled={busy !== null}>
-                  Modifier
-                </Button>
+                {accessChanged ? (
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => void saveAccess()} disabled={savingAccess || access.length === 0}>
+                      {savingAccess && <Loader2 className="animate-spin" />}
+                      Enregistrer
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setAccess(status.experts)} disabled={savingAccess}>
+                      Annuler
+                    </Button>
+                  </div>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={open} disabled={busy !== null}>
+                    Changer de clé
+                  </Button>
+                )}
                 <button
                   type="button"
                   onClick={() => (confirming ? void clear().then(() => setDetails(false)) : setConfirming(true))}

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, CircleDashed, X } from "lucide-react";
+import Link from "next/link";
+import { BookOpen, Check, CircleDashed, Plug, Sparkles, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { readiness, type JourZero } from "@/lib/jour-zero";
+import { FIX, pointsLeft, readiness, stage, type JourZero, type Stage } from "@/lib/jour-zero";
 import { cn } from "@/lib/utils";
 import { UpdateSpinner, useDeployPhase } from "@/components/app/DeployStatus";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,16 +27,25 @@ export function ExpertReadiness({
   agentId,
   profileId,
   expertName,
-  onOpenTools,
   className,
   variant = "chip",
+  pronoun = null,
+  onCommand,
+  onStage,
 }: {
   agentId: string;
   profileId: string;
   expertName: string;
-  onOpenTools: () => void;
+  /** Kept for the callers; each point now links to its own page. */
+  onOpenTools?: () => void;
   className?: string;
   variant?: "chip" | "dot" | "banner";
+  /** « elle » or « il » from the catalogue: « prête », « Ce qu'elle sait ». */
+  pronoun?: "elle" | "il" | null;
+  /** The banner's buttons run a command in the conversation (« /onboarding »…); the client never sees it. */
+  onCommand?: (text: string) => void;
+  /** Where the expert stands (null while unknown): the empty conversation shows one action at a time. */
+  onStage?: (s: Stage | null) => void;
 }) {
   const jzKey = `jour-zero:${agentId}:${profileId}`;
   const [jz, setJz] = useState<JourZero | null>(() => cached<JourZero>(jzKey) ?? null);
@@ -55,9 +65,13 @@ export function ExpertReadiness({
     };
   }, [agentId, profileId, jzKey]);
 
+  const st = jz ? stage(jz) : null;
+  useEffect(() => onStage?.(st), [onStage, st]);
+
   // During an update the chip says so: the expert answers slower, and it is not a fault of its own.
   // The banner above the chat bar has nothing to say then, nor once the expert is ready.
-  if (variant === "banner" && (updating || !jz || readiness(jz).state === "ready")) return null;
+  if (variant === "banner" && (updating || !jz || stage(jz) === "ready")) return null;
+  // « Prêt » stays beside the name once the expert is ready (Leslie, 01/11, back on her 31/10 choice).
   if (updating)
     return (
       <span role="status" className={cn("inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-[12px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300", className)}>
@@ -70,27 +84,77 @@ export function ExpertReadiness({
   return (
     <>
       {variant === "banner" ? (
-        // Above the chat bar while the expert's day-zero preparation is not complete (Myriel, Leslie
-        // 30/10): what is left, and « Continuer » opens the checks with the way to each.
-        <div className={cn("mx-auto flex w-full max-w-3xl items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/25 dark:bg-amber-500/10", className)}>
-          <span className="min-w-0 flex-1">
-            <b className="block text-sm text-ink">Préparez {expertName} pour de meilleurs résultats</b>
-            <span className="block text-xs text-ink-2">
-              {r.state === "absent"
-                ? "Sa préparation du premier jour n’est pas encore faite."
-                : (() => {
-                    const left = jz.checks.filter((c) => !c.ok).length;
-                    return `${left === 1 ? "1 étape à faire" : `${left} étapes à faire`} · ${jz.checks.length - left}/${jz.checks.length} terminées`;
-                  })()}
-            </span>
-          </span>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="inline-flex h-10 shrink-0 items-center rounded-xl border border-line bg-surface px-4 text-sm font-semibold text-ink hover:bg-soft"
-          >
-            Continuer
-          </button>
+        // The empty conversation (Leslie, 31/10): « Faire connaissance » first, alone; once done, only the
+        // points left, in one line. The three key commands run behind plain words.
+        <div className={cn("mx-auto flex w-full max-w-3xl flex-col items-center gap-2.5", className)}>
+          {stage(jz) === "intro" ? (
+            <div className="flex w-full flex-wrap items-center gap-3.5 rounded-2xl border border-line bg-surface p-4 shadow-sm sm:flex-nowrap">
+              <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-tint text-brand-ink">
+                <Sparkles className="size-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <b className="block text-[15px] text-ink">Faire connaissance avec {expertName}</b>
+                <span className="block text-[13px] text-ink-3">
+                  {pronoun === "il" ? "Il" : "Elle"} se présente, découvre votre entreprise et note votre charte.
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => onCommand?.("/onboarding")}
+                className="inline-flex h-11 w-full shrink-0 items-center justify-center rounded-xl bg-brand px-5 text-sm font-semibold text-on-brand hover:opacity-90 sm:w-auto"
+              >
+                Commencer
+              </button>
+            </div>
+          ) : (
+            (() => {
+              const left = pointsLeft(jz);
+              const first = left[0] ? FIX[left[0].id] : null;
+              const ready = pronoun === "il" ? "prêt" : "prête";
+              return (
+                <div className="flex w-full flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/25 dark:bg-amber-500/10 sm:flex-nowrap">
+                  <span className="min-w-0 flex-1">
+                    <b className="block text-sm text-ink">
+                      {left.length <= 1 ? `Un dernier point pour que ${expertName} soit ${ready}` : `${left.length} points pour que ${expertName} soit ${ready}`}
+                    </b>
+                    <span className="block text-xs text-ink-2">{first?.text ?? "Sa préparation n’est pas encore terminée."}</span>
+                  </span>
+                  {left.length <= 1 && first?.action ? (
+                    <Link
+                      href={first.action.href}
+                      className="inline-flex h-10 w-full shrink-0 items-center justify-center rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand hover:opacity-90 sm:w-auto"
+                    >
+                      {left[0]?.id === "outils" ? "Connecter" : first.action.label}
+                    </Link>
+                  ) : left.length > 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => setOpen(true)}
+                      className="inline-flex h-10 w-full shrink-0 items-center justify-center rounded-xl bg-brand px-4 text-sm font-semibold text-on-brand hover:opacity-90 sm:w-auto"
+                    >
+                      Voir les points
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })()
+          )}
+          <div className="flex flex-wrap justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => onCommand?.("/memoire")}
+              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 text-[13px] font-semibold text-ink-2 hover:bg-soft"
+            >
+              <BookOpen className="size-4" /> {pronoun === "il" ? "Ce qu’il sait" : "Ce qu’elle sait"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onCommand?.("/configuration")}
+              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 text-[13px] font-semibold text-ink-2 hover:bg-soft"
+            >
+              <Plug className="size-4" /> Ses outils
+            </button>
+          </div>
         </div>
       ) : variant === "dot" ? (
         <button
@@ -99,7 +163,9 @@ export function ExpertReadiness({
           title="Voir sa préparation"
           className={cn("inline-flex items-center gap-1.5 text-[13px] font-semibold hover:underline", DOT[r.state].text, className)}
         >
-          <span className={cn("size-2 rounded-full", DOT[r.state].dot)} /> {r.label}
+          <span className={cn("size-2 rounded-full", DOT[r.state].dot)} />
+          {/* On a phone the dot alone: the expert's name keeps the room. */}
+          <span className="max-sm:sr-only">{r.label}</span>
         </button>
       ) : (
         <button
@@ -118,36 +184,66 @@ export function ExpertReadiness({
             <DialogDescription>
               {r.state === "absent"
                 ? `${expertName} n’a pas encore fait sa préparation du premier jour.`
-                : `Ce que ${expertName} a vérifié avant de se mettre au travail${jz.date ? `, le ${new Date(jz.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}` : ""}.`}
+                : `Vérifiée${jz.date ? ` le ${new Date(jz.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}` : ""}. ${pronoun === "il" ? "Il" : "Elle"} se revérifie dès qu’un point est réglé.`}
             </DialogDescription>
           </DialogHeader>
-          {jz.checks.length > 0 && (
-            <ul className="flex flex-col gap-3">
-              {jz.checks.map((c) => (
-                <li key={c.id} className="flex gap-2.5">
-                  <span className={cn("mt-0.5 grid size-5 shrink-0 place-items-center rounded-full", c.ok ? TONE.ready : TONE.partial)}>
-                    {c.ok ? <Check className="size-3" /> : <X className="size-3" />}
-                  </span>
-                  <div className="min-w-0 text-sm">
-                    <p className="font-semibold text-ink">{c.label}</p>
-                    {c.detail && <p className="text-ink-3">{c.detail}</p>}
-                    {c.id === "outils" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpen(false);
-                          onOpenTools();
-                        }}
-                        className="mt-0.5 text-xs font-semibold text-brand-ink hover:underline"
-                      >
-                        Ouvrir les connecteurs
-                      </button>
-                    )}
+          {jz.checks.length > 0 &&
+            (() => {
+              const left = pointsLeft(jz);
+              const ready = pronoun === "il" ? "prêt" : "prête";
+              return (
+                <div className="flex flex-col gap-3">
+                  {left.length > 0 && (
+                    <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-ink dark:border-amber-500/25 dark:bg-amber-500/10">
+                      {left.length === 1 ? "1 point à régler" : `${left.length} points à régler`} pour que {expertName} soit {ready}
+                    </p>
+                  )}
+                  <div className="flex gap-1" aria-hidden>
+                    {jz.checks.map((c) => (
+                      <i key={c.id} className={cn("h-1.5 flex-1 rounded-full", c.ok ? "bg-emerald-500" : "bg-soft")} />
+                    ))}
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
+                  <ul className="flex flex-col gap-3">
+                    {left.map((c) => (
+                      <li key={c.id} className="flex gap-2.5">
+                        <span className={cn("mt-0.5 grid size-5 shrink-0 place-items-center rounded-full", TONE.partial)}>
+                          <X className="size-3" />
+                        </span>
+                        <div className="min-w-0 flex-1 text-sm">
+                          <p className="font-semibold text-ink">{c.label}</p>
+                          {c.detail && <p className="text-ink-3">{c.detail}</p>}
+                          <div className="mt-1.5 rounded-xl bg-soft px-3 py-2.5">
+                            <p className="text-[11px] font-bold tracking-wide text-ink-3">POUR RÉGLER</p>
+                            <p className="mt-0.5 text-ink">{FIX[c.id].text}</p>
+                            {FIX[c.id].action && (
+                              <Link
+                                href={FIX[c.id].action!.href}
+                                onClick={() => setOpen(false)}
+                                className="mt-2 inline-flex h-9 items-center rounded-lg bg-brand px-3 text-[13px] font-semibold text-on-brand hover:opacity-90"
+                              >
+                                {FIX[c.id].action!.label}
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                    {jz.checks
+                      .filter((c) => c.ok)
+                      .map((c) => (
+                        <li key={c.id} className="flex items-baseline gap-2.5 text-sm">
+                          <span className={cn("grid size-5 shrink-0 translate-y-1 place-items-center rounded-full", TONE.ready)}>
+                            <Check className="size-3" />
+                          </span>
+                          <span className="min-w-0">
+                            <b className="font-semibold text-ink">{c.label}</b> {c.detail && <span className="text-ink-3">{c.detail}</span>}
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              );
+            })()}
         </DialogContent>
       </Dialog>
     </>

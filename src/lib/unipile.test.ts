@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { accountBroken, accountName, accountType, hostedLink, normalizeDsn, parseAccountId, parseUnipileDraft } from "./unipile.ts";
+import { accountBroken, accountName, accountType, hostedLink, normalizeDsn, parseAccountId, parseUnipileDraft, parseUnipileExperts } from "./unipile.ts";
 
 const KEY = "Kx7pQ2.abcdefghijklmnop=";
 
@@ -33,4 +33,10 @@ test("reconnection: a plain account id goes out, only a link Unipile hosts comes
   assert.equal(parseAccountId(null), null);
   assert.equal(hostedLink("https://account.unipile.com/pnn3ZR3q"), "https://account.unipile.com/pnn3ZR3q");
   for (const url of ["https://evil.example/x", "http://account.unipile.com/x", "https://account.unipile.com.evil.io/x", "javascript:alert(1)", "https://u:p@account.unipile.com/x", null]) assert.equal(hostedLink(url), null, String(url));
+});
+
+test("parseUnipileExperts: the Experts alone, without the key", () => {
+  assert.deepEqual(parseUnipileExperts({ experts: ["awa", "awa", "../x", 7, "kouassi"] }), ["awa", "kouassi"]);
+  assert.equal(parseUnipileExperts({ experts: [] }), null);
+  assert.equal(parseUnipileExperts({ apiKey: "x" }), null);
 });

@@ -19,6 +19,8 @@ import { DropOverlay } from "@/components/DropOverlay";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatComposer } from "./ChatComposer";
 import { ExpertReadiness } from "@/components/experts/ExpertReadiness";
+import { useVoiceExpert } from "@/components/voice/useVoiceExpert";
+import type { Stage } from "@/lib/jour-zero";
 import { ChatMessages } from "./ChatMessages";
 import { ChatSessionsPanel } from "./ChatSessionsPanel";
 import { setChatFull, setChatListHidden, useChatFull, useChatListHidden, useChatSidePanel } from "./chat-layout";
@@ -194,10 +196,14 @@ export function ChatView({
   // instance's default home or while the list loads.
   const router = useRouter();
   const { experts } = useExpertsContext();
+  const voiceExpert = useVoiceExpert();
   const expert = useMemo(
     () => (profile ? (experts.find((e) => e.agentId === agentId && e.profileId === profile) ?? null) : null),
     [experts, agentId, profile]
   );
+  const pronoun = expert?.catalogueKey ? voiceExpert(expert.catalogueKey).pronoun : null;
+  // Before « Faire connaissance », it is the one action shown: the catalogue's requests wait (Leslie, 31/10).
+  const [prepStage, setPrepStage] = useState<Stage | null>(null);
   const instance = useMemo(() => agents.find((x) => x.agent37_id === agentId) ?? null, [agents, agentId]);
   // The expert's name when the chat targets one; the company chat otherwise (never the instance's
   // name, which the back office writes as the list of its Experts).
@@ -323,7 +329,7 @@ export function ChatView({
           </div>
         ) : messages.length > 0 ? (
           <div ref={contentRef}>
-            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} onUnqueue={unqueue} onDocs={setDocs} onGoogle={setGoogle} routine={sessions.find((s) => s.session_id === activeSessionId)?.routine ?? null} />
+            <ChatMessages messages={messages} isStreaming={isStreaming} face={face} driveFolder={driveFolder} onShowEarlier={showEarlier} onUnqueue={unqueue} onDocs={setDocs} onGoogle={setGoogle} routine={sessions.find((s) => s.session_id === activeSessionId)?.routine ?? null} pronoun={pronoun} />
           </div>
         ) : (
           <>
@@ -346,12 +352,15 @@ export function ChatView({
         <div className={cn("mx-auto w-full", showWelcome ? "max-w-2xl" : "max-w-3xl")} aria-live="polite">
           {error && <p className="mb-2 rounded-xl bg-ko-pale px-3 py-2 text-[13px] text-ko">{error}</p>}
         </div>
-        {profile && (
+        {profile && showWelcome && (
           <ExpertReadiness
             variant="banner"
             agentId={agentId}
             profileId={profile}
             expertName={agentName}
+            pronoun={pronoun}
+            onCommand={(text) => void send(text)}
+            onStage={setPrepStage}
             onOpenTools={() => router.push("/integrations/connecteurs")}
             className={cn("mb-3", showWelcome && "max-w-2xl")}
           />
@@ -372,7 +381,7 @@ export function ChatView({
         <div className="flex flex-1 flex-col items-center px-4 pt-3">
           {/* An expert's first discussion: three requests from the catalogue, sent as is on a click. If
               something is missing for one (a tool to connect), the expert says what (its own rules). */}
-          {profile && expert?.suggestions?.length ? (
+          {profile && prepStage === "intro" ? null : profile && expert?.suggestions?.length ? (
             <div role="group" aria-label={`Demander à ${agentName}`} className="flex max-w-2xl flex-wrap justify-center gap-2">
               {expert.suggestions.slice(0, 3).map((s) => (
                 <button
