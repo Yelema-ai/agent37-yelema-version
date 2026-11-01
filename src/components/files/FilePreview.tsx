@@ -9,7 +9,7 @@ import { fileLabel, seatFolderOf } from "@/lib/drive-paths";
 import type { Expert } from "@/lib/types";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Preview as DocPreview } from "@/components/chat/DocumentCards";
+import { CharteAdopt, isCharteDoc, Preview as DocPreview } from "@/components/chat/DocumentCards";
 import { docKind } from "@/lib/drive-links";
 import { contentUrl, formatBytes, previewKind, thumbUrl, type FileEntry } from "./types";
 import { Markdown } from "@/components/chat/Markdown";
@@ -91,6 +91,11 @@ export function FilePreview({
                   {opening ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
                   {editor.name ? `Modifier avec ${editor.name}` : "Modifier dans le chat d’entreprise"}
                 </Button>
+              )}
+              {isCharteDoc(entry) && (
+                <div className="basis-full">
+                  <CharteAdopt agentId={agentId} doc={entry} />
+                </div>
               )}
             </div>
           </>
