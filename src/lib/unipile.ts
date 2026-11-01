@@ -41,6 +41,13 @@ export function parseUnipileDraft(body: unknown): UnipileDraft | null {
   return dsn && KEY_RE.test(apiKey) && experts.length ? { dsn, apiKey, experts } : null;
 }
 
+/** The Experts alone, for a change of access that keeps the key already on the instance (Leslie, 01/11). */
+export function parseUnipileExperts(body: unknown): string[] | null {
+  const v = body && typeof body === "object" ? (body as Record<string, unknown>).experts : null;
+  const experts = Array.isArray(v) ? [...new Set(v.filter((p): p is string => typeof p === "string" && PROFILE_RE.test(p)))].slice(0, 50) : [];
+  return experts.length ? experts : null;
+}
+
 const MESSAGES: Record<string, string> = {
   bad_dsn: "Ce DSN n’est pas une adresse Unipile (exemple : api8.unipile.com:13851).",
   bad_key: "Cette clé d’API Unipile n’a pas le bon format.",
@@ -53,6 +60,7 @@ const MESSAGES: Record<string, string> = {
   bad_account: "Ce compte de messagerie n’est pas valide.",
   unipile_not_found: "Unipile ne connaît plus ce compte : reliez-le de nouveau depuis votre tableau de bord Unipile.",
   unipile_not_configured: "La messagerie n’est pas branchée sur votre instance.",
+  not_found: "Ce réglage arrive avec la prochaine mise à jour de votre espace.",
 };
 
 export const unipileRefusalMessage = (code: string): string | null => MESSAGES[code] ?? null;

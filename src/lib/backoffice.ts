@@ -574,6 +574,8 @@ export const backoffice = {
   unipile: (token: string) => call<UnipileStatus>("/app/unipile", { token, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   testUnipile: (token: string, draft: UnipileDraft) => call<{ accounts: UnipileAccount[] }>("/app/unipile/test", { method: "POST", token, body: draft, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
   setUnipile: (token: string, draft: UnipileDraft) => call<UnipileStatus>("/app/unipile", { method: "PUT", token, body: draft, timeoutMs: 60_000 }),
+  // The Experts who reach the messaging, the key already on the instance kept (Leslie, 01/11: no DSN and key typed again).
+  setUnipileExperts: (token: string, experts: string[]) => call<UnipileStatus>("/app/unipile/experts", { method: "PUT", token, body: { experts }, timeoutMs: 60_000 }),
   clearUnipile: (token: string) => call<{ ok: true }>("/app/unipile", { method: "DELETE", token, timeoutMs: 60_000 }),
   // A one-click Unipile link, made by the instance (it alone holds the key), to link a broken account again.
   reconnectUnipile: (token: string, accountId: string) => call<{ url: string }>("/app/unipile/reconnect", { method: "POST", token, body: { accountId }, timeoutMs: SETTING_WRITE_TIMEOUT_MS }),
