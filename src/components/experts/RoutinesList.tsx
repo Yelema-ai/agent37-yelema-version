@@ -66,7 +66,7 @@ export function RoutinesList({ routines, expertName, ...act }: { routines: Routi
   const next = (r: Routine) => {
     const at = r.nextRunAt ? Date.parse(r.nextRunAt) : Number.NaN;
     const text = !r.enabled ? "En pause" : !Number.isNaN(at) ? `Prochaine : ${nextRunLabel(at)}` : null;
-    return text && <span className="shrink-0 rounded-full bg-soft px-2 py-0.5 text-[11.5px] font-medium text-ink-2">{text}</span>;
+    return text && <span className="max-w-full truncate rounded-full bg-soft px-2 py-0.5 text-[11.5px] font-medium text-ink-2">{text}</span>;
   };
 
   return (
@@ -81,11 +81,12 @@ export function RoutinesList({ routines, expertName, ...act }: { routines: Routi
             return (
               <div key={r.id} className="border-b border-line last:border-0">
                 <div className="flex items-center gap-3 px-4 py-3.5">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-tint text-brand-ink">
+                  {/* On a phone the text needs the width: no icon, a name on two lines rather than cut. */}
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-tint text-brand-ink max-sm:hidden">
                     <Repeat className="size-[17px]" />
                   </span>
                   <div className="min-w-0 flex-1 leading-tight">
-                    <p className="truncate text-[14.5px] font-semibold text-ink">{r.name}</p>
+                    <p className="line-clamp-2 text-[14.5px] font-semibold text-ink sm:truncate">{r.name}</p>
                     <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ink-3">
                       <span className="min-w-0 sm:truncate">{scheduleLabel(r.schedule)}</span>
                       {next(r)}

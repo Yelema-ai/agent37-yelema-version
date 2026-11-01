@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { McpAuth, McpServerDraft, McpToolsReport } from "@/lib/mcp-servers";
 import Link from "next/link";
-import { searchDirectory, sameTool, serverName, type McpDirectoryEntry } from "@/lib/mcp-directory";
+import { searchDirectory, sameTool, serverName, serverSlug, type McpDirectoryEntry } from "@/lib/mcp-directory";
 import type { IntegrationToolkitsResult } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 import { useOwnAgentId } from "@/components/conversations/useAllConversations";
@@ -63,9 +63,17 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth 
     setStep("pick");
     setQuery("");
     setPicked(null);
+    setNameTouched(false);
   }, [open]);
 
   const found = useMemo(() => searchDirectory(query), [query]);
+  // Nothing in the list for what was typed: the address form opens under the search, its name taken from
+  // the search until the member changes it.
+  const noMatch = query.trim().length >= 2 && found.length === 0;
+  const [nameTouched, setNameTouched] = useState(false);
+  useEffect(() => {
+    if (step === "pick" && !picked && !nameTouched) setName(noMatch ? serverSlug(query) : "");
+  }, [noMatch, query, step, picked, nameTouched]);
 
   // The picked tool may also be among Connecteurs (Composio): one line under the form says so, nothing more.
   useEffect(() => {
@@ -99,6 +107,88 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth 
     setHeader("");
   }
 
+  // The hand-written server's fields: on « Saisir son adresse », and unfolded right under the search when
+  // the tool typed is not in the list (Leslie, 01/11: « pourquoi les champs ne se déroulent pas »).
+  function fields(focusName: boolean) {
+    return (
+              <div className="space-y-4 py-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="mcp-name">
+                    Nom du serveur <span className="text-ko">*</span>
+                  </Label>
+                  <Input id="mcp-name" type="text" placeholder="ex. mon_crm" value={name} onChange={(e) => (setNameTouched(true), setName(e.target.value))} disabled={busy} required autoFocus={focusName} autoComplete="off" spellCheck={false} />
+                  <p className="text-xs text-ink-3">Des minuscules, des chiffres ou « _ », sans espace ni tiret. Vos Experts retrouvent ses outils sous ce nom.</p>
+                </div>
+
+                <div className="space-y-1.5">
+                    <Label htmlFor="mcp-url">
+                      Adresse du serveur <span className="text-ko">*</span>
+                    </Label>
+                    <Input id="mcp-url" type="url" placeholder="https://exemple.com/mcp" value={url} onChange={(e) => setUrl(e.target.value)} disabled={busy} required autoComplete="off" spellCheck={false} className="font-mono text-[13px]" />
+                    <p className="text-xs text-ink-3">En https, joignable depuis Internet : vos Experts tournent dans le cloud, pas sur votre réseau.</p>
+                  </div>
+
+                <fieldset className="space-y-1.5" disabled={busy}>
+                  <legend className="mb-1.5 text-sm font-medium text-ink">Authentification</legend>
+                  <div role="radiogroup" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {AUTH_OPTIONS.map((opt) => {
+                      const selected = auth === opt.value;
+                      const Icon = opt.icon;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          onClick={() => setAuth(opt.value)}
+                          className={cn("flex items-start gap-2.5 rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50", selected ? "border-brand bg-tint/60" : "border-line bg-surface hover:border-brand/40")}
+                        >
+                          <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", selected ? "bg-brand text-on-brand" : "bg-soft-2 text-ink-2")}>
+                            <Icon className="h-3.5 w-3.5" />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold leading-tight text-ink">{opt.label}</span>
+                            <span className="mt-0.5 block text-xs leading-snug text-ink-3">{opt.description}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+
+                {auth === "bearer" && (
+                  <div className="space-y-1.5 pt-1">
+                    <Label htmlFor="mcp-token">
+                      Jeton Bearer <span className="text-ko">*</span>
+                    </Label>
+                    <Input id="mcp-token" type="password" placeholder="Jeton ou clé secrète" value={token} onChange={(e) => setToken(e.target.value)} disabled={busy} required autoComplete="off" spellCheck={false} />
+                    <p className="text-xs text-ink-3">Chiffré et gardé par Yelema ; il ne sera plus affiché, seulement ses quatre derniers caractères.</p>
+                    <Label htmlFor="mcp-header" className="pt-2">En-tête de la clé</Label>
+                    <Input id="mcp-header" type="text" placeholder="Authorization: Bearer (par défaut)" value={header} onChange={(e) => setHeader(e.target.value)} disabled={busy} autoComplete="off" spellCheck={false} className="font-mono text-[13px]" />
+                    <p className="text-xs text-ink-3">Seulement si le serveur attend sa clé dans un en-tête à lui, par exemple X-API-KEY.</p>
+                  </div>
+                )}
+
+                {auth === "oauth" && (
+                  <div className="space-y-1 rounded-xl border border-brand/20 bg-tint/60 p-3 text-xs">
+                    <p className="flex items-center gap-1.5 font-semibold text-brand">
+                      <ShieldCheck className="h-3.5 w-3.5" /> Flux OAuth interactif sécurisé
+                    </p>
+                    <p className="leading-relaxed text-ink-2">
+                      {oauth.chains
+                        ? "En cliquant sur « Connecter », une fenêtre d’autorisation s’ouvrira directement sur le site du fournisseur pour vous connecter et valider l’accès. Chaque membre autorise ensuite son propre compte ; l’accès reste sur son instance."
+                        : "Rien à saisir ici. Une fois le serveur installé, ce membre clique « Autoriser » et se connecte avec son propre compte chez le fournisseur ; l’accès reste sur son instance."}
+                    </p>
+                  </div>
+                )}
+
+                <p className="rounded-xl bg-soft px-3 py-2.5 text-xs leading-relaxed text-ink-2">
+                  Les outils de ce serveur seront offerts à tous les Experts concernés ; Yelema ne les vérifie pas. La conversation en cours sera interrompue le temps de l’installation.
+                </p>
+              </div>
+    );
+  }
+
   const ready = Boolean(name.trim() && url.trim() && (auth !== "bearer" || token.trim()));
 
   async function submit(e: React.FormEvent) {
@@ -120,7 +210,7 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth 
         {oauth.flow ? (
           <McpOauthSteps flow={oauth.flow} tools={oauth.tools} onOpenAccess={oauth.onOpenAccess} onCancel={oauth.onCancel} onClose={oauth.onClose} />
         ) : step === "pick" && !picked ? (
-          <div className="grid gap-4">
+          <form onSubmit={submit} className="grid gap-4">
             <DialogHeader>
               <DialogTitle>Ajouter un outil</DialogTitle>
               <DialogDescription>Pour {scopeLabel}.</DialogDescription>
@@ -149,15 +239,27 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth 
                     </button>
                   </li>
                 ))}
-              {query.trim() && found.length === 0 && <li className="px-2 py-3 text-sm text-ink-3">Aucun outil de la liste ne porte ce nom.</li>}
             </ul>
-            <p className="border-t border-line pt-3 text-sm text-ink-2">
-              Votre outil n’est pas là ?{" "}
-              <button type="button" onClick={() => setStep("form")} className="font-semibold text-ink underline-offset-2 hover:underline">
-                Saisir son adresse
-              </button>
-            </p>
-          </div>
+            {noMatch ? (
+              <>
+                <p className="-mt-1 text-sm text-ink-2">« {query.trim()} » n’est pas dans la liste : saisissez l’adresse de son serveur.</p>
+                {fields(false)}
+                <DialogFooter>
+                  <Button type="submit" disabled={busy || !ready}>
+                    {busy ? <Loader2 className="animate-spin" /> : <Plus />}
+                    {busy ? (auth === "oauth" && oauth.chains ? "Initialisation…" : "Connexion…") : "Connecter"}
+                  </Button>
+                </DialogFooter>
+              </>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+                <span className="text-sm text-ink-2">Votre outil n’est pas là ?</span>
+                <Button type="button" variant="outline" onClick={() => setStep("form")} className="max-sm:w-full">
+                  <Plus /> Saisir son adresse
+                </Button>
+              </div>
+            )}
+          </form>
         ) : step === "pick" && picked ? (
           <form onSubmit={submit} className="grid gap-4">
             <DialogHeader>
@@ -213,81 +315,7 @@ export function McpServerDialog({ open, onOpenChange, scopeLabel, onSave, oauth 
             <DialogDescription>Branchez un serveur Model Context Protocol pour {scopeLabel}.</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="mcp-name">
-                Nom du serveur <span className="text-ko">*</span>
-              </Label>
-              <Input id="mcp-name" type="text" placeholder="ex. mon_crm" value={name} onChange={(e) => setName(e.target.value)} disabled={busy} required autoFocus autoComplete="off" spellCheck={false} />
-              <p className="text-xs text-ink-3">Des minuscules, des chiffres ou « _ », sans espace ni tiret. Vos Experts retrouvent ses outils sous ce nom.</p>
-            </div>
-
-            <div className="space-y-1.5">
-                <Label htmlFor="mcp-url">
-                  Adresse du serveur <span className="text-ko">*</span>
-                </Label>
-                <Input id="mcp-url" type="url" placeholder="https://exemple.com/mcp" value={url} onChange={(e) => setUrl(e.target.value)} disabled={busy} required autoComplete="off" spellCheck={false} className="font-mono text-[13px]" />
-                <p className="text-xs text-ink-3">En https, joignable depuis Internet : vos Experts tournent dans le cloud, pas sur votre réseau.</p>
-              </div>
-
-            <fieldset className="space-y-1.5" disabled={busy}>
-              <legend className="mb-1.5 text-sm font-medium text-ink">Authentification</legend>
-              <div role="radiogroup" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                {AUTH_OPTIONS.map((opt) => {
-                  const selected = auth === opt.value;
-                  const Icon = opt.icon;
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      onClick={() => setAuth(opt.value)}
-                      className={cn("flex items-start gap-2.5 rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50", selected ? "border-brand bg-tint/60" : "border-line bg-surface hover:border-brand/40")}
-                    >
-                      <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", selected ? "bg-brand text-on-brand" : "bg-soft-2 text-ink-2")}>
-                        <Icon className="h-3.5 w-3.5" />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold leading-tight text-ink">{opt.label}</span>
-                        <span className="mt-0.5 block text-xs leading-snug text-ink-3">{opt.description}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
-
-            {auth === "bearer" && (
-              <div className="space-y-1.5 pt-1">
-                <Label htmlFor="mcp-token">
-                  Jeton Bearer <span className="text-ko">*</span>
-                </Label>
-                <Input id="mcp-token" type="password" placeholder="Jeton ou clé secrète" value={token} onChange={(e) => setToken(e.target.value)} disabled={busy} required autoComplete="off" spellCheck={false} />
-                <p className="text-xs text-ink-3">Chiffré et gardé par Yelema ; il ne sera plus affiché, seulement ses quatre derniers caractères.</p>
-                <Label htmlFor="mcp-header" className="pt-2">En-tête de la clé</Label>
-                <Input id="mcp-header" type="text" placeholder="Authorization: Bearer (par défaut)" value={header} onChange={(e) => setHeader(e.target.value)} disabled={busy} autoComplete="off" spellCheck={false} className="font-mono text-[13px]" />
-                <p className="text-xs text-ink-3">Seulement si le serveur attend sa clé dans un en-tête à lui, par exemple X-API-KEY.</p>
-              </div>
-            )}
-
-            {auth === "oauth" && (
-              <div className="space-y-1 rounded-xl border border-brand/20 bg-tint/60 p-3 text-xs">
-                <p className="flex items-center gap-1.5 font-semibold text-brand">
-                  <ShieldCheck className="h-3.5 w-3.5" /> Flux OAuth interactif sécurisé
-                </p>
-                <p className="leading-relaxed text-ink-2">
-                  {oauth.chains
-                    ? "En cliquant sur « Connecter », une fenêtre d’autorisation s’ouvrira directement sur le site du fournisseur pour vous connecter et valider l’accès. Chaque membre autorise ensuite son propre compte ; l’accès reste sur son instance."
-                    : "Rien à saisir ici. Une fois le serveur installé, ce membre clique « Autoriser » et se connecte avec son propre compte chez le fournisseur ; l’accès reste sur son instance."}
-                </p>
-              </div>
-            )}
-
-            <p className="rounded-xl bg-soft px-3 py-2.5 text-xs leading-relaxed text-ink-2">
-              Les outils de ce serveur seront offerts à tous les Experts concernés ; Yelema ne les vérifie pas. La conversation en cours sera interrompue le temps de l’installation.
-            </p>
-          </div>
+          {fields(true)}
 
           <DialogFooter className="gap-2 sm:gap-0">
             <Button type="button" variant="outline" onClick={back} disabled={busy}>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MCP_DIRECTORY, MCP_FEATURED, sameTool, searchDirectory, serverName } from "./mcp-directory.ts";
+import { MCP_DIRECTORY, MCP_FEATURED, sameTool, searchDirectory, serverName, serverSlug } from "./mcp-directory.ts";
 
 test("every entry is an https address under a unique key", () => {
   const keys = new Set<string>();
@@ -33,4 +33,9 @@ test("the same tool whatever the spelling", () => {
 
 test("the server name follows the back office's rule", () => {
   for (const e of MCP_DIRECTORY) assert.match(serverName(e), /^[a-z0-9_]+$/, e.key);
+});
+
+test("serverSlug: a typed tool becomes a server name", () => {
+  assert.equal(serverSlug("Magnific AI"), "magnific_ai");
+  assert.equal(serverSlug("  Élan-CRM! "), "elan_crm");
 });
