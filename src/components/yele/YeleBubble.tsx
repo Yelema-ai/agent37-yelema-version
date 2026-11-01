@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowUpRight, BarChart3, Bug, ChevronLeft, History, KeyRound, Loader2, Mic, Plug, Receipt, Repeat, FileSpreadsheet, ShieldCheck, Send, Sparkles, SquarePen, Users, X, type LucideIcon } from "lucide-react";
@@ -18,6 +18,7 @@ import { useVoices } from "@/components/voice/useVoices";
 import { Markdown } from "@/components/chat/Markdown";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { useCallState } from "@/components/voice/CallProvider";
+import { CallButton } from "@/components/voice/CallButton";
 import type { Companion } from "@/lib/companion";
 import { cn } from "@/lib/utils";
 import { toMs } from "@/lib/activity";
@@ -102,12 +103,15 @@ function keepSession(c: Companion, id: string | null): void {
 // Yélé is the brand's asterisk with a face (hermes-experts yele/avatars), not a portrait: the still
 // picture by default, the smiling loop when asked for (WebP, which Safari plays too), never for a
 // visitor who asked for less motion.
+// Her still face, also her picture in a call.
+const YELE_FACE = "/yele/yele-fixe.webp";
+
 function Portrait({ animated = false }: { animated?: boolean }) {
   return (
     <picture className="grid size-10 shrink-0 place-items-center rounded-full bg-tint ring-2 ring-brand/30">
       {animated && <source srcSet="/yele/yele-anime.webp" media="(prefers-reduced-motion: no-preference)" type="image/webp" />}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/yele/yele-fixe.webp" alt="" width={128} height={128} className="size-9 object-contain" />
+      <img src={YELE_FACE} alt="" width={128} height={128} className="size-9 object-contain" />
     </picture>
   );
 }
@@ -145,7 +149,7 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
   });
   const dictating = dictation.state !== "idle";
   const { active: onCall } = useCallState();
-  const { messages, isStreaming, error, send } = useChat({
+  const { messages, isStreaming, loadingHistory, error, send } = useChat({
     agentId: companion.agentId,
     profile: companion.profileId,
     sessionId,
@@ -211,7 +215,9 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
     if (!window.matchMedia("(min-width: 640px)").matches) onClose();
   };
 
-  const shown = messages.filter((m) => m.role !== "system");
+  // The answer not started yet is not an empty bubble: « Yélé réfléchit… » says she is on it.
+  const shown = messages.filter((m) => m.role !== "system" && !(m.role === "assistant" && !m.content.trim() && isStreaming && m === messages[messages.length - 1]));
+  const thinking = isStreaming && shown[shown.length - 1]?.role !== "assistant";
 
   return (
     <div role="dialog" aria-label="Yélé, accompagnement" className={cn(
@@ -230,6 +236,8 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {/* Yélé se joint aussi par la voix, comme dans l'app mobile (Leslie, 01/11). */}
+          <CallButton expert={{ key: companion.profileId, name: "Yélé", photoUrl: YELE_FACE }} iconOnly label="Appeler" className="size-10 rounded-lg bg-transparent text-ink-2 shadow-none hover:bg-soft hover:text-ink" />
           <button type="button" onClick={() => (past ? setPast(null) : openPast())} title="Anciennes discussions" aria-label="Anciennes discussions" aria-pressed={!!past} className={cn("flex h-10 items-center gap-1.5 rounded-lg px-2 text-[13px] font-semibold hover:bg-soft hover:text-ink", past ? "bg-soft text-ink" : "text-ink-2")}>
             <History className="size-4" /> Historique
           </button>
@@ -267,7 +275,11 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
               </nav>
             )}
           </>
-        ) : shown.length === 0 ? (
+        ) : shown.length === 0 && loadingHistory ? (
+          <p className="flex items-center gap-2 pl-1 text-[13px] text-ink-3">
+            <Loader2 className="size-3.5 animate-spin text-brand" /> Chargement de la discussion…
+          </p>
+        ) : shown.length === 0 && !isStreaming ? (
           <>
             <div className="flex items-start gap-2.5 rounded-2xl border border-brand/20 bg-tint/50 p-3.5">
               <Sparkles className="mt-0.5 size-5 shrink-0 text-brand" />
@@ -324,8 +336,8 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
           ))
         )}
         {isStreaming && (
-          <p className="flex items-center gap-2 pl-1 text-[12.5px] text-ink-3">
-            <Loader2 className="size-3.5 animate-spin text-brand" /> Yélé rédige sa réponse…
+          <p role="status" className="flex items-center gap-2 pl-1 text-[13px] text-ink-3">
+            <Loader2 className="size-3.5 animate-spin text-brand" /> {thinking ? "Yélé réfléchit…" : "Yélé rédige sa réponse…"}
           </p>
         )}
         {error && <p role="alert" className="rounded-xl bg-ko-pale p-2.5 text-[13px] text-ko">{error}</p>}
@@ -404,11 +416,17 @@ function Panel({ companion, folded, onClose }: { companion: Companion; folded: b
 // Yélé sits in the top bar instead, and this event opens her.
 const OPEN_EVENT = "yelema:open-yele";
 
+// The experts come with the server page, so the bubble is in its HTML before React listens: a tap
+// then is lost (3 times out of 3 on Mstudio). It shows only once the page answers.
+const noop = () => () => {};
+const useHydrated = () => useSyncExternalStore(noop, () => true, () => false);
+
 export function YeleTopButton() {
   const { companion } = useExpertsContext();
+  const hydrated = useHydrated();
   // On a phone Yélé always lives in the top bar: a round fixed in the corner would sit on the buttons
   // of whatever row scrolls under it.
-  if (!companion) return null;
+  if (!companion || !hydrated) return null;
   return (
     <button
       type="button"
@@ -442,7 +460,8 @@ export function YeleBubble() {
   }, [open]);
   // A folded call floats in the same corner on a computer (on a phone it is a strip at the top).
   const { folded } = useCallState();
-  if (!companion) return null;
+  const hydrated = useHydrated();
+  if (!companion || !hydrated) return null;
   return (
     <>
       <button
