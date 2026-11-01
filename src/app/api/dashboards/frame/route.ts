@@ -7,6 +7,7 @@ import { instanceFetch } from "@/lib/agent37";
 import { assertInDrive } from "@/lib/drive";
 import { expertDriveFolders } from "@/lib/expert-folders";
 import { withTimeout } from "@/lib/fetch-timeout";
+import { inlineDashboard } from "@/lib/dashboard-inline";
 
 const CSP = [
   "sandbox allow-scripts allow-popups;",
@@ -41,9 +42,16 @@ async function targetOf(request: NextRequest): Promise<{ url: string } | { html:
   const raw = request.nextUrl.searchParams.get("path");
   if (!raw || !raw.toLowerCase().endsWith(".html")) return { status: 404, error: "Tableau de bord introuvable." };
   try {
-    const res = await instanceFetch(agentId, `/v1/files/content?path=${encodeURIComponent(assertInDrive(raw))}`, withTimeout(undefined, 20_000));
+    const path = assertInDrive(raw);
+    const res = await instanceFetch(agentId, `/v1/files/content?path=${encodeURIComponent(path)}`, withTimeout(undefined, 20_000));
     if (!res.ok) return { status: 404, error: "Tableau de bord introuvable." };
-    return { html: await res.text() };
+    // Its stylesheet, pictures and fonts beside it in the drive go inside the page: the frame's CSP
+    // and address would leave them out (unstyled page, broken pictures).
+    const read = async (file: string) => {
+      const r = await instanceFetch(agentId, `/v1/files/content?path=${encodeURIComponent(assertInDrive(file))}`, withTimeout(undefined, 15_000));
+      return r.ok ? new Uint8Array(await r.arrayBuffer()) : null;
+    };
+    return { html: await inlineDashboard(await res.text(), path, read) };
   } catch {
     return { status: 404, error: "Tableau de bord introuvable." };
   }
