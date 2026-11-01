@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Download, File, FileImage, FileSpreadsheet, FileText, Presentation, type LucideIcon } from "lucide-react";
+import { Download, File, Loader2, Palette, FileImage, FileSpreadsheet, FileText, Presentation, type LucideIcon } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { isMemoryFolder } from "@/lib/drive-order";
 import type { DocKind, DriveFile, TurnDoc } from "@/lib/drive-links";
@@ -11,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import { FilePreview, ReducedImage } from "@/components/files/FilePreview";
 import { contentUrl, formatBytes, thumbUrl, type FileEntry } from "@/components/files/types";
 import { fileLabel } from "@/lib/drive-paths";
+import { cachedFetch, forget } from "@/lib/client-cache";
+import type { MemoryList } from "@/lib/memory";
+import { toast } from "sonner";
 
 const KINDS: Record<DocKind, { label: string; icon: LucideIcon; tone: string }> = {
   pdf: { label: "PDF", icon: FileText, tone: "bg-[#FCE8E4] text-[#B4321F] dark:bg-[#3b2520] dark:text-[#f4a28c]" },
@@ -50,6 +53,7 @@ export function DocumentCards({ agentId, docs }: { agentId: string; docs: TurnDo
               <Preview agentId={agentId} doc={d} />
             </button>
             <FileRow agentId={agentId} doc={d} />
+            {isCharteDoc(d) && <CharteAdopt agentId={agentId} doc={d} />}
           </li>
         ))}
       </ul>
@@ -77,6 +81,52 @@ function FileRow({ agentId, doc }: { agentId: string; doc: TurnDoc }) {
           <Download /> <span className="hidden min-[400px]:inline">Télécharger</span>
         </a>
       </Button>
+    </div>
+  );
+}
+
+// A brand book an Expert delivered (« Charte graphique… », Koffi's /charte): whoever may deposit for the
+// whole company makes it the company's in one click; the app copies it into the Contexte, as a new
+// version when one is there (Leslie, 01/11: the Expert writes nothing in the memory himself).
+export const isCharteDoc = (doc: { name: string }) => /charte\s+graphique/i.test(doc.name) && !/\.(gdoc|gsheet|gslides)$/i.test(doc.name);
+
+export function CharteAdopt({ agentId, doc }: { agentId: string; doc: { name: string; path: string } }) {
+  const [memory, setMemory] = useState<MemoryList | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    cachedFetch("memory-items", () => apiFetch<MemoryList>("/api/memory/items"), 60_000)
+      .then(setMemory)
+      .catch(() => setMemory(null));
+  }, []);
+  if (!memory?.canDepositForAll) return null;
+  const current = memory.items.find((i) => i.kind === "document" && /charte/i.test(i.title));
+  if (current?.fileName === doc.name && !done) return null;
+  async function adopt() {
+    setBusy(true);
+    try {
+      await apiFetch("/api/memory/charte", { method: "POST", body: JSON.stringify({ agentId, path: doc.path, replace: current?.id ?? null }) });
+      forget("memory-items");
+      setDone(true);
+      toast.success("C’est la charte de l’entreprise : vos Experts l’appliquent désormais.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-3 rounded-2xl bg-tint px-3 py-2.5">
+      <Palette className="size-5 shrink-0 text-brand-ink" />
+      <span className="min-w-0 grow basis-40 text-[13.5px] text-ink-2">
+        {done ? "Dans le Contexte : tous vos Experts l’appliquent." : "Pour que tous vos Experts l’appliquent :"}
+      </span>
+      {!done && (
+        <Button size="sm" className="h-10 rounded-xl max-sm:w-full" disabled={busy} onClick={() => void adopt()}>
+          {busy && <Loader2 className="animate-spin" />}
+          En faire la charte de l’entreprise
+        </Button>
+      )}
     </div>
   );
 }

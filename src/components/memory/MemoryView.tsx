@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useExpertsContext } from "@/components/experts/ExpertsProvider";
 import { usePoll } from "@/components/usePoll";
 import { runPool } from "@/lib/bulk";
+import { driveTree } from "@/lib/drive-store";
 
 // The company memory: what the experts know of the company. Everyone sees the deposits of their own
 // compartments; whoever may deposit adds a note or a document. The back office sends each deposit
@@ -64,6 +65,40 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
   const designer = experts.find((e) =>
     [e.catalogueKey, e.driveFolder, e.profileId].some((k) => k && k.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes("koffi"))
   );
+  // Koffi delivers the brand book in his Livrables (a file named « Charte… »); the admin makes it the
+  // company's in one click (Leslie, 01/11: Koffi writes nothing in the memory himself). Shown while
+  // there is no charte, or when his file is newer than the one deposited.
+  const [made, setMade] = useState<{ path: string; name: string; modified: number } | null>(null);
+  const [copying, setCopying] = useState(false);
+  useEffect(() => {
+    if (!designer) return;
+    const plain = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const folders = [designer.driveFolder, designer.displayName, "koffi"].filter(Boolean).map((f) => plain(String(f)));
+    driveTree(designer.agentId)
+      .then((tree) => {
+        const found = tree.entries
+          .filter((e) => e.type === "file" && /charte/i.test(e.name) && folders.some((f) => plain(e.path).includes(`/livrables/${f}/`)))
+          .sort((a, b) => Number(/\.pdf$/i.test(b.name)) - Number(/\.pdf$/i.test(a.name)) || b.modified - a.modified)[0];
+        setMade(found ? { path: found.path, name: found.name, modified: found.modified } : null);
+      })
+      .catch(() => setMade(null));
+  }, [designer]);
+  const charteAt = charte?.sentAt ? Date.parse(charte.sentAt) / 1000 : 0;
+  const offer = made && (!charte || (charteAt > 0 && made.modified > charteAt + 60)) ? made : null;
+  async function adoptCharte() {
+    if (!offer || !designer) return;
+    setCopying(true);
+    try {
+      await apiFetch("/api/memory/charte", { method: "POST", body: JSON.stringify({ agentId: designer.agentId, path: offer.path, replace: charte?.id ?? null }) });
+      toast.success("C’est la charte de l’entreprise : vos Experts l’appliquent désormais.");
+      await load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setCopying(false);
+    }
+  }
+
   async function depositCharte(file: File) {
     if (charte) return newVersion(charte, file);
     const form = new FormData();
@@ -162,7 +197,20 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
           </span>
           <div className="min-w-0 flex-1 basis-52">
             <h2 className="text-lg font-bold text-ink">Charte graphique</h2>
-            {charte ? (
+            {offer && designer ? (
+              <p className="text-[13px] text-ink-3">
+                {designer.displayName} a {charte ? "préparé une nouvelle version" : "préparé votre charte"} :{" "}
+                <a
+                  href={`/api/agents/${designer.agentId}/files/content?path=${encodeURIComponent(offer.path)}&disposition=inline`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-brand-ink underline-offset-2 hover:underline"
+                >
+                  {offer.name}
+                </a>
+                .
+              </p>
+            ) : charte ? (
               <p className="text-[13px] text-ink-3">
                 <a href={`/api/memory/items/${charte.id}/file`} download className="font-semibold text-brand-ink underline-offset-2 hover:underline">
                   {charte.fileName ?? "Charte"}
@@ -177,7 +225,13 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
             )}
           </div>
           <div className="flex gap-2 max-sm:w-full max-sm:flex-col">
-            {!charte && designer && (
+            {offer && (
+              <Button size="sm" className="max-sm:w-full" disabled={copying} onClick={() => void adoptCharte()}>
+                {copying && <Loader2 className="h-4 w-4 animate-spin" />}
+                En faire la charte de l’entreprise
+              </Button>
+            )}
+            {!charte && !offer && designer && (
               <Button asChild size="sm" className="max-sm:w-full">
                 <Link href={`/experts/${designer.agentId}/${designer.profileId}/chat?q=${encodeURIComponent("/charte")}`}>
                   La créer avec {designer.displayName}
