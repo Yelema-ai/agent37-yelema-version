@@ -94,7 +94,7 @@ export function RoutinesList({ routines, expertName, ...act }: { routines: Routi
                     {/* When it last ran and where it arrives (PDF du 30/10, « Mes routines »). */}
                     <p className="mt-1 text-[12px] text-ink-3">
                       {r.lastRunAt && !Number.isNaN(Date.parse(r.lastRunAt)) ? `Dernière fois ${runDayLabel(Date.parse(r.lastRunAt))}. ` : "Jamais lancée. "}
-                      <span className={deliveryLabel(r.deliver).ok ? "" : "font-semibold text-coral-ink"}>{deliveryLabel(r.deliver).text}.</span>
+                      {deliveryLabel(r.deliver).text}.
                     </p>
                   </div>
                   <span className="max-sm:hidden">{voir(r)}</span>

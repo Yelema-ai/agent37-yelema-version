@@ -106,6 +106,6 @@ test("a routine says when it last ran and where it arrives", () => {
   assert.equal(sp(runDayLabel(Date.UTC(2026, 9, 27, 8, 0), fri)), "mardi dernier à 8 h");
   assert.deepEqual(deliveryLabel("telegram:-100123:45,local"), { text: "Reçue dans l’app et Telegram", ok: true });
   assert.deepEqual(deliveryLabel("local"), { text: "Reçue dans l’app", ok: true });
-  assert.equal(deliveryLabel("origin").ok, false);
+  assert.deepEqual(deliveryLabel("origin"), { text: "Reçue dans l’app", ok: false });
   assert.equal(deliveryLabel(null).ok, false);
 });

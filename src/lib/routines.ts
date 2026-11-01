@@ -313,11 +313,11 @@ export function nextRunChip(nextRunAt: number, now = Date.now()): string {
 const PLATFORMS: Record<string, string> = { telegram: "Telegram", slack: "Slack", teams: "Teams", whatsapp: "WhatsApp", discord: "Discord", email: "e-mail", local: "l’app" };
 
 // Where a routine's result arrives (PDF du 30/10 : « canal de réception »). The app always shows a run
-// that delivered; « origin » or nothing is a routine an Expert set up from a chat, whose delivery
-// the member should set again (Modifier, Enregistrer).
+// that delivered; « origin » or nothing is a routine an Expert set up from a chat: its result is in the
+// app only. Said calmly, with a way to receive it elsewhere too, never as an alert (Leslie, 01/11).
 export function deliveryLabel(deliver: string | null | undefined): { text: string; ok: boolean } {
   const targets = (deliver ?? "").split(",").map((t) => t.trim().split(":")[0].toLowerCase()).filter(Boolean);
-  if (!targets.length || targets.every((t) => t === "origin")) return { text: "Réception à régler : Modifier, puis Enregistrer", ok: false };
+  if (!targets.length || targets.every((t) => t === "origin")) return { text: "Reçue dans l’app", ok: false };
   const names = [...new Set(["l’app", ...targets.filter((t) => t !== "origin").map((t) => PLATFORMS[t] ?? t)])];
   const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} et ${names[names.length - 1]}` : names[0];
   return { text: `Reçue dans ${list}`, ok: true };
