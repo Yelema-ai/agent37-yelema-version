@@ -71,8 +71,7 @@ export function ExpertReadiness({
   // During an update the chip says so: the expert answers slower, and it is not a fault of its own.
   // The banner above the chat bar has nothing to say then, nor once the expert is ready.
   if (variant === "banner" && (updating || !jz || stage(jz) === "ready")) return null;
-  // A ready expert is the normal case: nothing beside its name (Leslie, 31/10).
-  if (variant === "dot" && !updating && jz && readiness(jz).state === "ready") return null;
+  // « Prêt » stays beside the name once the expert is ready (Leslie, 01/11, back on her 31/10 choice).
   if (updating)
     return (
       <span role="status" className={cn("inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-[12px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300", className)}>
