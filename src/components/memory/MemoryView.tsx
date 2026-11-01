@@ -2,7 +2,7 @@
 
 import { Picker } from "@/components/ui/picker";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Plus, X } from "lucide-react";
+import { Globe, Loader2, Palette, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch, readApiError } from "@/lib/api";
 import type { MemoryItem, MemoryList } from "@/lib/memory";
@@ -31,7 +31,12 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
   const [note, setNote] = useState("");
   const [unit, setUnit] = useState(ALL);
   const [files, setFiles] = useState<File[]>([]);
+  const [sites, setSites] = useState<string[]>([]);
+  const [site, setSite] = useState("");
   const picker = useRef<HTMLInputElement>(null);
+  const chartePicker = useRef<HTMLInputElement>(null);
+  const versionPicker = useRef<HTMLInputElement>(null);
+  const [versionOf, setVersionOf] = useState<MemoryItem | null>(null);
 
   const load = useCallback(
     () =>
@@ -50,11 +55,46 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
   // The first compartment the member may deposit in, while none is chosen.
   const target = targets.some((t) => t.id === unit) ? unit : (targets[0]?.id ?? ALL);
 
-  // The note, then each document on its own: a document takes the title only when it is alone.
+  // The company's brand book, always on top: the Experts apply it to every deliverable (Leslie, 01/11).
+  const charte = list?.items.find((i) => i.kind === "document" && /charte/i.test(i.title)) ?? null;
+  async function depositCharte(file: File) {
+    if (charte) return newVersion(charte, file);
+    const form = new FormData();
+    form.set("title", "Charte graphique");
+    form.set("file", file);
+    const res = await fetch("/api/memory/items", { method: "POST", body: form });
+    if (!res.ok) toast.error(await readApiError(res, "la charte n’a pas pu être déposée."));
+    await load();
+  }
+
+  // A new file for a deposited document: the back office keeps the old one as the previous version.
+  async function newVersion(item: MemoryItem, file: File) {
+    const form = new FormData();
+    form.set("file", file);
+    const res = await fetch(`/api/memory/items/${item.id}/versions`, { method: "POST", body: form });
+    if (!res.ok) toast.error(await readApiError(res, "la nouvelle version n’a pas pu être déposée."));
+    else toast.success(`${item.title} : nouvelle version déposée`);
+    await load();
+  }
+
+  // A typed address becomes a site to add; several sites may go at once.
+  function addSite() {
+    const v = site.trim();
+    if (!v) return;
+    const url = /^https?:\/\//i.test(v) ? v : `https://${v}`;
+    if (!sites.includes(url)) setSites([...sites, url]);
+    setSite("");
+  }
+
+  // The note, then each site, then each document on its own: a document takes the title only when it is alone.
   async function deposit() {
     setBusy(true);
     const failed: File[] = [];
     try {
+      for (const url of sites) {
+        await apiFetch("/api/memory/items", { method: "POST", body: JSON.stringify({ title: new URL(url).hostname.replace(/^www\./, ""), url, unit: target === ALL ? null : target }) });
+      }
+      setSites([]);
       if (note.trim()) {
         await apiFetch("/api/memory/items", { method: "POST", body: JSON.stringify({ title, note, unit: target === ALL ? null : target }) });
         setTitle("");
@@ -108,6 +148,31 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
       {error && <p className="mt-4 max-w-xl rounded-xl bg-ko-pale px-4 py-3 text-sm text-ko">{error}</p>}
       {!list && !error && <Loader2 className="mt-6 h-5 w-5 animate-spin text-ink-3" aria-label="Chargement" />}
 
+      {list && list.canDepositForAll && (
+        <section className="mt-5 flex flex-wrap items-center gap-4 rounded-[22px] border border-line bg-surface p-5 sm:p-6">
+          <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-tint text-brand-ink">
+            <Palette className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1 basis-52">
+            <h2 className="text-lg font-bold text-ink">Charte graphique</h2>
+            {charte ? (
+              <p className="text-[13px] text-ink-3">
+                <a href={`/api/memory/items/${charte.id}/file`} download className="font-semibold text-brand-ink underline-offset-2 hover:underline">
+                  {charte.fileName ?? "Charte"}
+                </a>
+                {charte.version && charte.version > 1 ? `, version ${charte.version}` : ""}. Vos Experts l’appliquent à chaque livrable.
+              </p>
+            ) : (
+              <p className="text-[13px] text-ink-3">Logo, couleurs, polices : vos Experts l’appliquent à chaque livrable.</p>
+            )}
+          </div>
+          <Button variant={charte ? "outline" : "default"} size="sm" className="max-sm:w-full" onClick={() => chartePicker.current?.click()}>
+            {charte ? "Remplacer" : "Déposer la charte"}
+          </Button>
+          <HiddenFileInput inputRef={chartePicker} onFiles={(picked) => picked[0] && void depositCharte(picked[0])} />
+        </section>
+      )}
+
       {list && targets.length > 0 && (
         <section className="mt-5 rounded-[22px] border border-line bg-surface p-5 sm:p-6" aria-busy={busy}>
           <h2 className="text-lg font-bold text-ink">Déposer</h2>
@@ -151,11 +216,45 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
             </Button>
             <HiddenFileInput inputRef={picker} onFiles={(picked) => setFiles([...files, ...Array.from(picked)])} />
           </div>
+          <div className="mt-4">
+            <p className="text-[13px] font-semibold text-ink-3">Sites web (relus chaque semaine)</p>
+            {sites.length > 0 && (
+              <ul className="mt-1 flex flex-wrap gap-1.5">
+                {sites.map((u) => (
+                  <li key={u} className="inline-flex max-w-full items-center gap-1 rounded-full bg-soft py-1 pl-3 pr-1 text-sm text-ink-2">
+                    <Globe className="h-3.5 w-3.5 shrink-0 text-ink-3" />
+                    <span className="truncate">{u.replace(/^https?:\/\//, "")}</span>
+                    <button type="button" aria-label={`Retirer ${u}`} onClick={() => setSites(sites.filter((x) => x !== u))} className="grid size-6 place-items-center rounded-full hover:bg-soft-2">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-2 flex gap-2">
+              <Input
+                value={site}
+                placeholder="unifood.ci"
+                aria-label="Adresse d’un site web"
+                onChange={(e) => setSite(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addSite();
+                  }
+                }}
+                className="max-w-sm"
+              />
+              <Button type="button" variant="outline" size="sm" className="h-10" disabled={!site.trim()} onClick={addSite}>
+                <Plus className="h-4 w-4" /> Ajouter
+              </Button>
+            </div>
+          </div>
           {/* Greyed out until there is something to deposit, rather than a faded colour that reads as broken. */}
           <Button
             className="mt-4"
-            variant={note.trim() || files.length > 0 ? "default" : "outline"}
-            disabled={busy || (note.trim() ? !title.trim() : files.length === 0)}
+            variant={note.trim() || files.length > 0 || sites.length > 0 ? "default" : "outline"}
+            disabled={busy || (note.trim() ? !title.trim() : files.length === 0 && sites.length === 0)}
             onClick={() => void deposit()}
           >
             {busy ? "Dépôt en cours…" : "Déposer dans la mémoire"}
@@ -166,8 +265,17 @@ export function MemoryView({ embedded = false, onDeposit }: { embedded?: boolean
       {list?.items.length === 0 && <p className="mt-6 rounded-[22px] border border-line bg-surface p-8 text-center text-sm text-ink-3">La mémoire est vide pour l’instant.</p>}
 
       {list && list.items.length > 0 && (
-        <MemoryGroups list={list} onToggle={(item) => void patch(item, { active: !item.active })} onRemove={setRemoving} />
+        <MemoryGroups
+          list={list}
+          onToggle={(item) => void patch(item, { active: !item.active })}
+          onRemove={setRemoving}
+          onNewVersion={(item) => {
+            setVersionOf(item);
+            versionPicker.current?.click();
+          }}
+        />
       )}
+      <HiddenFileInput inputRef={versionPicker} onFiles={(picked) => versionOf && picked[0] && void newVersion(versionOf, picked[0])} />
 
       <ConfirmDialog
         open={removing !== null}
