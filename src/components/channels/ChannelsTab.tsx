@@ -328,7 +328,8 @@ function ChannelRow({
     <div className="flex min-h-[68px] items-center gap-3 px-4 py-3">
       {body}
       <Button variant="outline" size="sm" disabled={!canManage} onClick={onOpen} className="rounded-full max-sm:h-10">
-        {isFeaturedChannel(channel.id) ? `Connecter ${channel.name}` : "Connecter"}
+        {/* On a phone the channel's name is already on the row: « Connecter » alone, so the name is not cut. */}
+        Connecter{isFeaturedChannel(channel.id) && <span className="max-sm:hidden">&nbsp;{channel.name}</span>}
       </Button>
     </div>
   );

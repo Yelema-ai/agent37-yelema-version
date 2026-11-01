@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cronFor, cronParts, deliveryLabel, RECURRENCES, recurrenceOf, isMemoryRun, isUpkeep, nextRunLabel, runDayLabel, scheduleLabel, isRoutineRun, isRunOf, isSilentRun, routineOfSession, routinePlainText, routineRunText, runOutcome } from "./routines.ts";
+import { deliveryLabel, isMemoryRun, isUpkeep, nextRunChip, nextRunLabel, runDayLabel, scheduleLabel, isRoutineRun, isRunOf, isSilentRun, routineOfSession, routinePlainText, routineRunText, runOutcome, cronFor, cronParts, RECURRENCES, recurrenceOf } from "./routines.ts";
 
 const sp = (s: string) => s.replace(/\u00a0/g, " ");
 
@@ -96,6 +96,8 @@ test("schedules and the next run read as a French reader says them", () => {
   assert.equal(sp(nextRunLabel(Date.UTC(2026, 9, 31, 8, 0), fri)), "demain à 8 h");
   assert.equal(sp(nextRunLabel(Date.UTC(2026, 10, 2, 17, 0), fri)), "lundi à 17 h");
   assert.equal(sp(nextRunLabel(Date.UTC(2026, 10, 12, 9, 0), fri)), "le 12 novembre à 9 h");
+  assert.equal(sp(nextRunChip(Date.UTC(2026, 9, 31, 8, 0), fri)), "Prochaine : demain à 8 h");
+  assert.equal(sp(nextRunChip(Date.UTC(2026, 9, 26, 8, 0), fri)), "Pas encore partie, prévue lundi dernier à 8 h");
 });
 
 test("a routine says when it last ran and where it arrives", () => {
@@ -104,7 +106,7 @@ test("a routine says when it last ran and where it arrives", () => {
   assert.equal(sp(runDayLabel(Date.UTC(2026, 9, 27, 8, 0), fri)), "mardi dernier à 8 h");
   assert.deepEqual(deliveryLabel("telegram:-100123:45,local"), { text: "Reçue dans l’app et Telegram", ok: true });
   assert.deepEqual(deliveryLabel("local"), { text: "Reçue dans l’app", ok: true });
-  assert.equal(deliveryLabel("origin").ok, false);
+  assert.deepEqual(deliveryLabel("origin"), { text: "Reçue dans l’app", ok: false });
   assert.equal(deliveryLabel(null).ok, false);
 });
 
